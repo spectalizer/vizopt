@@ -1,7 +1,7 @@
 [project]
 name = "vizopt"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.0.1"
+description = "Mathematical optimization for data visualization"
 authors = [
     { name = "Spectalizer", email = "spectalizer@protonmail.com" },
 ]
