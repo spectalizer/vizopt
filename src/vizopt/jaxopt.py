@@ -21,7 +21,7 @@ def optimize_gradient_descent(
     learning_rate: float = 0.001,
     n_iters: int = 1000,
     callback: Callback | None = None,
-) -> tuple[Params, Array]:
+) -> tuple[Params, float]:
     """Minimize a function by gradient descent"""
     if callback is None:
         callback = default_print_callback
@@ -41,4 +41,4 @@ def optimize_gradient_descent(
         if callback is not None:
             callback(i_iter, loss_value, params, grads)
 
-    return params, loss_value
+    return params, float(loss_value)
