@@ -90,3 +90,7 @@ The `get_node_radii()` function concatenates both types into a single array for 
 - Requires Python 3.13+
 - Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas
 - Dev dependencies: black (formatting), pytest (testing), ipykernel (notebooks)
+
+## Style guide
+
+- Google-style docstrings

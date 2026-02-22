@@ -1,11 +1,21 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 
 from vizopt.jaxopt import optimize_gradient_descent
 
 
 def classical_mds(D, k=3):
+    """Embed a distance matrix into Euclidean coordinates via classical MDS.
+
+    Args:
+        D: Square symmetric distance matrix of shape (n, n).
+        k: Number of embedding dimensions.
+
+    Returns:
+        Coordinate array of shape (n, k).
+    """
     n = len(D)
     D2 = np.array(D) ** 2
     H = np.eye(n) - np.ones((n, n)) / n
@@ -24,7 +34,14 @@ def classical_mds(D, k=3):
 
 
 def lab_to_rgb(Lab):
-    """Convert an (n, 3) array of CIE L*a*b* values to sRGB in [0, 1]."""
+    """Convert CIE L*a*b* values to sRGB.
+
+    Args:
+        Lab: Array of shape (n, 3) with CIE L*a*b* values.
+
+    Returns:
+        Array of shape (n, 3) with sRGB values clipped to [0, 1].
+    """
     L, a, b = Lab[:, 0], Lab[:, 1], Lab[:, 2]
     fy = (L + 16) / 116
     fx = a / 500 + fy
@@ -51,7 +68,14 @@ def lab_to_rgb(Lab):
 
 
 def rgb_to_lab(rgb):
-    """Differentiable sRGB → CIE L*a*b* (D65). rgb: (n, 3) in [0, 1]."""
+    """Convert sRGB values to CIE L*a*b* (D65 illuminant), differentiable via JAX.
+
+    Args:
+        rgb: Array of shape (n, 3) with sRGB values in [0, 1].
+
+    Returns:
+        Array of shape (n, 3) with CIE L*a*b* values.
+    """
     rgb_lin = jnp.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
     M = jnp.array(
         [
@@ -80,30 +104,20 @@ def optimize_colors(
 ):
     """Optimize a palette so pairwise CIELAB ΔE distances match ``distances``.
 
-    Parameters
-    ----------
-    distances : (n, n) array-like or pd.DataFrame
-        Symmetric pairwise distance matrix.  If a DataFrame, its index
-        is used as labels for ``fixed_colors`` keys.
-    fixed_colors : dict, optional
-        Map from label (DataFrame index value) or integer position to an
-        sRGB tuple/array in [0, 1].  Those colors are held fixed during
-        optimization.
-    target_max_delta_e : float
-        The largest pairwise distance maps to this ΔE value.
-    learning_rate : float
-        Adam learning rate.
-    n_iters : int
-        Number of gradient-descent iterations.
-    callback : callable, optional
-        Called as ``callback(i, loss, params, grads)`` after each step.
+    Args:
+        distances: Symmetric pairwise distance matrix of shape (n, n). If a
+            DataFrame, its index is used as labels for ``fixed_colors`` keys.
+        fixed_colors: Map from label (DataFrame index value) or integer position
+            to an sRGB tuple/array in [0, 1]. Those colors are held fixed during
+            optimization.
+        target_max_delta_e: The largest pairwise distance maps to this ΔE value.
+        learning_rate: Adam learning rate.
+        n_iters: Number of gradient-descent iterations.
+        callback: Called as ``callback(i, loss, params, grads)`` after each step.
 
-    Returns
-    -------
-    colors : (n, 3) ndarray
-        Optimized sRGB colors in [0, 1], one row per item.
+    Returns:
+        Optimized sRGB colors in [0, 1] of shape (n, 3), one row per item.
     """
-    import pandas as pd
 
     if isinstance(distances, pd.DataFrame):
         labels = list(distances.index)
@@ -123,7 +137,9 @@ def optimize_colors(
         fixed_idx_map[idx] = np.asarray(rgb, dtype=float)
 
     free_idx = jnp.array([i for i in range(n) if i not in fixed_idx_map])
-    fixed_idx = jnp.array(sorted(fixed_idx_map)) if fixed_idx_map else jnp.array([], dtype=int)
+    fixed_idx = (
+        jnp.array(sorted(fixed_idx_map)) if fixed_idx_map else jnp.array([], dtype=int)
+    )
     fixed_rgb = (
         jnp.array([fixed_idx_map[i] for i in sorted(fixed_idx_map)])
         if fixed_idx_map
@@ -163,7 +179,11 @@ def optimize_colors(
     params0 = {"logit_rgb": jnp.array(logit_init[np.array(free_idx)])}
 
     params_opt = optimize_gradient_descent(
-        params0, loss_fn, learning_rate=learning_rate, n_iters=n_iters, callback=callback
+        params0,
+        loss_fn,
+        learning_rate=learning_rate,
+        n_iters=n_iters,
+        callback=callback,
     )
 
     return np.array(build_rgb(params_opt))
