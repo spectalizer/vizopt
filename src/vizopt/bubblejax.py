@@ -15,6 +15,97 @@ def get_random_node_positions(graph, scale=1.0):
     return pos
 
 
+def _should_be_positive_activation(x_value, factor=100.0):
+    """A penalty for negative values"""
+    return factor * jax.nn.relu(-x_value)
+
+
+def _calculate_total_width_penalty(node_xys):
+    """A penalty for the overall width and height of the drawing"""
+    return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
+
+
+def _compute_collision_pairs(all_node_names, inclusion_tree):
+    """Pre-compute which node pairs should be checked for collisions"""
+    collision_pairs = []
+    for i, node_a in enumerate(all_node_names):
+        for j, node_b in enumerate(all_node_names[:i]):
+            a_in_b = node_a in inclusion_tree.nodes and node_b in nx.descendants(
+                inclusion_tree, node_a
+            )
+            b_in_a = node_b in inclusion_tree.nodes and node_a in nx.descendants(
+                inclusion_tree, node_b
+            )
+            if not (a_in_b or b_in_a):
+                collision_pairs.append([i, j])
+
+    return (
+        np.array(collision_pairs)
+        if collision_pairs
+        else np.zeros((0, 2), dtype=np.int32)
+    )
+
+
+def _calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1.0):
+    """Vectorized collision penalty calculation"""
+    if len(collision_pairs) == 0:
+        return jnp.array(0.0)
+
+    pos_a = node_xys[collision_pairs[:, 0]]
+    pos_b = node_xys[collision_pairs[:, 1]]
+    dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
+
+    radii_a = node_radii[collision_pairs[:, 0]]
+    radii_b = node_radii[collision_pairs[:, 1]]
+
+    d_minus_radiuses = dists - offset - radii_a - radii_b
+    penalties = _should_be_positive_activation(d_minus_radiuses)
+
+    return jnp.sum(penalties)
+
+
+def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=1.0):
+    """Vectorized inclusion constraint penalty.
+
+    Uses the convention: edge (u, v) means v is contained in u.
+    """
+    if len(inclusion_edge_indices) == 0:
+        return jnp.array(0.0)
+
+    # Convention: in edge (u, v), v is contained in u
+    including_nodes = inclusion_edge_indices[:, 0]
+    included_nodes = inclusion_edge_indices[:, 1]
+
+    including_pos = node_xys[including_nodes]
+    included_pos = node_xys[included_nodes]
+    dists = jnp.sqrt(jnp.sum((including_pos - included_pos) ** 2, axis=1))
+
+    including_radii = node_radii[including_nodes]
+    included_radii = node_radii[included_nodes]
+
+    radius_diff_minus_dist = including_radii - offset - included_radii - dists
+    penalties = _should_be_positive_activation(radius_diff_minus_dist)
+
+    return jnp.sum(penalties)
+
+
+def _calculate_edge_lengths(node_xys, edge_indices):
+    """Vectorized edge length calculation"""
+    if len(edge_indices) == 0:
+        return jnp.array(0.0)
+
+    start_points = node_xys[edge_indices[:, 0]]
+    end_points = node_xys[edge_indices[:, 1]]
+    return jnp.sum(jnp.sqrt(jnp.sum((start_points - end_points) ** 2, axis=1)))
+
+
+def _plot_optimization_history(history):
+    """Plot optimization loss history on log scale"""
+    _, ax = plt.subplots()
+    pd.DataFrame(history).set_index("iteration").iloc[::50].plot(ax=ax)
+    ax.set_yscale("log")
+
+
 def optimize_circular_layout_with_enclosed_nodes(
     inclusion_tree: nx.DiGraph,
     weight_total_size=2.0,
@@ -60,24 +151,7 @@ def optimize_circular_layout_with_enclosed_nodes(
     )
 
     # Pre-compute collision exclusion mask
-    collision_pairs = []
-    for i, node_a in enumerate(all_node_names):
-        for j, node_b in enumerate(all_node_names[:i]):
-            # Determine if these nodes should be checked for collisions
-            a_in_b = node_a in inclusion_tree.nodes and node_b in nx.descendants(
-                inclusion_tree, node_a
-            )
-            b_in_a = node_b in inclusion_tree.nodes and node_a in nx.descendants(
-                inclusion_tree, node_b
-            )
-            if not (a_in_b or b_in_a):
-                collision_pairs.append([i, j])
-
-    collision_pairs = (
-        np.array(collision_pairs)
-        if collision_pairs
-        else np.zeros((0, 2), dtype=np.int32)
-    )
+    collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
 
     # Initialize non-leaf node radii
     non_leaf_node_radii = np.full(
@@ -94,62 +168,6 @@ def optimize_circular_layout_with_enclosed_nodes(
         return jnp.concatenate(
             [jnp.array(leaf_node_radii), params["non_leaf_node_radii"]], axis=0
         )
-
-    def should_be_positive_activation(x_value, factor=100.0):
-        """A penalty for negative values"""
-        return factor * jax.nn.relu(-x_value)
-
-    def calculate_total_width_penalty(node_xys):
-        """A penalty for the overall width and height of the drawing"""
-        return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
-
-    def calculate_collision_penalty(node_xys, node_radii, offset=1.0):
-        """Vectorized collision penalty calculation"""
-        if len(collision_pairs) == 0:
-            return jnp.array(0.0)
-
-        # Extract node positions for all collision pairs
-        pos_a = node_xys[collision_pairs[:, 0]]
-        pos_b = node_xys[collision_pairs[:, 1]]
-
-        # Calculate distances between nodes
-        dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
-
-        # Get radii for collision pairs
-        radii_a = node_radii[collision_pairs[:, 0]]
-        radii_b = node_radii[collision_pairs[:, 1]]
-
-        # Calculate penalties
-        d_minus_radiuses = dists - offset - radii_a - radii_b
-        penalties = should_be_positive_activation(d_minus_radiuses)
-
-        return jnp.sum(penalties)
-
-    def non_inclusion_penalty(node_xys, node_radii, offset=1.0):
-        """Vectorized inclusion constraint penalty"""
-        if len(inclusion_edge_indices) == 0:
-            return jnp.array(0.0)
-
-        # Using the convention v in (u,v) if v is in u
-        including_nodes = inclusion_edge_indices[:, 0]
-        included_nodes = inclusion_edge_indices[:, 1]
-
-        # Extract positions
-        including_pos = node_xys[including_nodes]
-        included_pos = node_xys[included_nodes]
-
-        # Calculate distances
-        dists = jnp.sqrt(jnp.sum((including_pos - included_pos) ** 2, axis=1))
-
-        # Get radii
-        including_radii = node_radii[including_nodes]
-        included_radii = node_radii[included_nodes]
-
-        # Calculate penalties
-        radius_diff_minus_dist = including_radii - offset - included_radii - dists
-        penalties = should_be_positive_activation(radius_diff_minus_dist)
-
-        return jnp.sum(penalties)
 
     @jax.jit
     def function_to_minimize(params):
@@ -248,24 +266,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     )
 
     # Pre-compute collision exclusion mask
-    collision_pairs = []
-    for i, node_a in enumerate(all_node_names):
-        for j, node_b in enumerate(all_node_names[:i]):
-            # Determine if these nodes should be checked for collisions
-            a_in_b = node_a in inclusion_tree.nodes and node_b in nx.descendants(
-                inclusion_tree, node_a
-            )
-            b_in_a = node_b in inclusion_tree.nodes and node_a in nx.descendants(
-                inclusion_tree, node_b
-            )
-            if not (a_in_b or b_in_a):
-                collision_pairs.append([i, j])
-
-    collision_pairs = (
-        np.array(collision_pairs)
-        if collision_pairs
-        else np.zeros((0, 2), dtype=np.int32)
-    )
+    collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
 
     # Initialize enclosing node radii
     enclosing_node_radii = np.full(
