@@ -193,7 +193,7 @@ def optimize_circular_layout_with_enclosed_nodes(
             print(i_iter, loss_value)
         history.append({"iteration": i_iter, "loss": float(loss_value)})
 
-    params_opt = jaxopt.optimize_gradient_descent(
+    params_opt, _ = jaxopt.optimize_gradient_descent(
         params, function_to_minimize, **optim_kwargs, callback=optim_callback
     )
 
@@ -377,7 +377,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
             print(i_iter, loss_value)
         history.append({"iteration": i_iter, "loss": float(loss_value)})
 
-    params_opt = jaxopt.optimize_gradient_descent(
+    params_opt, _ = jaxopt.optimize_gradient_descent(
         params, function_to_minimize, **optim_kwargs, callback=optim_callback
     )
 

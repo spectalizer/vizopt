@@ -120,7 +120,8 @@ def optimize_colors(
             restarts with different starting points.
 
     Returns:
-        Optimized sRGB colors in [0, 1] of shape (n, 3), one row per item.
+        Tuple of (colors, loss) where colors is an sRGB array of shape (n, 3)
+        in [0, 1] and loss is the final scalar loss value.
     """
 
     if isinstance(distances, pd.DataFrame):
@@ -186,7 +187,7 @@ def optimize_colors(
 
     params0 = {"logit_rgb": jnp.array(logit_init[np.array(free_idx)])}
 
-    params_opt = optimize_gradient_descent(
+    params_opt, final_loss = optimize_gradient_descent(
         params0,
         loss_fn,
         learning_rate=learning_rate,
@@ -194,4 +195,4 @@ def optimize_colors(
         callback=callback,
     )
 
-    return np.array(build_rgb(params_opt))
+    return np.array(build_rgb(params_opt)), float(final_loss)
