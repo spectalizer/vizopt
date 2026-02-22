@@ -101,6 +101,7 @@ def optimize_colors(
     learning_rate=0.05,
     n_iters=1000,
     callback=None,
+    seed=None,
 ):
     """Optimize a palette so pairwise CIELAB ΔE distances match ``distances``.
 
@@ -114,6 +115,9 @@ def optimize_colors(
         learning_rate: Adam learning rate.
         n_iters: Number of gradient-descent iterations.
         callback: Called as ``callback(i, loss, params, grads)`` after each step.
+        seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
+            Pass an integer to use random initialization instead, enabling multiple
+            restarts with different starting points.
 
     Returns:
         Optimized sRGB colors in [0, 1] of shape (n, 3), one row per item.
@@ -168,13 +172,17 @@ def optimize_colors(
         coverage = -(lab[:, 1].var() + lab[:, 2].var())
         return stress + 0.5 * coverage
 
-    # MDS warm-start
-    coords = classical_mds(D)
-    target_half_ranges = np.array([25.0, 50.0, 50.0])
-    uniform_scale = (target_half_ranges / np.abs(coords).max(axis=0)).min()
-    Lab_init = coords * uniform_scale + np.array([55.0, 0.0, 0.0])
-    rgb_init = np.clip(lab_to_rgb(Lab_init), 1e-4, 1 - 1e-4)
-    logit_init = np.log(rgb_init / (1 - rgb_init))
+    if seed is None:
+        # MDS warm-start
+        coords = classical_mds(D)
+        target_half_ranges = np.array([25.0, 50.0, 50.0])
+        uniform_scale = (target_half_ranges / np.abs(coords).max(axis=0)).min()
+        Lab_init = coords * uniform_scale + np.array([55.0, 0.0, 0.0])
+        rgb_init = np.clip(lab_to_rgb(Lab_init), 1e-4, 1 - 1e-4)
+        logit_init = np.log(rgb_init / (1 - rgb_init))
+    else:
+        rng = jax.random.PRNGKey(seed)
+        logit_init = jax.random.normal(rng, shape=(n, 3))
 
     params0 = {"logit_rgb": jnp.array(logit_init[np.array(free_idx)])}
 
