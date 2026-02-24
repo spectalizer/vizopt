@@ -5,7 +5,7 @@ import jax
 import optax
 from jax import Array
 
-Params = TypeVar("Params")
+OptimVars = TypeVar("OptimVars")
 Callback = Callable[[int, Array, Any, Any], None]
 
 
@@ -16,12 +16,12 @@ def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:
 
 
 def optimize_gradient_descent(
-    params: Params,
-    fun_to_minimize: Callable[[Params], Array],
+    params: OptimVars,
+    fun_to_minimize: Callable[[OptimVars], Array],
     learning_rate: float = 0.001,
     n_iters: int = 1000,
     callback: Callback | None = None,
-) -> tuple[Params, float]:
+) -> tuple[OptimVars, float]:
     """Minimize a function by gradient descent"""
     if callback is None:
         callback = default_print_callback
