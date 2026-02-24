@@ -23,3 +23,26 @@ class ObjectiveTerm:
     name: str
     compute: Callable[[OptimVars, Any], Array]
     multiplier: float = 1.0
+
+
+def build_objective(
+    terms: list[ObjectiveTerm],
+    input_parameters: Any,
+) -> Callable[[OptimVars], Array]:
+    """Build a composite objective function from a list of terms.
+
+    Args:
+        terms: Objective terms to sum, each weighted by its multiplier.
+        input_parameters: Fixed data passed to each term's compute function.
+
+    Returns:
+        A callable ``fun(optim_vars) -> scalar`` suitable for gradient descent.
+    """
+
+    def fun_to_minimize(optim_vars: OptimVars) -> Array:
+        return sum(
+            term.compute(optim_vars, input_parameters) * term.multiplier
+            for term in terms
+        )
+
+    return fun_to_minimize
