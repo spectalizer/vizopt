@@ -5,9 +5,7 @@ import jax
 import optax
 from jax import Array
 
-from .base import OptimVars
-
-Callback = Callable[[int, Array, Any, Any], None]
+from .base import Callback, OptimVars
 
 
 def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:

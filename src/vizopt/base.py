@@ -2,12 +2,15 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from jax import Array
 from jax import numpy as jnp
 
 OptimVars = TypeVar("OptimVars")
+InputParams = TypeVar("InputParams")
+
+Callback = Callable[[int, Array, Any, Any], None]
 
 
 @dataclass
@@ -50,3 +53,48 @@ def build_objective(
         )
 
     return fun_to_minimize
+
+
+@dataclass
+class OptimizationProblem(Generic[InputParams, OptimVars]):
+    """An optimization problem.
+
+    Attributes:
+        input_parameters: Fixed data for the problem (not optimized).
+        terms: Objective terms defining the loss function.
+        initialize: Callable that produces initial optimization variables
+            from input_parameters.
+    """
+
+    input_parameters: InputParams
+    terms: list[ObjectiveTerm]
+    initialize: Callable[[InputParams], OptimVars]
+
+    def optimize(
+        self,
+        n_iters: int = 1000,
+        learning_rate: float = 0.001,
+        callback: Callback | None = None,
+    ) -> tuple[OptimVars, float]:
+        """Run gradient descent to minimize the objective.
+
+        Args:
+            n_iters: Number of optimization iterations.
+            learning_rate: Step size for Adam optimizer.
+            callback: Optional callback called after each iteration with
+                (iteration, loss, optim_vars, grads).
+
+        Returns:
+            Tuple of (optimized variables, final loss value).
+        """
+        from . import jaxopt  # lazy import to avoid circular dependency
+
+        optim_vars = self.initialize(self.input_parameters)
+        fun = build_objective(self.terms, self.input_parameters)
+        return jaxopt.optimize_gradient_descent(
+            optim_vars,
+            fun,
+            n_iters=n_iters,
+            learning_rate=learning_rate,
+            callback=callback,
+        )
