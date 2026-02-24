@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from jax import Array
+from jax import numpy as jnp
 
 OptimVars = TypeVar("OptimVars")
 
@@ -41,8 +42,11 @@ def build_objective(
 
     def fun_to_minimize(optim_vars: OptimVars) -> Array:
         return sum(
-            term.compute(optim_vars, input_parameters) * term.multiplier
-            for term in terms
+            (
+                term.compute(optim_vars, input_parameters) * term.multiplier
+                for term in terms
+            ),
+            jnp.zeros(()),
         )
 
     return fun_to_minimize
