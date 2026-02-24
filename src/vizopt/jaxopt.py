@@ -5,7 +5,8 @@ import jax
 import optax
 from jax import Array
 
-OptimVars = TypeVar("OptimVars")
+from .base import OptimVars
+
 Callback = Callable[[int, Array, Any, Any], None]
 
 
