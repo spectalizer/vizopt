@@ -64,30 +64,51 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
     input data. Call :meth:`instantiate` with concrete input parameters
     to obtain a runnable :class:`OptimizationProblem`.
 
-    Input parameter validation is expected to be handled by the
-    ``InputParams`` type itself (e.g. via a Pydantic model).
+    If ``input_params_class`` is provided, it must be a Pydantic model class.
+    ``instantiate`` will call ``model_validate`` on the supplied parameters,
+    triggering Pydantic validation and coercion before the problem is created.
 
     Attributes:
         terms: Objective terms defining the loss function.
         initialize: Callable that produces initial optimization variables
             from input_parameters.
+        input_params_class: Optional Pydantic model class for input parameters.
+            When set, validation is performed at instantiation time.
+        plot_configuration: Optional callable to visualize a configuration.
+            Signature: ``plot_configuration(optim_vars, input_parameters)``.
     """
 
     terms: list[ObjectiveTerm]
     initialize: Callable[[InputParams], OptimVars]
+    input_params_class: type[InputParams] | None = None
+    plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
 
     def instantiate(
         self, input_parameters: InputParams
     ) -> "OptimizationProblem[InputParams, OptimVars]":
         """Create a runnable problem instance from concrete input parameters.
 
+        If ``input_params_class`` is set, validates ``input_parameters`` via
+        ``model_validate`` before creating the problem. The plain dict is passed
+        through to the problem unchanged (Pydantic is used for validation only,
+        so that ``input_parameters`` remains a JAX-compatible pytree).
+
         Args:
             input_parameters: Fixed data for this problem instance.
 
         Returns:
             An :class:`OptimizationProblem` ready to optimize.
+
+        Raises:
+            pydantic.ValidationError: If ``input_params_class`` is set and
+                validation fails.
         """
-        return OptimizationProblem(input_parameters, self.terms, self.initialize)
+        if self.input_params_class is not None:
+            # validate only
+            self.input_params_class.model_validate(input_parameters)  # type: ignore
+        return OptimizationProblem(
+            input_parameters, self.terms, self.initialize, self.plot_configuration
+        )
 
 
 @dataclass
@@ -99,11 +120,14 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         terms: Objective terms defining the loss function.
         initialize: Callable that produces initial optimization variables
             from input_parameters.
+        plot_configuration: Optional callable to visualize a configuration.
+            Signature: ``plot_configuration(optim_vars, input_parameters)``.
     """
 
     input_parameters: InputParams
     terms: list[ObjectiveTerm]
     initialize: Callable[[InputParams], OptimVars]
+    plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
 
     def optimize(
         self,
