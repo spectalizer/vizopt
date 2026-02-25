@@ -56,6 +56,41 @@ def build_objective(
 
 
 @dataclass
+class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
+    """A template for a class of optimization problems.
+
+    An instance represents a specific *type* of optimization problem
+    (e.g. bubble layout optimization), independently of any particular
+    input data. Call :meth:`instantiate` with concrete input parameters
+    to obtain a runnable :class:`OptimizationProblem`.
+
+    Input parameter validation is expected to be handled by the
+    ``InputParams`` type itself (e.g. via a Pydantic model).
+
+    Attributes:
+        terms: Objective terms defining the loss function.
+        initialize: Callable that produces initial optimization variables
+            from input_parameters.
+    """
+
+    terms: list[ObjectiveTerm]
+    initialize: Callable[[InputParams], OptimVars]
+
+    def instantiate(
+        self, input_parameters: InputParams
+    ) -> "OptimizationProblem[InputParams, OptimVars]":
+        """Create a runnable problem instance from concrete input parameters.
+
+        Args:
+            input_parameters: Fixed data for this problem instance.
+
+        Returns:
+            An :class:`OptimizationProblem` ready to optimize.
+        """
+        return OptimizationProblem(input_parameters, self.terms, self.initialize)
+
+
+@dataclass
 class OptimizationProblem(Generic[InputParams, OptimVars]):
     """An optimization problem.
 
