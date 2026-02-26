@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**vizopt** is a mathematical optimization library for data visualization, specifically designed for optimizing graph layouts with hierarchical inclusion constraints ("bubble layouts"). It uses JAX for automatic differentiation and JIT compilation to efficiently optimize layouts via gradient descent.
+**vizopt** is a mathematical optimization library for data visualization. It provides a general framework for defining and solving layout optimization problems (e.g., bubble layouts, label placement) using JAX for automatic differentiation and JIT compilation.
 
 ## Development Commands
 
@@ -20,7 +20,8 @@ uv run black .
 # Run tests (when tests are added)
 uv run pytest
 
-# Run Jupyter notebook for examples
+# Run Jupyter notebooks for examples
+uv run jupyter notebook examples/optimize_label_positions.ipynb
 uv run jupyter notebook examples/examples_with_bubbles.ipynb
 ```
 
@@ -28,67 +29,70 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
 
 ### Core Components
 
-The codebase consists of two primary modules that work together:
+1. **[base.py](src/vizopt/base.py)** - Core abstractions for the optimization framework
+   - `ObjectiveTerm`: A named, weighted term in a composite loss function (name, compute, multiplier)
+   - `build_objective()`: Combines a list of `ObjectiveTerm`s into a single `fun(optim_vars) -> scalar`
+   - `OptimizationProblemTemplate`: A reusable template for a class of problems — holds terms, an `initialize` function, optional Pydantic `input_params_class` for validation, and optional `plot_configuration`
+   - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.optimize()` which returns `(optim_vars, history)`
 
-1. **[jaxopt.py](src/vizopt/jaxopt.py)** - Generic gradient descent optimizer
+2. **[jaxopt.py](src/vizopt/jaxopt.py)** - Generic gradient descent optimizer
    - `optimize_gradient_descent()`: Wraps Optax's Adam optimizer with JAX JIT compilation
-   - Accepts arbitrary loss functions and parameters as dictionaries
-   - Provides callback mechanism for monitoring optimization progress
+   - Low-level entry point; normally called indirectly via `OptimizationProblem.optimize()`
 
-2. **[bubblejax.py](src/vizopt/bubblejax.py)** - Specialized bubble layout optimizer
+3. **[components.py](src/vizopt/components.py)** - Reusable JAX loss components
+   - `multiple_bbox_intersections()`: Vectorized pairwise bounding-box intersection areas; shape `(n, 2, 2)` inputs, returns `(n, m)` matrix
+
+4. **[animation.py](src/vizopt/animation.py)** - Optimization progress visualization
+   - `SnapshotCallback`: Callback that saves numpy copies of `optim_vars` at regular intervals into `.snapshots`
+   - `animate()`: Renders each snapshot via `problem.plot_configuration` and returns a `FuncAnimation`
+
+5. **[bubblejax.py](src/vizopt/bubblejax.py)** - Specialized bubble layout optimizer
    - `optimize_bubble_layout()`: Main entry point for optimizing graph layouts with inclusion constraints
-   - Uses the generic optimizer from jaxopt.py
    - Pre-processes NetworkX graphs into JAX-compatible numpy arrays for vectorized operations
 
 ### Key Architectural Concepts
 
-#### Inclusion Trees
-The central concept is the **inclusion tree**: a directed graph where an edge `(u, v)` means node `u` is contained within node `v`. For example, in the examples notebook, "Munich" is in "Germany", "Vienna" is in "Austria", etc.
+#### General Optimization Workflow
 
-The optimizer handles two separate graphs:
-- **graph**: The main NetworkX Graph with nodes to lay out and edges to draw
-- **inclusion_tree**: A NetworkX DiGraph defining hierarchical containment relationships
+The framework separates *problem definition* from *problem instantiation*:
 
-#### Multi-Objective Optimization
+1. Define `ObjectiveTerm`s (loss components with names, compute functions, and multipliers)
+2. Create an `OptimizationProblemTemplate` with those terms, an `initialize` function, optional Pydantic class for input validation, and optional `plot_configuration`
+3. Call `template.instantiate(input_parameters)` → `OptimizationProblem`
+4. Call `problem.optimize(n_iters, learning_rate, callback, track_every)` → `(optim_vars, history)`
 
-The layout optimization minimizes a weighted sum of four competing objectives:
+`history` is a list of dicts with keys `"iteration"`, `"total"`, and one key per term name (weighted values), recorded every `track_every` iterations.
 
-1. **Edge lengths** - Shorter edges improve readability
-2. **Total width** - Compact layouts are preferred
-3. **Collision penalty** - Nodes that shouldn't overlap must stay separated
-4. **Non-inclusion penalty** - Nodes must stay inside their container nodes
+#### Input Parameters and Validation
 
-The collision detection is smart: nodes are allowed to overlap if one contains the other (based on the inclusion tree). This is pre-computed into a `collision_pairs` array.
+Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to loss functions. If `input_params_class` is set on a template, `model_validate` is called at instantiation time for type/shape checking (Pydantic), but the dict itself flows through unmodified.
 
 #### JAX-Specific Design Patterns
 
-The code uses several JAX-specific patterns:
+- **Pre-processing**: All non-JAX data (e.g., NetworkX graphs) is converted to numpy arrays before optimization to avoid Python loops in JAX-traced functions
+- **Vectorization**: Loss components use fully vectorized array operations rather than loops
+- **JIT compilation**: The composite loss function built by `build_objective()` is JIT-compiled via `jaxopt.optimize_gradient_descent()`
+- **Parameter dictionaries**: `optim_vars` are plain dicts (e.g., `{"rectangle_positions": ...}`)
 
-- **Pre-processing**: All graph data structures (NetworkX objects) are converted to numpy arrays before optimization to avoid Python loops in JAX-traced functions
-- **Vectorization**: Operations like collision detection and inclusion constraints are fully vectorized using array indexing rather than loops
-- **JIT compilation**: The main loss function `function_to_minimize()` is JIT-compiled for performance
-- **Parameter dictionaries**: Optimization parameters are passed as nested dictionaries (e.g., `{"node_xys": ..., "enclosing_node_radii": ...}`)
+#### Bubble Layout (bubblejax.py)
 
-#### Node Radii Management
+`bubblejax.py` implements the bubble layout use-case on top of the general framework:
 
-Nodes come in two types:
-- **Fixed-radius nodes**: Nodes from the main graph with pre-defined sizes
-- **Enclosing nodes**: Nodes that only appear in the inclusion tree (not the main graph) - their radii are optimization parameters
-
-The `get_node_radii()` function concatenates both types into a single array for use in loss calculations.
+- Handles two NetworkX graphs: **graph** (nodes/edges to lay out) and **inclusion_tree** (DiGraph where `(u, v)` means `u` is inside `v`)
+- Multi-objective loss: edge lengths, total width, collision penalty (pre-computed `collision_pairs`), non-inclusion penalty
+- Two node types: fixed-radius nodes (from graph) and enclosing nodes (radii are optimization variables)
 
 ### Data Flow
 
-1. Input: NetworkX Graph + NetworkX DiGraph (inclusion tree)
-2. Pre-process: Convert to numpy arrays (edge indices, collision pairs, etc.)
-3. Initialize: Random positions, initial enclosing radii
-4. Optimize: Gradient descent on multi-objective loss function
-5. Output: Optimized positions dictionary + enclosing radii dictionary + loss history plot
+1. Define terms and template (problem class definition)
+2. Call `template.instantiate(input_parameters)` — validates inputs, creates `OptimizationProblem`
+3. Call `problem.optimize()` — initializes vars, JIT-compiles loss, runs Adam, records history
+4. Optionally use `SnapshotCallback` + `animate()` for animated visualization
 
 ## Python Environment
 
 - Requires Python 3.13+
-- Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas
+- Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas, pydantic
 - Dev dependencies: black (formatting), pytest (testing), ipykernel (notebooks)
 
 ## Style guide
