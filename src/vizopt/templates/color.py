@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
-from vizopt.jaxopt import optimize_gradient_descent
+from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
 
 
 def classical_mds(D, k=3):
@@ -93,6 +93,48 @@ def rgb_to_lab(rgb):
     return jnp.stack([L, a, b], axis=1)
 
 
+def _build_rgb(optim_vars, input_parameters):
+    """Reconstruct the full (n, 3) sRGB array from free logit params.
+
+    Args:
+        optim_vars: Dict with key ``"logit_rgb"`` of shape (n_free, 3).
+        input_parameters: Problem input dict with keys ``"n"``, ``"free_idx"``,
+            ``"fixed_idx"``, and ``"fixed_rgb"``.
+
+    Returns:
+        sRGB array of shape (n, 3) with values in [0, 1].
+    """
+    rgb = jax.nn.sigmoid(optim_vars["logit_rgb"])
+    full = jnp.zeros((input_parameters["n"], 3))
+    full = full.at[input_parameters["free_idx"]].set(rgb)
+    if input_parameters["fixed_idx"].shape[0] > 0:
+        full = full.at[input_parameters["fixed_idx"]].set(input_parameters["fixed_rgb"])
+    return full
+
+
+def _stress(optim_vars, input_parameters):
+    lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
+    idx_i = input_parameters["idx_i"]
+    idx_j = input_parameters["idx_j"]
+    targets = input_parameters["targets"]
+    color_dists = jnp.sqrt(((lab[idx_i] - lab[idx_j]) ** 2).sum(axis=-1) + 1e-8)
+    return jnp.mean((color_dists - targets) ** 2)
+
+
+def _coverage(optim_vars, input_parameters):
+    lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
+    return -(lab[:, 1].var() + lab[:, 2].var())
+
+
+color_palette_template = OptimizationProblemTemplate(
+    terms=[
+        ObjectiveTerm(name="stress", compute=_stress),
+        ObjectiveTerm(name="coverage", compute=_coverage, multiplier=0.5),
+    ],
+    initialize=lambda params: {"logit_rgb": params["logit_init"]},
+)
+
+
 def optimize_colors(
     distances,
     fixed_colors=None,
@@ -120,10 +162,10 @@ def optimize_colors(
             restarts with different starting points.
 
     Returns:
-        Tuple of (colors, loss) where colors is an sRGB array of shape (n, 3)
-        in [0, 1] and loss is the final scalar loss value.
+        Tuple of (colors, history) where colors is an sRGB array of shape (n, 3)
+        in [0, 1] and history is a list of dicts recorded every 10 iterations
+        with keys ``"iteration"``, ``"total"``, ``"stress"``, and ``"coverage"``.
     """
-
     if isinstance(distances, pd.DataFrame):
         labels = list(distances.index)
         D = np.array(distances, dtype=float)
@@ -158,21 +200,6 @@ def optimize_colors(
     pair_dists = jnp.array([D[i, j] for i, j in pairs], dtype=float)
     targets = pair_dists / pair_dists.max() * target_max_delta_e
 
-    def build_rgb(params):
-        rgb = jax.nn.sigmoid(params["logit_rgb"])
-        full = jnp.zeros((n, 3))
-        full = full.at[free_idx].set(rgb)
-        if fixed_idx.shape[0] > 0:
-            full = full.at[fixed_idx].set(fixed_rgb)
-        return full
-
-    def loss_fn(params):
-        lab = rgb_to_lab(build_rgb(params))
-        color_dists = jnp.sqrt(((lab[idx_i] - lab[idx_j]) ** 2).sum(axis=-1) + 1e-8)
-        stress = jnp.mean((color_dists - targets) ** 2)
-        coverage = -(lab[:, 1].var() + lab[:, 2].var())
-        return stress + 0.5 * coverage
-
     if seed is None:
         # MDS warm-start
         coords = classical_mds(D)
@@ -185,14 +212,22 @@ def optimize_colors(
         rng = jax.random.PRNGKey(seed)
         logit_init = jax.random.normal(rng, shape=(n, 3))
 
-    params0 = {"logit_rgb": jnp.array(logit_init[np.array(free_idx)])}
+    input_parameters = {
+        "n": n,
+        "free_idx": free_idx,
+        "fixed_idx": fixed_idx,
+        "fixed_rgb": fixed_rgb,
+        "idx_i": idx_i,
+        "idx_j": idx_j,
+        "targets": targets,
+        "logit_init": jnp.array(logit_init[np.array(free_idx)]),
+    }
 
-    params_opt, final_loss = optimize_gradient_descent(
-        params0,
-        loss_fn,
-        learning_rate=learning_rate,
+    problem = color_palette_template.instantiate(input_parameters)
+    optim_vars, history = problem.optimize(
         n_iters=n_iters,
+        learning_rate=learning_rate,
         callback=callback,
     )
 
-    return np.array(build_rgb(params_opt)), float(final_loss)
+    return np.array(_build_rgb(optim_vars, input_parameters)), history
