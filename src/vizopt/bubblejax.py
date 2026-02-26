@@ -1,32 +1,97 @@
-import jax
 import networkx as nx
 import numpy as np
-import pandas as pd
+import jax
 from jax import numpy as jnp
-from matplotlib import pyplot as plt
 
-from . import jaxopt
+from .base import ObjectiveTerm, OptimizationProblemTemplate
 
 
 def get_random_node_positions(graph, scale=1.0):
+    """Generate random initial positions for graph nodes.
+
+    Args:
+        graph: NetworkX graph whose nodes to position.
+        scale: Coordinate range for positions.
+
+    Returns:
+        Dict mapping node names to (x, y) tuples.
+    """
     pos = {}
     for node in graph.nodes:
         pos[node] = (scale * np.random.rand(), scale * np.random.rand())
     return pos
 
 
+# ---------------------------------------------------------------------------
+# Low-level JAX loss components
+# ---------------------------------------------------------------------------
+
+
 def _should_be_positive_activation(x_value, factor=100.0):
-    """A penalty for negative values"""
+    """A penalty for negative values."""
     return factor * jax.nn.relu(-x_value)
 
 
 def _calculate_total_width_penalty(node_xys):
-    """A penalty for the overall width and height of the drawing"""
+    """A penalty for the overall width and height of the drawing."""
     return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
 
 
+def _calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1.0):
+    """Vectorized collision penalty for non-inclusion node pairs."""
+    if len(collision_pairs) == 0:
+        return jnp.array(0.0)
+
+    pos_a = node_xys[collision_pairs[:, 0]]
+    pos_b = node_xys[collision_pairs[:, 1]]
+    dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
+    radii_a = node_radii[collision_pairs[:, 0]]
+    radii_b = node_radii[collision_pairs[:, 1]]
+    d_minus_radiuses = dists - offset - radii_a - radii_b
+    return jnp.sum(_should_be_positive_activation(d_minus_radiuses))
+
+
+def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=1.0):
+    """Vectorized inclusion constraint penalty.
+
+    Convention: edge (u, v) means v is contained in u.
+    """
+    if len(inclusion_edge_indices) == 0:
+        return jnp.array(0.0)
+
+    including_nodes = inclusion_edge_indices[:, 0]
+    included_nodes = inclusion_edge_indices[:, 1]
+    including_pos = node_xys[including_nodes]
+    included_pos = node_xys[included_nodes]
+    dists = jnp.sqrt(jnp.sum((including_pos - included_pos) ** 2, axis=1))
+    including_radii = node_radii[including_nodes]
+    included_radii = node_radii[included_nodes]
+    radius_diff_minus_dist = including_radii - offset - included_radii - dists
+    return jnp.sum(_should_be_positive_activation(radius_diff_minus_dist))
+
+
+def _calculate_edge_lengths(node_xys, edge_indices):
+    """Vectorized sum of edge lengths."""
+    if len(edge_indices) == 0:
+        return jnp.array(0.0)
+    start_points = node_xys[edge_indices[:, 0]]
+    end_points = node_xys[edge_indices[:, 1]]
+    return jnp.sum(jnp.sqrt(jnp.sum((start_points - end_points) ** 2, axis=1)))
+
+
 def _compute_collision_pairs(all_node_names, inclusion_tree):
-    """Pre-compute which node pairs should be checked for collisions"""
+    """Pre-compute which node pairs should be checked for collisions.
+
+    Excludes pairs where one node is an ancestor/descendant of the other in
+    the inclusion tree, since one is geometrically contained inside the other.
+
+    Args:
+        all_node_names: Ordered list of all node names.
+        inclusion_tree: NetworkX DiGraph encoding inclusion relationships.
+
+    Returns:
+        Integer array of shape (n_pairs, 2) with index pairs to check.
+    """
     collision_pairs = []
     for i, node_a in enumerate(all_node_names):
         for j, node_b in enumerate(all_node_names[:i]):
@@ -40,70 +105,54 @@ def _compute_collision_pairs(all_node_names, inclusion_tree):
                 collision_pairs.append([i, j])
 
     return (
-        np.array(collision_pairs)
+        np.array(collision_pairs, dtype=np.int32)
         if collision_pairs
         else np.zeros((0, 2), dtype=np.int32)
     )
 
 
-def _calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1.0):
-    """Vectorized collision penalty calculation"""
-    if len(collision_pairs) == 0:
-        return jnp.array(0.0)
-
-    pos_a = node_xys[collision_pairs[:, 0]]
-    pos_b = node_xys[collision_pairs[:, 1]]
-    dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
-
-    radii_a = node_radii[collision_pairs[:, 0]]
-    radii_b = node_radii[collision_pairs[:, 1]]
-
-    d_minus_radiuses = dists - offset - radii_a - radii_b
-    penalties = _should_be_positive_activation(d_minus_radiuses)
-
-    return jnp.sum(penalties)
+# ---------------------------------------------------------------------------
+# ObjectiveTerm compute functions
+#
+# optim_vars keys: "node_xys", "variable_node_radii"
+# input_params keys: "fixed_node_radii", "collision_pairs", "inclusion_edge_indices"
+#                    and optionally "edge_indices"
+# ---------------------------------------------------------------------------
 
 
-def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=1.0):
-    """Vectorized inclusion constraint penalty.
-
-    Uses the convention: edge (u, v) means v is contained in u.
-    """
-    if len(inclusion_edge_indices) == 0:
-        return jnp.array(0.0)
-
-    # Convention: in edge (u, v), v is contained in u
-    including_nodes = inclusion_edge_indices[:, 0]
-    included_nodes = inclusion_edge_indices[:, 1]
-
-    including_pos = node_xys[including_nodes]
-    included_pos = node_xys[included_nodes]
-    dists = jnp.sqrt(jnp.sum((including_pos - included_pos) ** 2, axis=1))
-
-    including_radii = node_radii[including_nodes]
-    included_radii = node_radii[included_nodes]
-
-    radius_diff_minus_dist = including_radii - offset - included_radii - dists
-    penalties = _should_be_positive_activation(radius_diff_minus_dist)
-
-    return jnp.sum(penalties)
+def _get_node_radii(optim_vars, input_params):
+    """Concatenate fixed radii (input_params) and optimizable radii (optim_vars)."""
+    return jnp.concatenate(
+        [jnp.array(input_params["fixed_node_radii"]), optim_vars["variable_node_radii"]],
+        axis=0,
+    )
 
 
-def _calculate_edge_lengths(node_xys, edge_indices):
-    """Vectorized edge length calculation"""
-    if len(edge_indices) == 0:
-        return jnp.array(0.0)
-
-    start_points = node_xys[edge_indices[:, 0]]
-    end_points = node_xys[edge_indices[:, 1]]
-    return jnp.sum(jnp.sqrt(jnp.sum((start_points - end_points) ** 2, axis=1)))
+def _term_total_size(optim_vars, _):
+    return _calculate_total_width_penalty(optim_vars["node_xys"])
 
 
-def _plot_optimization_history(history):
-    """Plot optimization loss history on log scale"""
-    _, ax = plt.subplots()
-    pd.DataFrame(history).set_index("iteration").iloc[::50].plot(ax=ax)
-    ax.set_yscale("log")
+def _term_collision(optim_vars, input_params):
+    node_radii = _get_node_radii(optim_vars, input_params)
+    return _calculate_collision_penalty(
+        optim_vars["node_xys"], node_radii, input_params["collision_pairs"]
+    )
+
+
+def _term_non_inclusion(optim_vars, input_params):
+    node_radii = _get_node_radii(optim_vars, input_params)
+    return _non_inclusion_penalty(
+        optim_vars["node_xys"], node_radii, input_params["inclusion_edge_indices"]
+    )
+
+
+def _term_edge_length(optim_vars, input_params):
+    return _calculate_edge_lengths(optim_vars["node_xys"], input_params["edge_indices"])
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def optimize_circular_layout_with_enclosed_nodes(
@@ -111,103 +160,77 @@ def optimize_circular_layout_with_enclosed_nodes(
     weight_total_size=2.0,
     optim_kwargs=None,
 ):
-    """Optimize drawing of a tree with circular nodes and inclusion constraints
+    """Optimize drawing of a tree with circular nodes and inclusion constraints.
 
-    Minimizing a weighted sum of the following objectives:
+    Minimizes a weighted sum of:
         - total width/height: compact layouts with low overall dimensions are better
         - collision penalty: nodes not in inclusion relationships shouldn't overlap
         - non-inclusion penalty: child nodes must stay inside parent nodes
 
     Args:
-        inclusion_tree: a networkx DiGraph with an edge (u, v) if v is contained in u
-            Leaf nodes must have a "size" attribute (fixed radius)
-            Non-leaf nodes will have optimizable radii
-        weight_total_size: weight for the total width/height objective
-        optim_kwargs: optional keyword arguments for the optimizer
-    """
-    # Identify leaf and non-leaf nodes
-    leaf_nodes = [node for node in inclusion_tree.nodes if inclusion_tree.out_degree(node) == 0]
-    non_leaf_nodes = [node for node in inclusion_tree.nodes if inclusion_tree.out_degree(node) > 0]
+        inclusion_tree: a networkx DiGraph with an edge (u, v) if v is contained in u.
+            Leaf nodes must have a "size" attribute (fixed radius).
+            Non-leaf nodes will have optimizable radii.
+        weight_total_size: weight for the total width/height objective.
+        optim_kwargs: optional keyword arguments forwarded to problem.optimize()
+            (e.g. n_iters, learning_rate).
 
-    # Get fixed radii for leaf nodes
+    Returns:
+        Tuple of (pos, non_leaf_node_radius_dict) where pos maps node names to
+        (x, y) tuples and non_leaf_node_radius_dict maps non-leaf node names to
+        their optimized radii.
+    """
+    leaf_nodes = [n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) == 0]
+    non_leaf_nodes = [n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) > 0]
+    all_node_names = leaf_nodes + non_leaf_nodes
+
     def _node_size(node):
         if "size" in inclusion_tree.nodes[node]:
             return inclusion_tree.nodes[node]["size"]
         print(f"leaf node {node} has no size")
         return 1.0
 
-    leaf_node_radii = np.array([_node_size(node) for node in leaf_nodes])
-
-    # Initialize positions for all nodes
-    all_node_names = leaf_nodes + non_leaf_nodes
-    total_scale = sum(leaf_node_radii) if len(leaf_node_radii) > 0 else 10.0
-    pos = get_random_node_positions(inclusion_tree, scale=total_scale)
-
-    node_name_to_id = {node_name: i for i, node_name in enumerate(all_node_names)}
-
-    # Prepare inclusion tree relationships for vectorized operations
-    inclusion_edge_indices = np.array(
-        [[node_name_to_id[u], node_name_to_id[v]] for u, v in inclusion_tree.edges]
+    fixed_node_radii = np.array([_node_size(n) for n in leaf_nodes])
+    total_scale = float(sum(fixed_node_radii)) if len(fixed_node_radii) > 0 else 10.0
+    initial_pos = get_random_node_positions(inclusion_tree, scale=total_scale)
+    initial_node_xys = np.stack([initial_pos[n] for n in all_node_names])
+    initial_variable_radii = np.full(
+        len(non_leaf_nodes),
+        float(fixed_node_radii.max()) if len(fixed_node_radii) > 0 else 1.0,
     )
 
-    # Pre-compute collision exclusion mask
+    node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
+    edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in inclusion_tree.edges]
+    inclusion_edge_indices = (
+        np.array(edges_list, dtype=np.int32) if edges_list else np.zeros((0, 2), dtype=np.int32)
+    )
     collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
 
-    # Initialize non-leaf node radii
-    non_leaf_node_radii = np.full(
-        len(non_leaf_nodes), float(leaf_node_radii.max()) if len(leaf_node_radii) > 0 else 1.0
+    input_parameters = {
+        "fixed_node_radii": fixed_node_radii,
+        "collision_pairs": collision_pairs,
+        "inclusion_edge_indices": inclusion_edge_indices,
+    }
+
+    def initialize(_):
+        return {"node_xys": initial_node_xys, "variable_node_radii": initial_variable_radii}
+
+    terms = [
+        ObjectiveTerm("total_size", _term_total_size, weight_total_size),
+        ObjectiveTerm("collision", _term_collision),
+        ObjectiveTerm("non_inclusion", _term_non_inclusion),
+    ]
+
+    problem = OptimizationProblemTemplate(terms=terms, initialize=initialize).instantiate(
+        input_parameters
     )
+    optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
 
-    # Prepare initial parameters
-    node_xys = np.stack([pos[node] for node in all_node_names])
-    params = {"node_xys": node_xys, "non_leaf_node_radii": non_leaf_node_radii}
-
-    # JAX-optimized functions
-    def get_node_radii(params):
-        """Get all node radii from parameters"""
-        return jnp.concatenate(
-            [jnp.array(leaf_node_radii), params["non_leaf_node_radii"]], axis=0
-        )
-
-    @jax.jit
-    def function_to_minimize(params):
-        """The function to minimize, taking params as argument"""
-        node_xys = params["node_xys"]
-        node_radii = get_node_radii(params)
-
-        width_penalty = weight_total_size * calculate_total_width_penalty(node_xys)
-        coll_penalty = calculate_collision_penalty(node_xys, node_radii)
-        incl_penalty = non_inclusion_penalty(node_xys, node_radii)
-
-        return width_penalty + coll_penalty + incl_penalty
-
-    initial_loss = function_to_minimize(params)
-
-    if optim_kwargs is None:
-        optim_kwargs = {}
-
-    history = []
-
-    def optim_callback(i_iter, loss_value, params, grads):
-        if i_iter % 100 == 0:
-            print(i_iter, loss_value)
-        history.append({"iteration": i_iter, "loss": float(loss_value)})
-
-    params_opt, _ = jaxopt.optimize_gradient_descent(
-        params, function_to_minimize, **optim_kwargs, callback=optim_callback
-    )
-
-    node_xys_opt = params_opt["node_xys"]
-    non_leaf_node_radius_dict = dict(
-        zip(non_leaf_nodes, params_opt["non_leaf_node_radii"])
-    )
-
-    for node, node_xy in zip(all_node_names, node_xys_opt):
-        pos[node] = tuple(float(x_or_y) for x_or_y in node_xy)
-
-    _, ax = plt.subplots()
-    pd.DataFrame(history).set_index("iteration").iloc[::50].plot(ax=ax)
-    ax.set_yscale("log")
+    pos = {
+        node: tuple(float(c) for c in xy)
+        for node, xy in zip(all_node_names, optim_vars["node_xys"])
+    }
+    non_leaf_node_radius_dict = dict(zip(non_leaf_nodes, optim_vars["variable_node_radii"]))
     return pos, non_leaf_node_radius_dict
 
 
@@ -218,178 +241,95 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     weight_total_size=2.0,
     optim_kwargs=None,
 ):
-    """Optimize drawing of a graph with circular nodes and inclusion constraints
+    """Optimize drawing of a graph with circular nodes and inclusion constraints.
 
-    Minimizing a weighted sum of the following objectives:
-        - edge lengths: all things being equal, shorter edge lengths make the graph more readable.
-        - total width: compact layouts with low overall width are better
-        - collision penalty
-        - non-inclusion penalty
+    Minimizes a weighted sum of:
+        - edge lengths: shorter edges make the graph more readable
+        - total width/height: compact layouts with low overall dimensions are better
+        - collision penalty: nodes not in inclusion relationships shouldn't overlap
+        - non-inclusion penalty: child nodes must stay inside parent nodes
 
     Args:
-        graph: a networkx DiGraph
-        inclusion_tree: a networkx DiGraph
-            with an edge (u, v) if u is in v
-    """
+        graph: a networkx Graph with node "size" attributes.
+        inclusion_tree: a networkx DiGraph with an edge (u, v) if u is contained in v.
+        weight_edge_length: weight for the edge length objective.
+        weight_total_size: weight for the total width/height objective.
+        optim_kwargs: optional keyword arguments forwarded to problem.optimize()
+            (e.g. n_iters, learning_rate).
 
-    # Pre-process all the graph data to avoid Python loops in JAX functions
+    Returns:
+        Tuple of (pos, enclosing_node_radius_dict) where pos maps node names to
+        (x, y) tuples and enclosing_node_radius_dict maps enclosing node names to
+        their optimized radii.
+    """
     def _node_size(node):
         if "size" in graph.nodes[node]:
             return graph.nodes[node]["size"]
         print(f"node {node} has no size")
         return 1.0
 
-    all_node_names = sorted(list(set(graph.nodes).union(set(inclusion_tree.nodes))))
-    pos = get_random_node_positions(graph)
-    node_names = list(pos.keys())
-    fixed_node_radii = np.array([_node_size(node) for node in node_names])
-    pos = get_random_node_positions(graph, scale=sum(fixed_node_radii))
-
+    graph_node_names = list(graph.nodes)
     enclosing_node_names = sorted(list(set(inclusion_tree.nodes) - set(graph.nodes)))
-    enclosing_pos = get_random_node_positions(
-        inclusion_tree, scale=sum(fixed_node_radii)
-    )
-    pos = {**pos, **enclosing_pos}
+    all_node_names = graph_node_names + enclosing_node_names
+    node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
 
-    all_node_names = node_names + enclosing_node_names
-    node_name_to_id = {node_name: i for i, node_name in enumerate(all_node_names)}
+    fixed_node_radii = np.array([_node_size(n) for n in graph_node_names])
+    total_scale = float(sum(fixed_node_radii)) if len(fixed_node_radii) > 0 else 10.0
 
-    # Convert NetworkX graph structures to JAX-friendly arrays
-    # Create edge index arrays for vectorized operations
-    edge_indices = np.array(
-        [[node_name_to_id[u], node_name_to_id[v]] for u, v in graph.edges]
-    )
-
-    # Prepare inclusion tree relationships for vectorized operations
-    inclusion_edge_indices = np.array(
-        [[node_name_to_id[u], node_name_to_id[v]] for u, v in inclusion_tree.edges]
+    # Generate positions for graph nodes and enclosing nodes separately to avoid
+    # graph nodes having their positions overwritten by the inclusion tree positions.
+    initial_pos = get_random_node_positions(graph, scale=total_scale)
+    for n in enclosing_node_names:
+        initial_pos[n] = (total_scale * np.random.rand(), total_scale * np.random.rand())
+    initial_node_xys = np.stack([initial_pos[n] for n in all_node_names])
+    initial_variable_radii = np.full(
+        len(enclosing_node_names),
+        float(fixed_node_radii.max()) if len(fixed_node_radii) > 0 else 1.0,
     )
 
-    # Pre-compute collision exclusion mask
+    edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in graph.edges]
+    edge_indices = (
+        np.array(edges_list, dtype=np.int32) if edges_list else np.zeros((0, 2), dtype=np.int32)
+    )
+
+    # Normalize inclusion edges to (parent, child) convention used by _non_inclusion_penalty.
+    # Input convention: edge (u, v) means u is contained in v → store as (v, u).
+    inclusion_edges_list = [
+        (node_name_to_id[v], node_name_to_id[u]) for u, v in inclusion_tree.edges
+    ]
+    inclusion_edge_indices = (
+        np.array(inclusion_edges_list, dtype=np.int32)
+        if inclusion_edges_list
+        else np.zeros((0, 2), dtype=np.int32)
+    )
+
     collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
 
-    # Initialize enclosing node radii
-    enclosing_node_radii = np.full(
-        len(enclosing_node_names), float(fixed_node_radii.max())
+    input_parameters = {
+        "fixed_node_radii": fixed_node_radii,
+        "edge_indices": edge_indices,
+        "collision_pairs": collision_pairs,
+        "inclusion_edge_indices": inclusion_edge_indices,
+    }
+
+    def initialize(_):
+        return {"node_xys": initial_node_xys, "variable_node_radii": initial_variable_radii}
+
+    terms = [
+        ObjectiveTerm("edge_length", _term_edge_length, weight_edge_length),
+        ObjectiveTerm("total_size", _term_total_size, weight_total_size),
+        ObjectiveTerm("collision", _term_collision),
+        ObjectiveTerm("non_inclusion", _term_non_inclusion),
+    ]
+
+    problem = OptimizationProblemTemplate(terms=terms, initialize=initialize).instantiate(
+        input_parameters
     )
+    optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
 
-    # Prepare initial parameters
-    node_xys = np.stack([pos[node] for node in all_node_names])
-    params = {"node_xys": node_xys, "enclosing_node_radii": enclosing_node_radii}
-
-    # JAX-optimized functions
-    # @jax.jit
-    def get_node_radii(params):
-        """Get all node radii from parameters"""
-        return jnp.concatenate(
-            [jnp.array(fixed_node_radii), params["enclosing_node_radii"]], axis=0
-        )
-
-    # @jax.jit
-    def edge_lengths(node_xys):
-        """Vectorized edge length calculation"""
-        if len(edge_indices) == 0:
-            return jnp.array(0.0)
-
-        start_points = node_xys[edge_indices[:, 0]]
-        end_points = node_xys[edge_indices[:, 1]]
-        return jnp.sum(jnp.sqrt(jnp.sum((start_points - end_points) ** 2, axis=1)))
-
-    def should_be_positive_activation(x_value, factor=100.0):
-        """A penalty for negative values"""
-        return factor * jax.nn.relu(-x_value)
-
-    def calculate_total_width_penalty(node_xys):
-        """A penalty for the overall width of the drawing"""
-        return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
-
-    def calculate_collision_penalty(node_xys, node_radii, offset=1.0):
-        """Vectorized collision penalty calculation"""
-        if len(collision_pairs) == 0:
-            return jnp.array(0.0)
-
-        # Extract node positions for all collision pairs
-        pos_a = node_xys[collision_pairs[:, 0]]
-        pos_b = node_xys[collision_pairs[:, 1]]
-
-        # Calculate distances between nodes
-        dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
-
-        # Get radii for collision pairs
-        radii_a = node_radii[collision_pairs[:, 0]]
-        radii_b = node_radii[collision_pairs[:, 1]]
-
-        # Calculate penalties
-        d_minus_radiuses = dists - offset - radii_a - radii_b
-        penalties = should_be_positive_activation(d_minus_radiuses)
-
-        return jnp.sum(penalties)
-
-    # @jax.jit
-    def non_inclusion_penalty(node_xys, node_radii, offset=1.0):
-        """Vectorized inclusion constraint penalty"""
-        if len(inclusion_edge_indices) == 0:
-            return jnp.array(0.0)
-
-        # Using the convention v in (u,v) if u is in v
-        including_nodes = inclusion_edge_indices[:, 1]
-        included_nodes = inclusion_edge_indices[:, 0]
-
-        # Extract positions
-        including_pos = node_xys[including_nodes]
-        included_pos = node_xys[included_nodes]
-
-        # Calculate distances
-        dists = jnp.sqrt(jnp.sum((including_pos - included_pos) ** 2, axis=1))
-
-        # Get radii
-        including_radii = node_radii[including_nodes]
-        included_radii = node_radii[included_nodes]
-
-        # Calculate penalties
-        radius_diff_minus_dist = including_radii - offset - included_radii - dists
-        penalties = should_be_positive_activation(radius_diff_minus_dist)
-
-        return jnp.sum(penalties)
-
-    @jax.jit
-    def function_to_minimize(params):
-        """The function to minimize, taking params as argument"""
-        node_xys = params["node_xys"]
-        node_radii = get_node_radii(params)
-
-        edge_len_penalty = weight_edge_length * edge_lengths(node_xys)
-        width_penalty = weight_total_size * calculate_total_width_penalty(node_xys)
-        coll_penalty = calculate_collision_penalty(node_xys, node_radii)
-        incl_penalty = non_inclusion_penalty(node_xys, node_radii)
-
-        return edge_len_penalty + width_penalty + coll_penalty + incl_penalty
-
-    initial_loss = function_to_minimize(params)
-
-    if optim_kwargs is None:
-        optim_kwargs = {}
-
-    history = []
-
-    def optim_callback(i_iter, loss_value, params, grads):
-        if i_iter % 100 == 0:
-            print(i_iter, loss_value)
-        history.append({"iteration": i_iter, "loss": float(loss_value)})
-
-    params_opt, _ = jaxopt.optimize_gradient_descent(
-        params, function_to_minimize, **optim_kwargs, callback=optim_callback
-    )
-
-    node_xys_opt = params_opt["node_xys"]
-    enclosing_node_radius_dict = dict(
-        zip(enclosing_node_names, params_opt["enclosing_node_radii"])
-    )
-
-    for node, node_xy in zip(all_node_names, node_xys_opt):
-        pos[node] = tuple(float(x_or_y) for x_or_y in node_xy)
-
-    _, ax = plt.subplots()
-    pd.DataFrame(history).set_index("iteration").iloc[::50].plot(ax=ax)
-    ax.set_yscale("log")
+    pos = {
+        node: tuple(float(c) for c in xy)
+        for node, xy in zip(all_node_names, optim_vars["node_xys"])
+    }
+    enclosing_node_radius_dict = dict(zip(enclosing_node_names, optim_vars["variable_node_radii"]))
     return pos, enclosing_node_radius_dict
