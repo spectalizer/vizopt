@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 
 from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
 
@@ -126,45 +127,49 @@ def _coverage(optim_vars, input_parameters):
     return -(lab[:, 1].var() + lab[:, 2].var())
 
 
+def _plot_colored_words(optim_vars, input_parameters):
+    colors = np.array(_build_rgb(optim_vars, input_parameters))
+    labels = input_parameters["labels"]
+    _, ax = plt.subplots(figsize=(7, 2))
+    for i, (label, color) in enumerate(zip(labels, colors)):
+        ax.scatter(i, 0.15, color=color, s=500, zorder=3, edgecolors="0.3", linewidths=0.5)
+        ax.text(i, -0.05, label, ha="center", va="top", fontsize=12)
+    ax.set_xlim(-0.7, len(labels) - 0.3)
+    ax.set_ylim(-0.3, 0.45)
+    ax.axis("off")
+    plt.tight_layout()
+
+
 color_palette_template = OptimizationProblemTemplate(
     terms=[
         ObjectiveTerm(name="stress", compute=_stress),
         ObjectiveTerm(name="coverage", compute=_coverage, multiplier=0.5),
     ],
     initialize=lambda params: {"logit_rgb": params["logit_init"]},
+    plot_configuration=_plot_colored_words,
 )
 
 
-def optimize_colors(
+def build_color_input_parameters(
     distances,
     fixed_colors=None,
     *,
     target_max_delta_e=50.0,
-    learning_rate=0.05,
-    n_iters=1000,
-    callback=None,
     seed=None,
 ):
-    """Optimize a palette so pairwise CIELAB ΔE distances match ``distances``.
+    """Build the ``input_parameters`` dict for :obj:`color_palette_template`.
 
     Args:
         distances: Symmetric pairwise distance matrix of shape (n, n). If a
-            DataFrame, its index is used as labels for ``fixed_colors`` keys.
+            DataFrame, its index is used as labels.
         fixed_colors: Map from label (DataFrame index value) or integer position
-            to an sRGB tuple/array in [0, 1]. Those colors are held fixed during
-            optimization.
+            to an sRGB tuple/array in [0, 1]. Those colors are held fixed.
         target_max_delta_e: The largest pairwise distance maps to this ΔE value.
-        learning_rate: Adam learning rate.
-        n_iters: Number of gradient-descent iterations.
-        callback: Called as ``callback(i, loss, params, grads)`` after each step.
         seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
-            Pass an integer to use random initialization instead, enabling multiple
-            restarts with different starting points.
 
     Returns:
-        Tuple of (colors, history) where colors is an sRGB array of shape (n, 3)
-        in [0, 1] and history is a list of dicts recorded every 10 iterations
-        with keys ``"iteration"``, ``"total"``, ``"stress"``, and ``"coverage"``.
+        Dict of input parameters suitable for
+        ``color_palette_template.instantiate()``.
     """
     if isinstance(distances, pd.DataFrame):
         labels = list(distances.index)
@@ -212,8 +217,9 @@ def optimize_colors(
         rng = jax.random.PRNGKey(seed)
         logit_init = jax.random.normal(rng, shape=(n, 3))
 
-    input_parameters = {
+    return {
         "n": n,
+        "labels": labels,
         "free_idx": free_idx,
         "fixed_idx": fixed_idx,
         "fixed_rgb": fixed_rgb,
@@ -223,11 +229,45 @@ def optimize_colors(
         "logit_init": jnp.array(logit_init[np.array(free_idx)]),
     }
 
+
+def optimize_colors(
+    distances,
+    fixed_colors=None,
+    *,
+    target_max_delta_e=50.0,
+    learning_rate=0.05,
+    n_iters=1000,
+    callback=None,
+    seed=None,
+):
+    """Optimize a palette so pairwise CIELAB ΔE distances match ``distances``.
+
+    Args:
+        distances: Symmetric pairwise distance matrix of shape (n, n). If a
+            DataFrame, its index is used as labels for ``fixed_colors`` keys.
+        fixed_colors: Map from label (DataFrame index value) or integer position
+            to an sRGB tuple/array in [0, 1]. Those colors are held fixed during
+            optimization.
+        target_max_delta_e: The largest pairwise distance maps to this ΔE value.
+        learning_rate: Adam learning rate.
+        n_iters: Number of gradient-descent iterations.
+        callback: Called as ``callback(i, loss, params, grads)`` after each step.
+        seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
+            Pass an integer to use random initialization instead, enabling multiple
+            restarts with different starting points.
+
+    Returns:
+        Tuple of (colors, history) where colors is an sRGB array of shape (n, 3)
+        in [0, 1] and history is a list of dicts recorded every 10 iterations
+        with keys ``"iteration"``, ``"total"``, ``"stress"``, and ``"coverage"``.
+    """
+    input_parameters = build_color_input_parameters(
+        distances, fixed_colors, target_max_delta_e=target_max_delta_e, seed=seed
+    )
     problem = color_palette_template.instantiate(input_parameters)
     optim_vars, history = problem.optimize(
         n_iters=n_iters,
         learning_rate=learning_rate,
         callback=callback,
     )
-
     return np.array(_build_rgb(optim_vars, input_parameters)), history
