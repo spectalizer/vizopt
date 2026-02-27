@@ -9,6 +9,30 @@ from .. import components
 from ..base import ObjectiveTerm, OptimizationProblemTemplate
 
 
+class LabelPositionParams(BaseModel):
+    """Input parameters for the label position optimization problem"""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    point_positions: np.ndarray  # shape (n, 2)
+    rectangle_sizes: np.ndarray  # shape (n, 2)
+
+    @model_validator(mode="after")
+    def check_shapes(self) -> "LabelPositionParams":
+        for name, arr in [
+            ("point_positions", self.point_positions),
+            ("rectangle_sizes", self.rectangle_sizes),
+        ]:
+            if arr.ndim != 2 or arr.shape[1] != 2:
+                raise ValueError(f"{name} must have shape (n, 2), got {arr.shape}")
+        if self.point_positions.shape[0] != self.rectangle_sizes.shape[0]:
+            raise ValueError(
+                f"point_positions and rectangle_sizes must have the same n, "
+                f"got {self.point_positions.shape[0]} and {self.rectangle_sizes.shape[0]}"
+            )
+        return self
+
+
 def initialize(input_parameters):
     return {"rectangle_positions": input_parameters["point_positions"].copy()}
 
@@ -32,7 +56,15 @@ def calculate_intersection_loss(optim_vars, input_parameters):
     return jnp.sum(interlabel_inters_array)
 
 
+def calculate_point_label_distance_loss(optim_vars, input_parameters):
+    """Distances between points and the respective labels"""
+    return jnp.sum(
+        (optim_vars["rectangle_positions"] - input_parameters["point_positions"]) ** 2
+    )
+
+
 def plot_rectangles(optim_vars, input_parameters):
+    """Plot label rectangles and points"""
     _, ax = plt.subplots(figsize=(4, 3))
     n_rect = optim_vars["rectangle_positions"].shape[0]
     for i_rect in range(n_rect):
@@ -57,35 +89,6 @@ def plot_rectangles(optim_vars, input_parameters):
     ax.scatter(
         input_parameters["point_positions"][:, 0],
         input_parameters["point_positions"][:, 1],
-    )
-
-
-class LabelPositionParams(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    point_positions: np.ndarray  # shape (n, 2)
-    rectangle_sizes: np.ndarray  # shape (n, 2)
-
-    @model_validator(mode="after")
-    def check_shapes(self) -> "LabelPositionParams":
-        for name, arr in [
-            ("point_positions", self.point_positions),
-            ("rectangle_sizes", self.rectangle_sizes),
-        ]:
-            if arr.ndim != 2 or arr.shape[1] != 2:
-                raise ValueError(f"{name} must have shape (n, 2), got {arr.shape}")
-        if self.point_positions.shape[0] != self.rectangle_sizes.shape[0]:
-            raise ValueError(
-                f"point_positions and rectangle_sizes must have the same n, "
-                f"got {self.point_positions.shape[0]} and {self.rectangle_sizes.shape[0]}"
-            )
-        return self
-
-
-def calculate_point_label_distance_loss(optim_vars, input_parameters):
-    """Distances between points and the respective labels"""
-    return jnp.sum(
-        (optim_vars["rectangle_positions"] - input_parameters["point_positions"]) ** 2
     )
 
 
