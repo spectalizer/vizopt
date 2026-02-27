@@ -22,6 +22,7 @@ dev = [
     "black>=26.1.0",
     "ipykernel>=7.1.0",
     "pytest>=9.0.2",
+    "types-networkx>=3.6.1.20260210",
 ]
 
 [build-system]
