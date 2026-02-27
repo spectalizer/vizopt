@@ -10,11 +10,45 @@ from ..components import should_be_positive_activation
 
 
 # ---------------------------------------------------------------------------
+# Preprocessing
+# ---------------------------------------------------------------------------
+
+
+def _compute_sibling_pairs(graph: nx.DiGraph, node_name_to_id: dict) -> np.ndarray:
+    """Pre-compute pairs of nodes that share a common predecessor.
+
+    For each node, all pairs of its direct successors are recorded so the
+    sibling-separation term can push them apart in the perpendicular direction.
+
+    Args:
+        graph: Directed graph.
+        node_name_to_id: Mapping from node name to integer index.
+
+    Returns:
+        Integer array of shape (n_pairs, 2).
+    """
+    sibling_pairs: set[tuple[int, int]] = set()
+    for node in graph.nodes:
+        children = list(graph.successors(node))
+        for i in range(len(children)):
+            for j in range(i + 1, len(children)):
+                a = node_name_to_id[children[i]]
+                b = node_name_to_id[children[j]]
+                sibling_pairs.add((min(a, b), max(a, b)))
+    pairs = sorted(sibling_pairs)
+    return (
+        np.array(pairs, dtype=np.int32)
+        if pairs
+        else np.zeros((0, 2), dtype=np.int32)
+    )
+
+
+# ---------------------------------------------------------------------------
 # JAX loss components
 #
 # optim_vars keys: "node_xys"
-# input_params keys: "edge_indices", "node_pairs", "min_distance",
-#                    "standard_direction", "initial_node_xys"
+# input_params keys: "edge_indices", "node_pairs", "sibling_pairs",
+#                    "min_distance", "standard_direction", "initial_node_xys"
 # ---------------------------------------------------------------------------
 
 
@@ -58,6 +92,32 @@ def _term_node_separation(optim_vars, input_params):
     return jnp.sum(should_be_positive_activation(dists - min_distance))
 
 
+def _term_sibling_separation(optim_vars, input_params):
+    """Penalize siblings (nodes sharing a common parent) that are too close
+    in the direction perpendicular to the standard direction.
+
+    Euclidean separation alone is insufficient because the edge_direction term
+    pulls siblings to the same position along the standard direction, leaving
+    the optimizer free to collapse them in the perpendicular axis.
+    """
+    sibling_pairs = input_params["sibling_pairs"]
+    if len(sibling_pairs) == 0:
+        return jnp.array(0.0)
+
+    node_xys = optim_vars["node_xys"]
+    min_distance = input_params["min_distance"]
+    std_dir = jnp.array(input_params["standard_direction"])  # (2,)
+
+    # Perpendicular direction: rotate std_dir by 90°
+    perp_dir = jnp.array([-std_dir[1], std_dir[0]])
+    perp_dir = perp_dir / (jnp.sqrt(jnp.sum(perp_dir**2)) + 1e-8)
+
+    pos_a = node_xys[sibling_pairs[:, 0]]
+    pos_b = node_xys[sibling_pairs[:, 1]]
+    perp_dists = jnp.abs(jnp.sum((pos_b - pos_a) * perp_dir, axis=1))
+    return jnp.sum(should_be_positive_activation(perp_dists - min_distance))
+
+
 def _initialize(input_params):
     return {"node_xys": input_params["initial_node_xys"].copy()}
 
@@ -97,6 +157,7 @@ layered_graph_template = OptimizationProblemTemplate(
     terms=[
         ObjectiveTerm("edge_direction", _term_edge_direction, 1.0),
         ObjectiveTerm("node_separation", _term_node_separation, 1.0),
+        ObjectiveTerm("sibling_separation", _term_sibling_separation, 1.0),
     ],
     initialize=_initialize,
     plot_configuration=_plot_configuration,
@@ -144,10 +205,13 @@ def make_layered_graph_input_params(
     i_idx, j_idx = np.triu_indices(n, k=1)
     node_pairs = np.stack([i_idx, j_idx], axis=1).astype(np.int32)
 
+    sibling_pairs = _compute_sibling_pairs(graph, node_name_to_id)
+
     return {
         "initial_node_xys": initial_node_xys.astype(np.float32),
         "edge_indices": edge_indices,
         "node_pairs": node_pairs,
+        "sibling_pairs": sibling_pairs,
         "min_distance": float(min_distance),
         "standard_direction": np.array(standard_direction, dtype=np.float32),
         "node_names": node_names,
