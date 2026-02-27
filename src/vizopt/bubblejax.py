@@ -1,9 +1,10 @@
+import jax
 import networkx as nx
 import numpy as np
-import jax
 from jax import numpy as jnp
 
 from .base import ObjectiveTerm, OptimizationProblemTemplate
+from .components import calculate_total_width_penalty, should_be_positive_activation
 
 
 def get_random_node_positions(graph, scale=1.0):
@@ -27,16 +28,6 @@ def get_random_node_positions(graph, scale=1.0):
 # ---------------------------------------------------------------------------
 
 
-def _should_be_positive_activation(x_value, factor=100.0):
-    """A penalty for negative values."""
-    return factor * jax.nn.relu(-x_value)
-
-
-def _calculate_total_width_penalty(node_xys):
-    """A penalty for the overall width and height of the drawing."""
-    return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
-
-
 def _calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1.0):
     """Vectorized collision penalty for non-inclusion node pairs."""
     if len(collision_pairs) == 0:
@@ -48,7 +39,7 @@ def _calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1
     radii_a = node_radii[collision_pairs[:, 0]]
     radii_b = node_radii[collision_pairs[:, 1]]
     d_minus_radiuses = dists - offset - radii_a - radii_b
-    return jnp.sum(_should_be_positive_activation(d_minus_radiuses))
+    return jnp.sum(should_be_positive_activation(d_minus_radiuses))
 
 
 def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=1.0):
@@ -67,7 +58,7 @@ def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=
     including_radii = node_radii[including_nodes]
     included_radii = node_radii[included_nodes]
     radius_diff_minus_dist = including_radii - offset - included_radii - dists
-    return jnp.sum(_should_be_positive_activation(radius_diff_minus_dist))
+    return jnp.sum(should_be_positive_activation(radius_diff_minus_dist))
 
 
 def _calculate_edge_lengths(node_xys, edge_indices):
@@ -123,13 +114,16 @@ def _compute_collision_pairs(all_node_names, inclusion_tree):
 def _get_node_radii(optim_vars, input_params):
     """Concatenate fixed radii (input_params) and optimizable radii (optim_vars)."""
     return jnp.concatenate(
-        [jnp.array(input_params["fixed_node_radii"]), optim_vars["variable_node_radii"]],
+        [
+            jnp.array(input_params["fixed_node_radii"]),
+            optim_vars["variable_node_radii"],
+        ],
         axis=0,
     )
 
 
 def _term_total_size(optim_vars, _):
-    return _calculate_total_width_penalty(optim_vars["node_xys"])
+    return calculate_total_width_penalty(optim_vars["node_xys"])
 
 
 def _term_collision(optim_vars, input_params):
@@ -181,7 +175,9 @@ def optimize_circular_layout_with_enclosed_nodes(
         their optimized radii.
     """
     leaf_nodes = [n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) == 0]
-    non_leaf_nodes = [n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) > 0]
+    non_leaf_nodes = [
+        n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) > 0
+    ]
     all_node_names = leaf_nodes + non_leaf_nodes
 
     def _node_size(node):
@@ -200,9 +196,13 @@ def optimize_circular_layout_with_enclosed_nodes(
     )
 
     node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
-    edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in inclusion_tree.edges]
+    edges_list = [
+        (node_name_to_id[u], node_name_to_id[v]) for u, v in inclusion_tree.edges
+    ]
     inclusion_edge_indices = (
-        np.array(edges_list, dtype=np.int32) if edges_list else np.zeros((0, 2), dtype=np.int32)
+        np.array(edges_list, dtype=np.int32)
+        if edges_list
+        else np.zeros((0, 2), dtype=np.int32)
     )
     collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
 
@@ -213,7 +213,10 @@ def optimize_circular_layout_with_enclosed_nodes(
     }
 
     def initialize(_):
-        return {"node_xys": initial_node_xys, "variable_node_radii": initial_variable_radii}
+        return {
+            "node_xys": initial_node_xys,
+            "variable_node_radii": initial_variable_radii,
+        }
 
     terms = [
         ObjectiveTerm("total_size", _term_total_size, weight_total_size),
@@ -221,16 +224,18 @@ def optimize_circular_layout_with_enclosed_nodes(
         ObjectiveTerm("non_inclusion", _term_non_inclusion),
     ]
 
-    problem = OptimizationProblemTemplate(terms=terms, initialize=initialize).instantiate(
-        input_parameters
-    )
+    problem = OptimizationProblemTemplate(
+        terms=terms, initialize=initialize
+    ).instantiate(input_parameters)
     optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
 
     pos = {
         node: tuple(float(c) for c in xy)
         for node, xy in zip(all_node_names, optim_vars["node_xys"])
     }
-    non_leaf_node_radius_dict = dict(zip(non_leaf_nodes, optim_vars["variable_node_radii"]))
+    non_leaf_node_radius_dict = dict(
+        zip(non_leaf_nodes, optim_vars["variable_node_radii"])
+    )
     return pos, non_leaf_node_radius_dict
 
 
@@ -262,6 +267,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
         (x, y) tuples and enclosing_node_radius_dict maps enclosing node names to
         their optimized radii.
     """
+
     def _node_size(node):
         if "size" in graph.nodes[node]:
             return graph.nodes[node]["size"]
@@ -280,7 +286,10 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     # graph nodes having their positions overwritten by the inclusion tree positions.
     initial_pos = get_random_node_positions(graph, scale=total_scale)
     for n in enclosing_node_names:
-        initial_pos[n] = (total_scale * np.random.rand(), total_scale * np.random.rand())
+        initial_pos[n] = (
+            total_scale * np.random.rand(),
+            total_scale * np.random.rand(),
+        )
     initial_node_xys = np.stack([initial_pos[n] for n in all_node_names])
     initial_variable_radii = np.full(
         len(enclosing_node_names),
@@ -289,7 +298,9 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
 
     edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in graph.edges]
     edge_indices = (
-        np.array(edges_list, dtype=np.int32) if edges_list else np.zeros((0, 2), dtype=np.int32)
+        np.array(edges_list, dtype=np.int32)
+        if edges_list
+        else np.zeros((0, 2), dtype=np.int32)
     )
 
     inclusion_edges_list = [
@@ -311,7 +322,10 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     }
 
     def initialize(_):
-        return {"node_xys": initial_node_xys, "variable_node_radii": initial_variable_radii}
+        return {
+            "node_xys": initial_node_xys,
+            "variable_node_radii": initial_variable_radii,
+        }
 
     terms = [
         ObjectiveTerm("edge_length", _term_edge_length, weight_edge_length),
@@ -320,14 +334,16 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
         ObjectiveTerm("non_inclusion", _term_non_inclusion),
     ]
 
-    problem = OptimizationProblemTemplate(terms=terms, initialize=initialize).instantiate(
-        input_parameters
-    )
+    problem = OptimizationProblemTemplate(
+        terms=terms, initialize=initialize
+    ).instantiate(input_parameters)
     optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
 
     pos = {
         node: tuple(float(c) for c in xy)
         for node, xy in zip(all_node_names, optim_vars["node_xys"])
     }
-    enclosing_node_radius_dict = dict(zip(enclosing_node_names, optim_vars["variable_node_radii"]))
+    enclosing_node_radius_dict = dict(
+        zip(enclosing_node_names, optim_vars["variable_node_radii"])
+    )
     return pos, enclosing_node_radius_dict

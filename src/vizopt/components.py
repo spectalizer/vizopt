@@ -1,3 +1,4 @@
+import jax
 import numpy as np
 from jax import numpy as jnp
 
@@ -30,3 +31,17 @@ def multiple_bbox_intersections(bbox_matrix: np.ndarray, other_bbox_matrix: np.n
     y_intersect = jnp.clip(intersects[:, 1], 0, np.inf)
     intersect_prods = x_intersect * y_intersect
     return intersect_prods.reshape(bbox_matrix.shape[0], -1)
+
+
+def should_be_positive_activation(x_value: float, factor=100.0):
+    """A penalty for negative values."""
+    return factor * jax.nn.relu(-x_value)
+
+
+def calculate_total_width_penalty(node_xys: np.ndarray):
+    """A penalty for the overall width and height of the drawing.
+
+    Args:
+        node_xys: Array of node positions with shape (n, 2).
+    """
+    return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
