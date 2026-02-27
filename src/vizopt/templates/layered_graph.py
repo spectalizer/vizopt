@@ -48,22 +48,24 @@ def _compute_sibling_pairs(graph: nx.DiGraph, node_name_to_id: dict) -> np.ndarr
 #
 # optim_vars keys: "node_xys"
 # input_params keys: "edge_indices", "node_pairs", "sibling_pairs",
-#                    "min_distance", "standard_direction", "initial_node_xys"
+#                    "min_distance", "preferred_edge_vector", "standard_direction",
+#                    "initial_node_xys"
 # ---------------------------------------------------------------------------
 
 
 def _term_edge_direction(optim_vars, input_params):
     """Penalize deviation of edge directions from the standard direction.
 
-    For each directed edge (u, v), normalizes the edge vector and penalizes
-    its squared difference from the normalized standard direction.
+    Scale-invariant: normalizes each edge vector before comparing to the
+    unit standard direction. Use together with _term_edge_vector when a
+    specific edge length is also desired.
     """
     edge_indices = input_params["edge_indices"]
     if len(edge_indices) == 0:
         return jnp.array(0.0)
 
     node_xys = optim_vars["node_xys"]
-    std_dir = jnp.array(input_params["standard_direction"])  # (2,)
+    std_dir = jnp.array(input_params["standard_direction"])  # (2,) unit vector
 
     start = node_xys[edge_indices[:, 0]]
     end = node_xys[edge_indices[:, 1]]
@@ -72,9 +74,27 @@ def _term_edge_direction(optim_vars, input_params):
     lengths = jnp.sqrt(jnp.sum(edge_vecs**2, axis=1, keepdims=True)) + 1e-8
     edge_dirs = edge_vecs / lengths  # unit vectors (E, 2)
 
-    std_norm = std_dir / (jnp.sqrt(jnp.sum(std_dir**2)) + 1e-8)  # unit vector (2,)
+    return jnp.sum((edge_dirs - std_dir) ** 2)
 
-    return jnp.sum((edge_dirs - std_norm) ** 2)
+
+def _term_edge_vector(optim_vars, input_params):
+    """Penalize deviation of (non-normalized) edge vectors from preferred_edge_vector.
+
+    Unlike _term_edge_direction, this term is sensitive to both direction and
+    magnitude, pulling edges toward a specific length as well as orientation.
+    """
+    edge_indices = input_params["edge_indices"]
+    if len(edge_indices) == 0:
+        return jnp.array(0.0)
+
+    node_xys = optim_vars["node_xys"]
+    preferred = jnp.array(input_params["preferred_edge_vector"])  # (2,)
+
+    start = node_xys[edge_indices[:, 0]]
+    end = node_xys[edge_indices[:, 1]]
+    edge_vecs = end - start  # (E, 2)
+
+    return jnp.sum((edge_vecs - preferred) ** 2)
 
 
 def _term_node_separation(optim_vars, input_params):
@@ -156,6 +176,7 @@ def _plot_configuration(optim_vars, input_params):
 layered_graph_template = OptimizationProblemTemplate(
     terms=[
         ObjectiveTerm("edge_direction", _term_edge_direction, 1.0),
+        ObjectiveTerm("edge_vector", _term_edge_vector, 1.0),
         ObjectiveTerm("node_separation", _term_node_separation, 1.0),
         ObjectiveTerm("sibling_separation", _term_sibling_separation, 1.0),
     ],
@@ -167,7 +188,7 @@ layered_graph_template = OptimizationProblemTemplate(
 def make_layered_graph_input_params(
     graph: nx.DiGraph,
     min_distance: float = 1.0,
-    standard_direction: tuple[float, float] = (1.0, 0.0),
+    preferred_edge_vector: tuple[float, float] = (1.0, 0.0),
 ) -> dict:
     """Pre-process a NetworkX digraph into input_parameters for layered_graph_template.
 
@@ -176,10 +197,13 @@ def make_layered_graph_input_params(
 
     Args:
         graph: Directed graph to lay out. Edge direction defines the "from → to"
-            orientation that will be aligned with standard_direction.
+            orientation that will be aligned with preferred_edge_vector.
         min_distance: Minimum required Euclidean distance between any two nodes.
-        standard_direction: Target direction for edges as (dx, dy).
-            Default (1, 0) produces a left-to-right layout.
+        preferred_edge_vector: Target edge vector as (dx, dy). Encodes both the
+            preferred direction and the preferred edge length. Default (1, 0)
+            produces a left-to-right layout with unit-length edges.
+            ``standard_direction`` (used by the direction and sibling terms) is
+            derived as its unit vector.
 
     Returns:
         Dict suitable for layered_graph_template.instantiate(). Includes
@@ -207,12 +231,16 @@ def make_layered_graph_input_params(
 
     sibling_pairs = _compute_sibling_pairs(graph, node_name_to_id)
 
+    pev = np.array(preferred_edge_vector, dtype=np.float32)
+    standard_direction = pev / (np.linalg.norm(pev) + 1e-8)
+
     return {
         "initial_node_xys": initial_node_xys.astype(np.float32),
         "edge_indices": edge_indices,
         "node_pairs": node_pairs,
         "sibling_pairs": sibling_pairs,
         "min_distance": float(min_distance),
-        "standard_direction": np.array(standard_direction, dtype=np.float32),
+        "preferred_edge_vector": pev,
+        "standard_direction": standard_direction,
         "node_names": node_names,
     }

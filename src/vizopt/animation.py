@@ -6,7 +6,7 @@ import jax
 import numpy as np
 from jax import Array
 
-from .base import OptimizationProblem
+from .base import OptimizationProblem, default_print_callback
 
 
 class SnapshotCallback:
@@ -37,6 +37,7 @@ class SnapshotCallback:
     def __call__(
         self, i_iter: int, loss_value: Array, optim_vars: Any, grads: Any
     ) -> None:
+        default_print_callback(i_iter, loss_value)
         if i_iter % self.every == 0:
             self.snapshots.append((i_iter, jax.tree.map(np.array, optim_vars)))
 
