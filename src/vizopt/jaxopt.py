@@ -10,7 +10,7 @@ from .base import Callback, OptimVars
 
 def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:
     """Print the loss value after every nth optimization iteration"""
-    if i_iter % 10 == 0:
+    if i_iter % 100 == 0:
         print(f"Iteration {i_iter}: loss = {loss_value}")
 
 

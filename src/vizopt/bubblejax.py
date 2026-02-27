@@ -251,7 +251,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
 
     Args:
         graph: a networkx Graph with node "size" attributes.
-        inclusion_tree: a networkx DiGraph with an edge (u, v) if u is contained in v.
+        inclusion_tree: a networkx DiGraph with an edge (u, v) if v is contained in u.
         weight_edge_length: weight for the edge length objective.
         weight_total_size: weight for the total width/height objective.
         optim_kwargs: optional keyword arguments forwarded to problem.optimize()
@@ -292,10 +292,8 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
         np.array(edges_list, dtype=np.int32) if edges_list else np.zeros((0, 2), dtype=np.int32)
     )
 
-    # Normalize inclusion edges to (parent, child) convention used by _non_inclusion_penalty.
-    # Input convention: edge (u, v) means u is contained in v → store as (v, u).
     inclusion_edges_list = [
-        (node_name_to_id[v], node_name_to_id[u]) for u, v in inclusion_tree.edges
+        (node_name_to_id[u], node_name_to_id[v]) for u, v in inclusion_tree.edges
     ]
     inclusion_edge_indices = (
         np.array(inclusion_edges_list, dtype=np.int32)
