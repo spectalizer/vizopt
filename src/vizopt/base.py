@@ -152,6 +152,9 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         """
         from . import jaxopt  # lazy import to avoid circular dependency
 
+        if callback is None:
+            callback = jaxopt.default_print_callback
+
         history: list[dict] = []
 
         def tracking_callback(
