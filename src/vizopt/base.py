@@ -43,11 +43,13 @@ def build_objective(
         A callable ``fun(optim_vars) -> scalar`` suitable for gradient descent.
     """
 
+    active_terms = [t for t in terms if t.multiplier != 0.0]
+
     def fun_to_minimize(optim_vars: OptimVars) -> Array:
         return sum(
             (
                 term.compute(optim_vars, input_parameters) * term.multiplier
-                for term in terms
+                for term in active_terms
             ),
             jnp.zeros(()),
         )
@@ -84,7 +86,9 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
 
     def instantiate(
-        self, input_parameters: InputParams
+        self,
+        input_parameters: InputParams,
+        weight_overrides: dict[str, float] | None = None,
     ) -> "OptimizationProblem[InputParams, OptimVars]":
         """Create a runnable problem instance from concrete input parameters.
 
@@ -95,19 +99,35 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
 
         Args:
             input_parameters: Fixed data for this problem instance.
+            x: Optional mapping of term name to multiplier.
+                Overrides the default multiplier for the named terms.
+                Unknown names raise ``KeyError``.
 
         Returns:
             An :class:`OptimizationProblem` ready to optimize.
 
         Raises:
+            KeyError: If a name in ``weight_overrides`` does not match any term.
             pydantic.ValidationError: If ``input_params_class`` is set and
                 validation fails.
         """
         if self.input_params_class is not None:
             # validate only
             self.input_params_class.model_validate(input_parameters)  # type: ignore
+        terms = self.terms
+        if weight_overrides:
+            term_names = {term.name for term in terms}
+            unknown = set(weight_overrides) - term_names
+            if unknown:
+                raise KeyError(f"Unknown term name(s) in weight_overrides: {unknown}")
+            terms = [
+                ObjectiveTerm(
+                    t.name, t.compute, weight_overrides.get(t.name, t.multiplier)
+                )
+                for t in terms
+            ]
         return OptimizationProblem(
-            input_parameters, self.terms, self.initialize, self.plot_configuration
+            input_parameters, terms, self.initialize, self.plot_configuration
         )
 
 
