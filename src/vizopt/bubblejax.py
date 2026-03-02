@@ -83,16 +83,16 @@ def _compute_collision_pairs(all_node_names, inclusion_tree):
     Returns:
         Integer array of shape (n_pairs, 2) with index pairs to check.
     """
+    descendants = {
+        node: nx.descendants(inclusion_tree, node)
+        if node in inclusion_tree.nodes
+        else set()
+        for node in all_node_names
+    }
     collision_pairs = []
     for i, node_a in enumerate(all_node_names):
         for j, node_b in enumerate(all_node_names[:i]):
-            a_in_b = node_a in inclusion_tree.nodes and node_b in nx.descendants(
-                inclusion_tree, node_a
-            )
-            b_in_a = node_b in inclusion_tree.nodes and node_a in nx.descendants(
-                inclusion_tree, node_b
-            )
-            if not (a_in_b or b_in_a):
+            if node_b not in descendants[node_a] and node_a not in descendants[node_b]:
                 collision_pairs.append([i, j])
 
     return (
