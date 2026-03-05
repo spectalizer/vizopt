@@ -24,48 +24,50 @@ from .base import ObjectiveTerm, OptimizationProblemTemplate
 # ---------------------------------------------------------------------------
 
 
-def _projections(center, circles, angles):
-    """Compute projection[k, i] = support of circle i in direction θ_k from center."""
-    dx = circles[:, 0] - center[0]
-    dy = circles[:, 1] - center[1]
-    return (
-        jnp.cos(angles)[:, None] * dx[None, :]
-        + jnp.sin(angles)[:, None] * dy[None, :]
-        + circles[:, 2][None, :]
-    )  # (K, N)
-
-
 def _term_enclosure(optim_vars, input_params):
     """Penalty for not enclosing all input circles.
 
-    For each angle θ_k, the farthest extent of circle i in direction θ_k
-    from the enclosing center is:
+    For each angle θ_k, the ray from the center in direction θ̂_k may or may
+    not intersect circle i. Only intersecting rays impose a radius constraint.
 
-        projection[k, i] = (cx_i - cx)*cos(θ_k) + (cy_i - cy)*sin(θ_k) + r_i
+    For circle i and ray direction θ̂_k:
+        tang[k, i] = (c_i - center) · θ̂_k   (forward component)
+        perp[k, i] = (c_i - center) · θ̂_k⊥  (perpendicular component)
 
-    Penalizes squared violations of radii[k] >= projection[k, i].
+    The ray hits circle i iff |perp[k, i]| <= r_i, and the required radius is:
+        tang[k, i] + sqrt(r_i² - perp[k, i]²)
+
+    Penalizes squared violations of radii[k] >= required[k, i] for hitting rays.
     """
     center = optim_vars["center"]  # (2,)
     radii = optim_vars["radii"]  # (K,)
-    projs = _projections(center, input_params["circles"], input_params["angles"])
-    violations = projs - radii[:, None]  # (K, N)
-    return jnp.sum(jnp.maximum(0.0, violations) ** 2)
+    circles = input_params["circles"]  # (N, 3)
+    angles = input_params["angles"]  # (K,)
+
+    dx = circles[:, 0] - center[0]  # (N,)
+    dy = circles[:, 1] - center[1]  # (N,)
+    r = circles[:, 2]  # (N,)
+
+    cos_a = jnp.cos(angles)  # (K,)
+    sin_a = jnp.sin(angles)  # (K,)
+
+    tang = cos_a[:, None] * dx[None, :] + sin_a[:, None] * dy[None, :]   # (K, N)
+    perp = -sin_a[:, None] * dx[None, :] + cos_a[:, None] * dy[None, :]  # (K, N)
+
+    r_sq = r[None, :] ** 2  # (1, N)
+    hits = perp ** 2 <= r_sq  # (K, N)
+    r_required = tang + jnp.sqrt(jnp.maximum(0.0, r_sq - perp ** 2) + 1e-12)  # (K, N)
+    violations = jnp.where(hits, jnp.maximum(0.0, r_required - radii[:, None]), 0.0)
+    return jnp.sum(violations ** 2)
 
 
-def _term_slack(optim_vars, input_params):
-    """Penalty for radii exceeding the minimum required to cover each circle.
+_MIN_RADIUS = 0.1
 
-    required[k] = max_i projection[k, i] is the tightest feasible radius at
-    angle θ_k. Penalising radii[k] > required[k] gives the centre a gradient
-    even when the enclosure constraint is already satisfied, allowing the
-    optimiser to relocate the centre to reduce coverage slack.
-    """
-    center = optim_vars["center"]  # (2,)
+
+def _term_min_radius(optim_vars, input_params):
+    """Penalty for radii falling below the minimum allowed value."""
     radii = optim_vars["radii"]  # (K,)
-    projs = _projections(center, input_params["circles"], input_params["angles"])
-    required = jnp.max(projs, axis=1)  # (K,)
-    excess = jnp.maximum(0.0, radii - required)
-    return jnp.sum(excess**2)
+    return jnp.sum(jnp.maximum(0.0, _MIN_RADIUS - radii) ** 2)
 
 
 def _term_area(optim_vars, input_params):
@@ -88,7 +90,7 @@ def _term_perimeter(optim_vars, input_params):
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
     points = center[None, :] + radii[:, None] * directions  # (K, 2)
     points_next = jnp.roll(points, -1, axis=0)
-    return jnp.sum(jnp.sqrt(jnp.sum((points_next - points) ** 2, axis=1)))
+    return jnp.sum(jnp.sqrt(jnp.sum((points_next - points) ** 2, axis=1) + 1e-12))
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +104,6 @@ def optimize_enclosing_radially_convex_set(
     weight_area=1.0,
     weight_perimeter=1.0,
     optim_kwargs=None,
-    weight_slack=1.0,
 ):
     """Find a star-shaped region that encloses all given circles.
 
@@ -134,15 +135,18 @@ def optimize_enclosing_radially_convex_set(
     # Initialize center at centroid of circle centers.
     initial_center = np.mean(circles_array[:, :2], axis=0).astype(np.float32)
 
-    # Initialize radii to just cover each circle at each sampled angle.
-    dx = circles_array[:, 0] - initial_center[0]
-    dy = circles_array[:, 1] - initial_center[1]
-    projections = (
-        np.cos(angles)[:, None] * dx[None, :]
-        + np.sin(angles)[:, None] * dy[None, :]
-        + circles_array[:, 2][None, :]
-    )  # (K, N)
-    initial_radii = np.maximum(projections.max(axis=1), 1.0).astype(np.float32)
+    # Initialize radii using ray-circle intersections.
+    dx = circles_array[:, 0] - initial_center[0]  # (N,)
+    dy = circles_array[:, 1] - initial_center[1]  # (N,)
+    r = circles_array[:, 2]  # (N,)
+    cos_a = np.cos(angles)[:, None]  # (K, 1)
+    sin_a = np.sin(angles)[:, None]  # (K, 1)
+    tang = cos_a * dx[None, :] + sin_a * dy[None, :]   # (K, N)
+    perp = -sin_a * dx[None, :] + cos_a * dy[None, :]  # (K, N)
+    hits = perp ** 2 <= r[None, :] ** 2  # (K, N)
+    r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp ** 2))  # (K, N)
+    r_required_masked = np.where(hits, r_required, 0.0)
+    initial_radii = np.maximum(r_required_masked.max(axis=1), 1.0).astype(np.float32)
 
     input_parameters = {
         "circles": circles_array,
@@ -157,7 +161,7 @@ def optimize_enclosing_radially_convex_set(
 
     terms = [
         ObjectiveTerm("enclosure", _term_enclosure, 10.0),
-        ObjectiveTerm("slack", _term_slack, weight_slack),
+        ObjectiveTerm("min_radius", _term_min_radius, 10.0),
         ObjectiveTerm("area", _term_area, weight_area),
         ObjectiveTerm("perimeter", _term_perimeter, weight_perimeter),
     ]
