@@ -51,14 +51,14 @@ def _term_enclosure(optim_vars, input_params):
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)  # (K,)
 
-    tang = cos_a[:, None] * dx[None, :] + sin_a[:, None] * dy[None, :]   # (K, N)
+    tang = cos_a[:, None] * dx[None, :] + sin_a[:, None] * dy[None, :]  # (K, N)
     perp = -sin_a[:, None] * dx[None, :] + cos_a[:, None] * dy[None, :]  # (K, N)
 
     r_sq = r[None, :] ** 2  # (1, N)
-    hits = perp ** 2 <= r_sq  # (K, N)
-    r_required = tang + jnp.sqrt(jnp.maximum(0.0, r_sq - perp ** 2) + 1e-12)  # (K, N)
+    hits = perp**2 <= r_sq  # (K, N)
+    r_required = tang + jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (K, N)
     violations = jnp.where(hits, jnp.maximum(0.0, r_required - radii[:, None]), 0.0)
-    return jnp.sum(violations ** 2)
+    return jnp.sum(violations**2)
 
 
 _MIN_RADIUS = 0.1
@@ -91,6 +91,125 @@ def _term_perimeter(optim_vars, input_params):
     points = center[None, :] + radii[:, None] * directions  # (K, 2)
     points_next = jnp.roll(points, -1, axis=0)
     return jnp.sum(jnp.sqrt(jnp.sum((points_next - points) ** 2, axis=1) + 1e-12))
+
+
+# ---------------------------------------------------------------------------
+# Multi-set objective term compute functions
+#
+# optim_vars keys: "centers" (S, 2), "radii" (S, K)
+# input_params keys: "circles" (N, 3): [cx, cy, r], "angles" (K,),
+#                    "membership" (S, N): True where circle n is in set s
+# ---------------------------------------------------------------------------
+
+
+def _multi_term_enclosure(optim_vars, input_params):
+    """Enclosure penalty summed over all sets.
+
+    For each set s and its member circles, penalizes squared violations of
+    radii[s, k] >= required radius at angle k for each member circle.
+    """
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
+    circles = input_params["circles"]  # (N, 3)
+    angles = input_params["angles"]  # (K,)
+    membership = input_params["membership"]  # (S, N)
+
+    dx = circles[None, :, 0] - centers[:, None, 0]  # (S, N)
+    dy = circles[None, :, 1] - centers[:, None, 1]  # (S, N)
+    r = circles[:, 2]  # (N,)
+
+    cos_a = jnp.cos(angles)  # (K,)
+    sin_a = jnp.sin(angles)  # (K,)
+
+    tang = (
+        cos_a[None, :, None] * dx[:, None, :] + sin_a[None, :, None] * dy[:, None, :]
+    )  # (S, K, N)
+    perp = (
+        -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
+    )  # (S, K, N)
+
+    r_sq = r[None, None, :] ** 2  # (1, 1, N)
+    hits = perp**2 <= r_sq  # (S, K, N)
+    r_required = tang + jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
+
+    in_set = membership[:, None, :]  # (S, 1, N)
+    violations = jnp.where(
+        hits & in_set,
+        jnp.maximum(0.0, r_required - radii[:, :, None]),
+        0.0,
+    )
+    return jnp.sum(violations**2)
+
+
+def _multi_term_exclusion(optim_vars, input_params):
+    """Exclusion penalty: boundary must not overlap circles outside the set.
+
+    For each set s and circle n not in set s, penalizes squared violations of
+    radii[s, k] <= near_edge[s, k, n], where near_edge is the distance along
+    ray k from center s to the near face of circle n.
+    """
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
+    circles = input_params["circles"]  # (N, 3)
+    angles = input_params["angles"]  # (K,)
+    membership = input_params["membership"]  # (S, N)
+
+    dx = circles[None, :, 0] - centers[:, None, 0]  # (S, N)
+    dy = circles[None, :, 1] - centers[:, None, 1]  # (S, N)
+    r = circles[:, 2]  # (N,)
+
+    cos_a = jnp.cos(angles)  # (K,)
+    sin_a = jnp.sin(angles)  # (K,)
+
+    tang = (
+        cos_a[None, :, None] * dx[:, None, :] + sin_a[None, :, None] * dy[:, None, :]
+    )  # (S, K, N)
+    perp = (
+        -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
+    )  # (S, K, N)
+
+    r_sq = r[None, None, :] ** 2  # (1, 1, N)
+    hits = perp**2 <= r_sq  # (S, K, N)
+    near_edge = tang - jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
+
+    # Only penalize when the obstacle's near face is in the forward direction of
+    # the ray (near_edge > 0). When near_edge <= 0 the obstacle is behind the
+    # center and the forward ray never reaches it, so no constraint is needed.
+    not_in_set = ~membership[:, None, :]  # (S, 1, N)
+    violations = jnp.where(
+        hits & not_in_set & (near_edge > 0),
+        jnp.maximum(0.0, radii[:, :, None] - near_edge),
+        0.0,
+    )
+    return jnp.sum(violations**2)
+
+
+def _multi_term_min_radius(optim_vars, input_params):
+    """Penalty for any radius falling below the minimum allowed value."""
+    radii = optim_vars["radii"]  # (S, K)
+    return jnp.sum(jnp.maximum(0.0, _MIN_RADIUS - radii) ** 2)
+
+
+def _multi_term_area(optim_vars, input_params):
+    """Sum of star-polygon areas over all sets."""
+    radii = optim_vars["radii"]  # (S, K)
+    K = radii.shape[1]
+    delta_theta = 2 * jnp.pi / K
+    return 0.5 * jnp.sin(delta_theta) * jnp.sum(radii * jnp.roll(radii, -1, axis=1))
+
+
+def _multi_term_perimeter(optim_vars, input_params):
+    """Sum of star-polygon perimeters over all sets."""
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
+    angles = input_params["angles"]  # (K,)
+
+    directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
+    points = (
+        centers[:, None, :] + radii[:, :, None] * directions[None, :, :]
+    )  # (S, K, 2)
+    points_next = jnp.roll(points, -1, axis=1)
+    return jnp.sum(jnp.sqrt(jnp.sum((points_next - points) ** 2, axis=2) + 1e-12))
 
 
 # ---------------------------------------------------------------------------
@@ -141,10 +260,10 @@ def optimize_enclosing_radially_convex_set(
     r = circles_array[:, 2]  # (N,)
     cos_a = np.cos(angles)[:, None]  # (K, 1)
     sin_a = np.sin(angles)[:, None]  # (K, 1)
-    tang = cos_a * dx[None, :] + sin_a * dy[None, :]   # (K, N)
+    tang = cos_a * dx[None, :] + sin_a * dy[None, :]  # (K, N)
     perp = -sin_a * dx[None, :] + cos_a * dy[None, :]  # (K, N)
-    hits = perp ** 2 <= r[None, :] ** 2  # (K, N)
-    r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp ** 2))  # (K, N)
+    hits = perp**2 <= r[None, :] ** 2  # (K, N)
+    r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp**2))  # (K, N)
     r_required_masked = np.where(hits, r_required, 0.0)
     initial_radii = np.maximum(r_required_masked.max(axis=1), 1.0).astype(np.float32)
 
@@ -176,3 +295,108 @@ def optimize_enclosing_radially_convex_set(
         "radii": np.array(optim_vars["radii"]),
         "angles": angles,
     }, history
+
+
+def optimize_multiple_radially_convex_sets(
+    circles,
+    sets,
+    K=32,
+    weight_area=1.0,
+    weight_perimeter=1.0,
+    weight_exclusion=10.0,
+    optim_kwargs=None,
+):
+    """Find star-shaped regions enclosing each set of circles without overlapping others.
+
+    Each set gets its own star-shaped boundary that encloses its member circles
+    and does not collide with circles belonging to other sets.
+
+    Args:
+        circles: array of shape (N, 3) with columns [cx, cy, r], or a sequence
+            of (cx, cy, r) triples.
+        sets: list of S subsets, each a collection of integer indices into circles.
+            A circle may appear in multiple sets; circles absent from a set are
+            treated as obstacles for that set's boundary.
+        K: number of angular samples defining each boundary polygon.
+        weight_area: weight for the area objective (summed over sets).
+        weight_perimeter: weight for the perimeter objective (summed over sets).
+        weight_exclusion: weight for the exclusion penalty.
+        optim_kwargs: keyword arguments forwarded to problem.optimize()
+            (e.g. n_iters, learning_rate).
+
+    Returns:
+        Tuple of (results, history) where results is a list of S dicts, each with:
+            "center": array of shape (2,), the center of the star-shaped region
+            "radii": array of shape (K,), boundary radii at each angle
+            "angles": array of shape (K,), uniformly spaced in [0, 2π)
+        and history is the list of per-iteration loss dicts.
+    """
+    circles_array = np.asarray(circles, dtype=np.float32)
+    if circles_array.ndim == 1:
+        circles_array = circles_array[None, :]
+    N = len(circles_array)
+    S = len(sets)
+    angles = np.linspace(0, 2 * np.pi, K, endpoint=False).astype(np.float32)
+
+    # Build membership matrix (S, N).
+    membership = np.zeros((S, N), dtype=bool)
+    for s, subset in enumerate(sets):
+        for i in subset:
+            membership[s, i] = True
+
+    # Initialize each set's center and radii from its member circles.
+    initial_centers = np.zeros((S, 2), dtype=np.float32)
+    initial_radii = np.ones((S, K), dtype=np.float32)
+    cos_a = np.cos(angles)[:, None]  # (K, 1)
+    sin_a = np.sin(angles)[:, None]  # (K, 1)
+
+    for s, subset in enumerate(sets):
+        subset_circles = circles_array[list(subset)]
+        center = np.mean(subset_circles[:, :2], axis=0).astype(np.float32)
+        initial_centers[s] = center
+
+        dx = subset_circles[:, 0] - center[0]  # (M,)
+        dy = subset_circles[:, 1] - center[1]  # (M,)
+        r = subset_circles[:, 2]  # (M,)
+        tang = cos_a * dx[None, :] + sin_a * dy[None, :]  # (K, M)
+        perp = -sin_a * dx[None, :] + cos_a * dy[None, :]  # (K, M)
+        hits = perp**2 <= r[None, :] ** 2
+        r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp**2))
+        r_required_masked = np.where(hits, r_required, 0.0)
+        initial_radii[s] = np.maximum(r_required_masked.max(axis=1), 1.0).astype(
+            np.float32
+        )
+
+    input_parameters = {
+        "circles": circles_array,
+        "angles": angles,
+        "membership": membership,
+    }
+
+    def initialize(_):
+        return {
+            "centers": initial_centers,
+            "radii": initial_radii,
+        }
+
+    terms = [
+        ObjectiveTerm("enclosure", _multi_term_enclosure, 10.0),
+        ObjectiveTerm("exclusion", _multi_term_exclusion, weight_exclusion),
+        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
+        ObjectiveTerm("area", _multi_term_area, weight_area),
+        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
+    ]
+
+    problem = OptimizationProblemTemplate(
+        terms=terms, initialize=initialize
+    ).instantiate(input_parameters)
+    optim_vars, history = problem.optimize(**(optim_kwargs or {}))
+
+    return [
+        {
+            "center": np.array(optim_vars["centers"][s]),
+            "radii": np.array(optim_vars["radii"][s]),
+            "angles": angles,
+        }
+        for s in range(S)
+    ], history
