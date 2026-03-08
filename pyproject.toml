@@ -23,6 +23,7 @@ dev = [
     "ipykernel>=7.1.0",
     "pytest>=9.0.2",
     "types-networkx>=3.6.1.20260210",
+    "zensical>=0.0.24",
 ]
 
 [build-system]
