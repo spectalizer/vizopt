@@ -107,18 +107,18 @@ def _multi_term_enclosure(optim_vars, input_params):
 
     For each set s and its member circles, penalizes squared violations of
     radii[s, k] >= required radius at angle k for each member circle.
-    The effective radius used is r + offset, where offset is per-circle.
+    The effective radius used is r + offset, where offset is per (set, circle).
     """
     centers = optim_vars["centers"]  # (S, 2)
     radii = optim_vars["radii"]  # (S, K)
     circles = input_params["circles"]  # (N, 3)
     angles = input_params["angles"]  # (K,)
     membership = input_params["membership"]  # (S, N)
-    offsets = input_params["offsets"]  # (N,)
+    offsets = input_params["offsets"]  # (S, N)
 
     dx = circles[None, :, 0] - centers[:, None, 0]  # (S, N)
     dy = circles[None, :, 1] - centers[:, None, 1]  # (S, N)
-    r = circles[:, 2] + offsets  # (N,)
+    r = circles[None, :, 2] + offsets  # (S, N)
 
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)  # (K,)
@@ -130,7 +130,7 @@ def _multi_term_enclosure(optim_vars, input_params):
         -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
     )  # (S, K, N)
 
-    r_sq = r[None, None, :] ** 2  # (1, 1, N)
+    r_sq = r[:, None, :] ** 2  # (S, 1, N)
     hits = perp**2 <= r_sq  # (S, K, N)
     r_required = tang + jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
 
@@ -337,8 +337,9 @@ def optimize_multiple_radially_convex_sets(
         weight_exclusion: weight for the exclusion penalty.
         weight_smoothness: weight for the smoothness penalty (squared radius
             differences between adjacent angles). Default 1.0.
-        offsets: per-circle padding added to each radius in the enclosure term.
-            Scalar (applied to all circles) or array of shape (N,). Default 0.1.
+        offsets: padding added to each circle's radius in the enclosure term,
+            per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
+            Broadcast to (S, N). Default 0.1.
         optim_kwargs: keyword arguments forwarded to problem.optimize()
             (e.g. n_iters, learning_rate).
 
@@ -386,7 +387,7 @@ def optimize_multiple_radially_convex_sets(
         )
 
     offsets_array = np.broadcast_to(
-        np.asarray(offsets, dtype=np.float32), (N,)
+        np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
 
     input_parameters = {
