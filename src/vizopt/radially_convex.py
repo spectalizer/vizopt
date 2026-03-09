@@ -107,16 +107,18 @@ def _multi_term_enclosure(optim_vars, input_params):
 
     For each set s and its member circles, penalizes squared violations of
     radii[s, k] >= required radius at angle k for each member circle.
+    The effective radius used is r + offset, where offset is per-circle.
     """
     centers = optim_vars["centers"]  # (S, 2)
     radii = optim_vars["radii"]  # (S, K)
     circles = input_params["circles"]  # (N, 3)
     angles = input_params["angles"]  # (K,)
     membership = input_params["membership"]  # (S, N)
+    offsets = input_params["offsets"]  # (N,)
 
     dx = circles[None, :, 0] - centers[:, None, 0]  # (S, N)
     dy = circles[None, :, 1] - centers[:, None, 1]  # (S, N)
-    r = circles[:, 2]  # (N,)
+    r = circles[:, 2] + offsets  # (N,)
 
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)  # (K,)
@@ -300,10 +302,11 @@ def optimize_enclosing_radially_convex_set(
 def optimize_multiple_radially_convex_sets(
     circles,
     sets,
-    K=32,
+    k_angles=32,
     weight_area=1.0,
     weight_perimeter=1.0,
     weight_exclusion=10.0,
+    offsets=0.1,
     optim_kwargs=None,
 ):
     """Find star-shaped regions enclosing each set of circles without overlapping others.
@@ -317,10 +320,12 @@ def optimize_multiple_radially_convex_sets(
         sets: list of S subsets, each a collection of integer indices into circles.
             A circle may appear in multiple sets; circles absent from a set are
             treated as obstacles for that set's boundary.
-        K: number of angular samples defining each boundary polygon.
+        k_angles: number of angular samples defining each boundary polygon.
         weight_area: weight for the area objective (summed over sets).
         weight_perimeter: weight for the perimeter objective (summed over sets).
         weight_exclusion: weight for the exclusion penalty.
+        offsets: per-circle padding added to each radius in the enclosure term.
+            Scalar (applied to all circles) or array of shape (N,). Default 0.1.
         optim_kwargs: keyword arguments forwarded to problem.optimize()
             (e.g. n_iters, learning_rate).
 
@@ -336,7 +341,7 @@ def optimize_multiple_radially_convex_sets(
         circles_array = circles_array[None, :]
     N = len(circles_array)
     S = len(sets)
-    angles = np.linspace(0, 2 * np.pi, K, endpoint=False).astype(np.float32)
+    angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
 
     # Build membership matrix (S, N).
     membership = np.zeros((S, N), dtype=bool)
@@ -346,7 +351,7 @@ def optimize_multiple_radially_convex_sets(
 
     # Initialize each set's center and radii from its member circles.
     initial_centers = np.zeros((S, 2), dtype=np.float32)
-    initial_radii = np.ones((S, K), dtype=np.float32)
+    initial_radii = np.ones((S, k_angles), dtype=np.float32)
     cos_a = np.cos(angles)[:, None]  # (K, 1)
     sin_a = np.sin(angles)[:, None]  # (K, 1)
 
@@ -367,10 +372,15 @@ def optimize_multiple_radially_convex_sets(
             np.float32
         )
 
+    offsets_array = np.broadcast_to(
+        np.asarray(offsets, dtype=np.float32), (N,)
+    ).copy()
+
     input_parameters = {
         "circles": circles_array,
         "angles": angles,
         "membership": membership,
+        "offsets": offsets_array,
     }
 
     def initialize(_):
