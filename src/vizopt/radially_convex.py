@@ -102,23 +102,22 @@ def _term_perimeter(optim_vars, input_params):
 # ---------------------------------------------------------------------------
 
 
-def _multi_term_enclosure(optim_vars, input_params):
-    """Enclosure penalty summed over all sets.
+def _enclosure_penalty(centers, radii, circle_xy, r, angles, membership):
+    """Core enclosure computation shared across fixed and movable variants.
 
-    For each set s and its member circles, penalizes squared violations of
-    radii[s, k] >= required radius at angle k for each member circle.
-    The effective radius used is r + offset, where offset is per (set, circle).
+    Args:
+        centers: (S, 2) set centers.
+        radii: (S, K) boundary radii.
+        circle_xy: (N, 2) circle positions.
+        r: (S, N) effective radii (with any offsets already applied).
+        angles: (K,) ray angles.
+        membership: (S, N) boolean mask, True where circle n belongs to set s.
+
+    Returns:
+        Scalar penalty.
     """
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]  # (S, K)
-    circles = input_params["circles"]  # (N, 3)
-    angles = input_params["angles"]  # (K,)
-    membership = input_params["membership"]  # (S, N)
-    offsets = input_params["offsets"]  # (S, N)
-
-    dx = circles[None, :, 0] - centers[:, None, 0]  # (S, N)
-    dy = circles[None, :, 1] - centers[:, None, 1]  # (S, N)
-    r = circles[None, :, 2] + offsets  # (S, N)
+    dx = circle_xy[None, :, 0] - centers[:, None, 0]  # (S, N)
+    dy = circle_xy[None, :, 1] - centers[:, None, 1]  # (S, N)
 
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)  # (K,)
@@ -143,22 +142,22 @@ def _multi_term_enclosure(optim_vars, input_params):
     return jnp.sum(violations**2)
 
 
-def _multi_term_exclusion(optim_vars, input_params):
-    """Exclusion penalty: boundary must not overlap circles outside the set.
+def _exclusion_penalty(centers, radii, circle_xy, circle_r, angles, membership):
+    """Core exclusion computation shared across fixed and movable variants.
 
-    For each set s and circle n not in set s, penalizes squared violations of
-    radii[s, k] <= near_edge[s, k, n], where near_edge is the distance along
-    ray k from center s to the near face of circle n.
+    Args:
+        centers: (S, 2) set centers.
+        radii: (S, K) boundary radii.
+        circle_xy: (N, 2) circle positions.
+        circle_r: (N,) circle radii (no offset).
+        angles: (K,) ray angles.
+        membership: (S, N) boolean mask.
+
+    Returns:
+        Scalar penalty.
     """
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]  # (S, K)
-    circles = input_params["circles"]  # (N, 3)
-    angles = input_params["angles"]  # (K,)
-    membership = input_params["membership"]  # (S, N)
-
-    dx = circles[None, :, 0] - centers[:, None, 0]  # (S, N)
-    dy = circles[None, :, 1] - centers[:, None, 1]  # (S, N)
-    r = circles[:, 2]  # (N,)
+    dx = circle_xy[None, :, 0] - centers[:, None, 0]  # (S, N)
+    dy = circle_xy[None, :, 1] - centers[:, None, 1]  # (S, N)
 
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)  # (K,)
@@ -170,7 +169,7 @@ def _multi_term_exclusion(optim_vars, input_params):
         -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
     )  # (S, K, N)
 
-    r_sq = r[None, None, :] ** 2  # (1, 1, N)
+    r_sq = circle_r[None, None, :] ** 2  # (1, 1, N)
     hits = perp**2 <= r_sq  # (S, K, N)
     near_edge = tang - jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
 
@@ -184,6 +183,37 @@ def _multi_term_exclusion(optim_vars, input_params):
         0.0,
     )
     return jnp.sum(violations**2)
+
+
+def _multi_term_enclosure(optim_vars, input_params):
+    """Enclosure penalty summed over all sets.
+
+    For each set s and its member circles, penalizes squared violations of
+    radii[s, k] >= required radius at angle k for each member circle.
+    The effective radius used is r + offset, where offset is per (set, circle).
+    """
+    circles = input_params["circles"]  # (N, 3)
+    r = circles[None, :, 2] + input_params["offsets"]  # (S, N)
+    return _enclosure_penalty(
+        optim_vars["centers"], optim_vars["radii"],
+        circles[:, :2], r,
+        input_params["angles"], input_params["membership"],
+    )
+
+
+def _multi_term_exclusion(optim_vars, input_params):
+    """Exclusion penalty: boundary must not overlap circles outside the set.
+
+    For each set s and circle n not in set s, penalizes squared violations of
+    radii[s, k] <= near_edge[s, k, n], where near_edge is the distance along
+    ray k from center s to the near face of circle n.
+    """
+    circles = input_params["circles"]  # (N, 3)
+    return _exclusion_penalty(
+        optim_vars["centers"], optim_vars["radii"],
+        circles[:, :2], circles[:, 2],
+        input_params["angles"], input_params["membership"],
+    )
 
 
 def _multi_term_min_radius(optim_vars, input_params):
@@ -236,75 +266,21 @@ def _multi_term_perimeter(optim_vars, input_params):
 
 def _multi_term_enclosure_movable(optim_vars, input_params):
     """Enclosure penalty summed over all sets (circle positions are variables)."""
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]  # (S, K)
-    circle_positions = optim_vars["circle_positions"]  # (N, 2)
-    circle_radii = input_params["circle_radii"]  # (N,)
-    angles = input_params["angles"]  # (K,)
-    membership = input_params["membership"]  # (S, N)
-    offsets = input_params["offsets"]  # (S, N)
-
-    dx = circle_positions[None, :, 0] - centers[:, None, 0]  # (S, N)
-    dy = circle_positions[None, :, 1] - centers[:, None, 1]  # (S, N)
-    r = circle_radii[None, :] + offsets  # (S, N)
-
-    cos_a = jnp.cos(angles)  # (K,)
-    sin_a = jnp.sin(angles)  # (K,)
-
-    tang = (
-        cos_a[None, :, None] * dx[:, None, :] + sin_a[None, :, None] * dy[:, None, :]
-    )  # (S, K, N)
-    perp = (
-        -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
-    )  # (S, K, N)
-
-    r_sq = r[:, None, :] ** 2  # (S, 1, N)
-    hits = perp**2 <= r_sq  # (S, K, N)
-    r_required = tang + jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
-
-    in_set = membership[:, None, :]  # (S, 1, N)
-    violations = jnp.where(
-        hits & in_set,
-        jnp.maximum(0.0, r_required - radii[:, :, None]),
-        0.0,
+    r = input_params["circle_radii"][None, :] + input_params["offsets"]  # (S, N)
+    return _enclosure_penalty(
+        optim_vars["centers"], optim_vars["radii"],
+        optim_vars["circle_positions"], r,
+        input_params["angles"], input_params["membership"],
     )
-    return jnp.sum(violations**2)
 
 
 def _multi_term_exclusion_movable(optim_vars, input_params):
     """Exclusion penalty (circle positions are variables)."""
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]  # (S, K)
-    circle_positions = optim_vars["circle_positions"]  # (N, 2)
-    circle_radii = input_params["circle_radii"]  # (N,)
-    angles = input_params["angles"]  # (K,)
-    membership = input_params["membership"]  # (S, N)
-
-    dx = circle_positions[None, :, 0] - centers[:, None, 0]  # (S, N)
-    dy = circle_positions[None, :, 1] - centers[:, None, 1]  # (S, N)
-    r = circle_radii  # (N,)
-
-    cos_a = jnp.cos(angles)  # (K,)
-    sin_a = jnp.sin(angles)  # (K,)
-
-    tang = (
-        cos_a[None, :, None] * dx[:, None, :] + sin_a[None, :, None] * dy[:, None, :]
-    )  # (S, K, N)
-    perp = (
-        -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
-    )  # (S, K, N)
-
-    r_sq = r[None, None, :] ** 2  # (1, 1, N)
-    hits = perp**2 <= r_sq  # (S, K, N)
-    near_edge = tang - jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
-
-    not_in_set = ~membership[:, None, :]  # (S, 1, N)
-    violations = jnp.where(
-        hits & not_in_set & (near_edge > 0),
-        jnp.maximum(0.0, radii[:, :, None] - near_edge),
-        0.0,
+    return _exclusion_penalty(
+        optim_vars["centers"], optim_vars["radii"],
+        optim_vars["circle_positions"], input_params["circle_radii"],
+        input_params["angles"], input_params["membership"],
     )
-    return jnp.sum(violations**2)
 
 
 def _multi_term_position_anchor(optim_vars, input_params):
@@ -330,6 +306,58 @@ def _multi_term_circle_collision(optim_vars, input_params):
     # Sum upper triangle only to count each pair once
     mask = jnp.triu(jnp.ones((radii.shape[0], radii.shape[0]), dtype=bool), k=1)
     return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+
+
+# ---------------------------------------------------------------------------
+# Shared initialization helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_membership(S, N, sets):
+    """Build a boolean membership matrix of shape (S, N)."""
+    membership = np.zeros((S, N), dtype=bool)
+    for s, subset in enumerate(sets):
+        for i in subset:
+            membership[s, i] = True
+    return membership
+
+
+def _init_centers_and_radii(circles_array, sets, angles):
+    """Initialize per-set centers and radii from member circles.
+
+    Args:
+        circles_array: (N, 3) array of [cx, cy, r].
+        sets: list of S subsets (index collections into circles_array).
+        angles: (K,) array of ray angles.
+
+    Returns:
+        Tuple of (initial_centers, initial_radii) with shapes (S, 2) and (S, K).
+    """
+    S = len(sets)
+    K = len(angles)
+    initial_centers = np.zeros((S, 2), dtype=np.float32)
+    initial_radii = np.ones((S, K), dtype=np.float32)
+    cos_a = np.cos(angles)[:, None]  # (K, 1)
+    sin_a = np.sin(angles)[:, None]  # (K, 1)
+
+    for s, subset in enumerate(sets):
+        subset_circles = circles_array[list(subset)]
+        center = np.mean(subset_circles[:, :2], axis=0).astype(np.float32)
+        initial_centers[s] = center
+
+        dx = subset_circles[:, 0] - center[0]
+        dy = subset_circles[:, 1] - center[1]
+        r = subset_circles[:, 2]
+        tang = cos_a * dx[None, :] + sin_a * dy[None, :]  # (K, M)
+        perp = -sin_a * dx[None, :] + cos_a * dy[None, :]  # (K, M)
+        hits = perp**2 <= r[None, :] ** 2
+        r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp**2))
+        r_required_masked = np.where(hits, r_required, 0.0)
+        initial_radii[s] = np.maximum(r_required_masked.max(axis=1), 1.0).astype(
+            np.float32
+        )
+
+    return initial_centers, initial_radii
 
 
 # ---------------------------------------------------------------------------
@@ -465,35 +493,8 @@ def optimize_multiple_radially_convex_sets(
     S = len(sets)
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
 
-    # Build membership matrix (S, N).
-    membership = np.zeros((S, N), dtype=bool)
-    for s, subset in enumerate(sets):
-        for i in subset:
-            membership[s, i] = True
-
-    # Initialize each set's center and radii from its member circles.
-    initial_centers = np.zeros((S, 2), dtype=np.float32)
-    initial_radii = np.ones((S, k_angles), dtype=np.float32)
-    cos_a = np.cos(angles)[:, None]  # (K, 1)
-    sin_a = np.sin(angles)[:, None]  # (K, 1)
-
-    for s, subset in enumerate(sets):
-        subset_circles = circles_array[list(subset)]
-        center = np.mean(subset_circles[:, :2], axis=0).astype(np.float32)
-        initial_centers[s] = center
-
-        dx = subset_circles[:, 0] - center[0]  # (M,)
-        dy = subset_circles[:, 1] - center[1]  # (M,)
-        r = subset_circles[:, 2]  # (M,)
-        tang = cos_a * dx[None, :] + sin_a * dy[None, :]  # (K, M)
-        perp = -sin_a * dx[None, :] + cos_a * dy[None, :]  # (K, M)
-        hits = perp**2 <= r[None, :] ** 2
-        r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp**2))
-        r_required_masked = np.where(hits, r_required, 0.0)
-        initial_radii[s] = np.maximum(r_required_masked.max(axis=1), 1.0).astype(
-            np.float32
-        )
-
+    membership = _build_membership(S, N, sets)
+    initial_centers, initial_radii = _init_centers_and_radii(circles_array, sets, angles)
     offsets_array = np.broadcast_to(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
@@ -587,35 +588,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     initial_circle_positions = circles_array[:, :2].copy()  # (N, 2)
     circle_radii = circles_array[:, 2].copy()  # (N,)
 
-    # Build membership matrix (S, N).
-    membership = np.zeros((S, N), dtype=bool)
-    for s, subset in enumerate(sets):
-        for i in subset:
-            membership[s, i] = True
-
-    # Initialize each set's center and radii from its member circles.
-    initial_centers = np.zeros((S, 2), dtype=np.float32)
-    initial_radii = np.ones((S, k_angles), dtype=np.float32)
-    cos_a = np.cos(angles)[:, None]  # (K, 1)
-    sin_a = np.sin(angles)[:, None]  # (K, 1)
-
-    for s, subset in enumerate(sets):
-        subset_circles = circles_array[list(subset)]
-        center = np.mean(subset_circles[:, :2], axis=0).astype(np.float32)
-        initial_centers[s] = center
-
-        dx = subset_circles[:, 0] - center[0]
-        dy = subset_circles[:, 1] - center[1]
-        r = subset_circles[:, 2]
-        tang = cos_a * dx[None, :] + sin_a * dy[None, :]
-        perp = -sin_a * dx[None, :] + cos_a * dy[None, :]
-        hits = perp**2 <= r[None, :] ** 2
-        r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp**2))
-        r_required_masked = np.where(hits, r_required, 0.0)
-        initial_radii[s] = np.maximum(r_required_masked.max(axis=1), 1.0).astype(
-            np.float32
-        )
-
+    membership = _build_membership(S, N, sets)
+    initial_centers, initial_radii = _init_centers_and_radii(circles_array, sets, angles)
     offsets_array = np.broadcast_to(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
