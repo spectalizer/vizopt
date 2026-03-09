@@ -192,6 +192,16 @@ def _multi_term_min_radius(optim_vars, input_params):
     return jnp.sum(jnp.maximum(0.0, _MIN_RADIUS - radii) ** 2)
 
 
+def _multi_term_smoothness(optim_vars, input_params):
+    """Penalty for sharp radius changes between adjacent angles.
+
+    Penalizes the squared difference between each radius and its neighbour,
+    summed over all sets and all angles (wrapping around).
+    """
+    radii = optim_vars["radii"]  # (S, K)
+    return jnp.sum((radii - jnp.roll(radii, -1, axis=1)) ** 2)
+
+
 def _multi_term_area(optim_vars, input_params):
     """Sum of star-polygon areas over all sets."""
     radii = optim_vars["radii"]  # (S, K)
@@ -306,6 +316,7 @@ def optimize_multiple_radially_convex_sets(
     weight_area=1.0,
     weight_perimeter=1.0,
     weight_exclusion=10.0,
+    weight_smoothness=1.0,
     offsets=0.1,
     optim_kwargs=None,
 ):
@@ -324,6 +335,8 @@ def optimize_multiple_radially_convex_sets(
         weight_area: weight for the area objective (summed over sets).
         weight_perimeter: weight for the perimeter objective (summed over sets).
         weight_exclusion: weight for the exclusion penalty.
+        weight_smoothness: weight for the smoothness penalty (squared radius
+            differences between adjacent angles). Default 1.0.
         offsets: per-circle padding added to each radius in the enclosure term.
             Scalar (applied to all circles) or array of shape (N,). Default 0.1.
         optim_kwargs: keyword arguments forwarded to problem.optimize()
@@ -393,6 +406,7 @@ def optimize_multiple_radially_convex_sets(
         ObjectiveTerm("enclosure", _multi_term_enclosure, 10.0),
         ObjectiveTerm("exclusion", _multi_term_exclusion, weight_exclusion),
         ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
+        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
         ObjectiveTerm("area", _multi_term_area, weight_area),
         ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
     ]
