@@ -83,7 +83,7 @@ def _exclusion_penalty(centers, radii, circle_xy, circle_r, angles, membership):
         centers: (S, 2) set centers.
         radii: (S, K) boundary radii.
         circle_xy: (N, 2) circle positions.
-        circle_r: (N,) circle radii (no offset).
+        circle_r: (N,) or (S, N) circle radii (with any offsets already applied).
         angles: (K,) ray angles.
         membership: (S, N) boolean mask.
 
@@ -103,7 +103,11 @@ def _exclusion_penalty(centers, radii, circle_xy, circle_r, angles, membership):
         -sin_a[None, :, None] * dx[:, None, :] + cos_a[None, :, None] * dy[:, None, :]
     )  # (S, K, N)
 
-    r_sq = circle_r[None, None, :] ** 2  # (1, 1, N)
+    # circle_r may be (N,) → (1, 1, N) or (S, N) → (S, 1, N)
+    if circle_r.ndim == 1:
+        r_sq = circle_r[None, None, :] ** 2  # (1, 1, N)
+    else:
+        r_sq = circle_r[:, None, :] ** 2  # (S, 1, N)
     hits = perp**2 <= r_sq  # (S, K, N)
     near_edge = tang - jnp.sqrt(jnp.maximum(0.0, r_sq - perp**2) + 1e-12)  # (S, K, N)
 
@@ -209,10 +213,15 @@ def _multi_term_enclosure_movable(optim_vars, input_params):
 
 
 def _multi_term_exclusion_movable(optim_vars, input_params):
-    """Exclusion penalty (circle positions are variables)."""
+    """Exclusion penalty (circle positions are variables).
+
+    Applies per-(set, circle) offsets to circle radii so that the boundary
+    must stay at least offset away from each excluded circle.
+    """
+    r = input_params["circle_radii"][None, :] + input_params["offsets"]  # (S, N)
     return _exclusion_penalty(
         optim_vars["centers"], optim_vars["radii"],
-        optim_vars["circle_positions"], input_params["circle_radii"],
+        optim_vars["circle_positions"], r,
         input_params["angles"], input_params["membership"],
     )
 
