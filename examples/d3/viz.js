@@ -105,7 +105,14 @@ boundaryG.selectAll("path.set-boundary")
   .attr("fill-opacity", 0.12)
   .attr("stroke", (_, i) => setColor(i))
   .attr("stroke-opacity", 0.7)
-  .attr("stroke-width", 1.5);
+  .attr("stroke-width", 1.5)
+  .on("mousemove", (event, s) => {
+    tooltip.style.display = "block";
+    tooltip.style.left = (event.clientX + 12) + "px";
+    tooltip.style.top  = (event.clientY - 8)  + "px";
+    tooltip.textContent = `${s.name} (${s.memberIndices.length} languages)`;
+  })
+  .on("mouseleave", () => { tooltip.style.display = "none"; });
 
 // ── Draw circles (front layer) ────────────────────────────────────────────────
 const circleG = zoomG.append("g").attr("class", "circles");
