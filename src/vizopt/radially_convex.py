@@ -233,6 +233,18 @@ def _multi_term_position_anchor(optim_vars, input_params):
     return jnp.sum((circle_positions - initial) ** 2)
 
 
+def _multi_term_total_bounding_box(optim_vars, input_params):
+    """Total width plus total height of all set boundaries combined."""
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
+    angles = input_params["angles"]  # (K,)
+    directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
+    points = centers[:, None, :] + radii[:, :, None] * directions[None, :, :]  # (S, K, 2)
+    return (jnp.max(points[:, :, 0]) - jnp.min(points[:, :, 0])) + (
+        jnp.max(points[:, :, 1]) - jnp.min(points[:, :, 1])
+    )
+
+
 def _multi_term_circle_collision(optim_vars, input_params):
     """Penalty for overlapping circles.
 
@@ -409,6 +421,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     weight_smoothness=1.0,
     weight_position_anchor=1.0,
     weight_circle_collision=10.0,
+    weight_bounding_box=0.0,
     offsets=0.1,
     optim_kwargs=None,
 ):
@@ -430,6 +443,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
             from their initial positions. Higher values keep circles closer to
             their starting positions.
         weight_circle_collision: weight for penalizing overlapping circles.
+        weight_bounding_box: weight for minimizing total width + total height of
+            all set boundaries. Default 0.0 (disabled).
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
         optim_kwargs: keyword arguments forwarded to problem.optimize()
@@ -481,6 +496,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
         ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor),
         ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision),
+        ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box),
     ]
 
     problem = OptimizationProblemTemplate(
