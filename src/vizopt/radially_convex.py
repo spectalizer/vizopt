@@ -133,9 +133,12 @@ def _multi_term_enclosure(optim_vars, input_params):
     circles = input_params["circles"]  # (N, 3)
     r = circles[None, :, 2] + input_params["offsets"]  # (S, N)
     return _enclosure_penalty(
-        optim_vars["centers"], optim_vars["radii"],
-        circles[:, :2], r,
-        input_params["angles"], input_params["membership"],
+        optim_vars["centers"],
+        optim_vars["radii"],
+        circles[:, :2],
+        r,
+        input_params["angles"],
+        input_params["membership"],
     )
 
 
@@ -148,9 +151,12 @@ def _multi_term_exclusion(optim_vars, input_params):
     """
     circles = input_params["circles"]  # (N, 3)
     return _exclusion_penalty(
-        optim_vars["centers"], optim_vars["radii"],
-        circles[:, :2], circles[:, 2],
-        input_params["angles"], input_params["membership"],
+        optim_vars["centers"],
+        optim_vars["radii"],
+        circles[:, :2],
+        circles[:, 2],
+        input_params["angles"],
+        input_params["membership"],
     )
 
 
@@ -206,9 +212,12 @@ def _multi_term_enclosure_movable(optim_vars, input_params):
     """Enclosure penalty summed over all sets (circle positions are variables)."""
     r = input_params["circle_radii"][None, :] + input_params["offsets"]  # (S, N)
     return _enclosure_penalty(
-        optim_vars["centers"], optim_vars["radii"],
-        optim_vars["circle_positions"], r,
-        input_params["angles"], input_params["membership"],
+        optim_vars["centers"],
+        optim_vars["radii"],
+        optim_vars["circle_positions"],
+        r,
+        input_params["angles"],
+        input_params["membership"],
     )
 
 
@@ -220,9 +229,12 @@ def _multi_term_exclusion_movable(optim_vars, input_params):
     """
     r = input_params["circle_radii"][None, :] + input_params["offsets"]  # (S, N)
     return _exclusion_penalty(
-        optim_vars["centers"], optim_vars["radii"],
-        optim_vars["circle_positions"], r,
-        input_params["angles"], input_params["membership"],
+        optim_vars["centers"],
+        optim_vars["radii"],
+        optim_vars["circle_positions"],
+        r,
+        input_params["angles"],
+        input_params["membership"],
     )
 
 
@@ -239,7 +251,9 @@ def _multi_term_total_bounding_box(optim_vars, input_params):
     radii = optim_vars["radii"]  # (S, K)
     angles = input_params["angles"]  # (K,)
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
-    points = centers[:, None, :] + radii[:, :, None] * directions[None, :, :]  # (S, K, 2)
+    points = (
+        centers[:, None, :] + radii[:, :, None] * directions[None, :, :]
+    )  # (S, K, 2)
     return (jnp.max(points[:, :, 0]) - jnp.min(points[:, :, 0])) + (
         jnp.max(points[:, :, 1]) - jnp.min(points[:, :, 1])
     )
@@ -277,7 +291,13 @@ def _build_membership(S, N, sets):
     return membership
 
 
-def _init_centers_and_radii(circles_array, sets, angles):
+def _init_centers_and_radii(
+    circles_array,
+    sets,
+    angles,
+    radius_smoothness: float = 0.0,
+    radius_multiplier: float = 1.05,
+):
     """Initialize per-set centers and radii from member circles.
 
     Args:
@@ -308,9 +328,15 @@ def _init_centers_and_radii(circles_array, sets, angles):
         hits = perp**2 <= r[None, :] ** 2
         r_required = tang + np.sqrt(np.maximum(0.0, r[None, :] ** 2 - perp**2))
         r_required_masked = np.where(hits, r_required, 0.0)
-        initial_radii[s] = np.maximum(r_required_masked.max(axis=1), 1.0).astype(
-            np.float32
-        )
+        initial_radii[s] = radius_multiplier * np.maximum(
+            r_required_masked.max(axis=1), 1.0
+        ).astype(np.float32)
+        max_radius = initial_radii[s].max()
+        # for smoothness 0.0, each radius only as large as possible
+        # for smoothness 1.0, each radius the same for all angles
+        initial_radii[s] = (1 - radius_smoothness) * initial_radii[
+            s
+        ] + radius_smoothness * max_radius
 
     return initial_centers, initial_radii
 
@@ -369,7 +395,9 @@ def optimize_multiple_radially_convex_sets(
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
 
     membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(circles_array, sets, angles)
+    initial_centers, initial_radii = _init_centers_and_radii(
+        circles_array, sets, angles
+    )
     offsets_array = np.broadcast_to(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
@@ -467,7 +495,9 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     circle_radii = circles_array[:, 2].copy()  # (N,)
 
     membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(circles_array, sets, angles)
+    initial_centers, initial_radii = _init_centers_and_radii(
+        circles_array, sets, angles
+    )
     offsets_array = np.broadcast_to(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
@@ -494,9 +524,15 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
         ObjectiveTerm("area", _multi_term_area, weight_area),
         ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
-        ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor),
-        ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision),
-        ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box),
+        ObjectiveTerm(
+            "position_anchor", _multi_term_position_anchor, weight_position_anchor
+        ),
+        ObjectiveTerm(
+            "circle_collision", _multi_term_circle_collision, weight_circle_collision
+        ),
+        ObjectiveTerm(
+            "bounding_box", _multi_term_total_bounding_box, weight_bounding_box
+        ),
     ]
 
     problem = OptimizationProblemTemplate(
@@ -508,11 +544,15 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         [np.array(optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
     )
 
-    return [
-        {
-            "center": np.array(optim_vars["centers"][s]),
-            "radii": np.array(optim_vars["radii"][s]),
-            "angles": angles,
-        }
-        for s in range(S)
-    ], circles_out, history
+    return (
+        [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": np.array(optim_vars["radii"][s]),
+                "angles": angles,
+            }
+            for s in range(S)
+        ],
+        circles_out,
+        history,
+    )
