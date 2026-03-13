@@ -355,6 +355,7 @@ def optimize_multiple_radially_convex_sets(
     weight_exclusion=10.0,
     weight_smoothness=1.0,
     offsets=0.1,
+    term_schedules=None,
     optim_kwargs=None,
 ):
     """Find star-shaped regions enclosing each set of circles without overlapping others.
@@ -377,6 +378,12 @@ def optimize_multiple_radially_convex_sets(
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
             Broadcast to (S, N). Default 0.1.
+        term_schedules: optional dict mapping term name to a JAX-compatible
+            callable ``(step: Array) -> Array`` that scales the term's weight
+            over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
+            "smoothness", "area", "perimeter". The effective weight at step t is
+            ``base_weight * schedule(t)``. Schedules must use JAX ops so they
+            can be traced through without recompilation.
         optim_kwargs: keyword arguments forwarded to problem.optimize()
             (e.g. n_iters, learning_rate).
 
@@ -415,13 +422,14 @@ def optimize_multiple_radially_convex_sets(
             "radii": initial_radii,
         }
 
+    schedules = term_schedules or {}
     terms = [
-        ObjectiveTerm("enclosure", _multi_term_enclosure, 10.0),
-        ObjectiveTerm("exclusion", _multi_term_exclusion, weight_exclusion),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
-        ObjectiveTerm("area", _multi_term_area, weight_area),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
+        ObjectiveTerm("enclosure", _multi_term_enclosure, 10.0, schedules.get("enclosure")),
+        ObjectiveTerm("exclusion", _multi_term_exclusion, weight_exclusion, schedules.get("exclusion")),
+        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
+        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness, schedules.get("smoothness")),
+        ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
+        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter, schedules.get("perimeter")),
     ]
 
     problem = OptimizationProblemTemplate(
@@ -451,6 +459,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     weight_circle_collision=10.0,
     weight_bounding_box=0.0,
     offsets=0.1,
+    term_schedules=None,
     optim_kwargs=None,
 ):
     """Like optimize_multiple_radially_convex_sets, but circle positions are also optimized.
@@ -475,6 +484,13 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
             all set boundaries. Default 0.0 (disabled).
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
+        term_schedules: optional dict mapping term name to a JAX-compatible
+            callable ``(step: Array) -> Array`` that scales the term's weight
+            over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
+            "smoothness", "area", "perimeter", "position_anchor",
+            "circle_collision", "bounding_box". The effective weight at step t
+            is ``base_weight * schedule(t)``. Schedules must use JAX ops so
+            they can be traced through without recompilation.
         optim_kwargs: keyword arguments forwarded to problem.optimize()
             (e.g. n_iters, learning_rate).
 
@@ -517,22 +533,17 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
             "circle_positions": initial_circle_positions.copy(),
         }
 
+    schedules = term_schedules or {}
     terms = [
-        ObjectiveTerm("enclosure", _multi_term_enclosure_movable, 10.0),
-        ObjectiveTerm("exclusion", _multi_term_exclusion_movable, weight_exclusion),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
-        ObjectiveTerm("area", _multi_term_area, weight_area),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
-        ObjectiveTerm(
-            "position_anchor", _multi_term_position_anchor, weight_position_anchor
-        ),
-        ObjectiveTerm(
-            "circle_collision", _multi_term_circle_collision, weight_circle_collision
-        ),
-        ObjectiveTerm(
-            "bounding_box", _multi_term_total_bounding_box, weight_bounding_box
-        ),
+        ObjectiveTerm("enclosure", _multi_term_enclosure_movable, 10.0, schedules.get("enclosure")),
+        ObjectiveTerm("exclusion", _multi_term_exclusion_movable, weight_exclusion, schedules.get("exclusion")),
+        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
+        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness, schedules.get("smoothness")),
+        ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
+        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter, schedules.get("perimeter")),
+        ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor, schedules.get("position_anchor")),
+        ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision, schedules.get("circle_collision")),
+        ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box, schedules.get("bounding_box")),
     ]
 
     problem = OptimizationProblemTemplate(
