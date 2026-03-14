@@ -278,11 +278,16 @@ def _multi_term_set_attraction(optim_vars, input_params):
 def _multi_term_circle_collision(optim_vars, input_params):
     """Penalty for overlapping circles.
 
-    For each pair (i, j), penalizes squared overlap:
-        max(0, r_i + r_j - dist(p_i, p_j))^2
+    For each pair (i, j), penalizes overlap with a quadratic + linear term:
+        max(0, r_i + r_j - dist(p_i, p_j))^2 + alpha * max(0, r_i + r_j - dist(p_i, p_j))
+
+    The linear term gives a constant non-zero gradient for any overlap, preventing
+    tiny violations from persisting due to vanishing gradients. alpha=0 recovers
+    the pure quadratic penalty.
     """
     positions = optim_vars["circle_positions"]  # (N, 2)
     radii = input_params["circle_radii"]  # (N,)
+    alpha = input_params["circle_collision_alpha"]
 
     diff = positions[:, None, :] - positions[None, :, :]  # (N, N, 2)
     dist = jnp.sqrt(jnp.sum(diff**2, axis=2) + 1e-12)  # (N, N)
@@ -290,7 +295,7 @@ def _multi_term_circle_collision(optim_vars, input_params):
     overlap = jnp.maximum(0.0, min_dist - dist)  # (N, N)
     # Sum upper triangle only to count each pair once
     mask = jnp.triu(jnp.ones((radii.shape[0], radii.shape[0]), dtype=bool), k=1)
-    return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+    return jnp.sum(jnp.where(mask, overlap**2 + alpha * overlap, 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +480,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     weight_circle_collision=10.0,
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
+    circle_collision_alpha=0.0,
     offsets=0.1,
     term_schedules=None,
     optim_kwargs=None,
@@ -502,6 +508,10 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         weight_set_attraction: weight for pulling each circle toward the center
             of every set it belongs to (and pulling set centers toward their
             member circles). Default 0.0 (disabled).
+        circle_collision_alpha: coefficient for the linear term in the circle
+            collision penalty: ``overlap² + alpha * overlap``. The linear term
+            gives a constant non-zero gradient for any overlap, preventing tiny
+            violations from persisting. Default 0.0 (pure quadratic).
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
         term_schedules: optional dict mapping term name to a JAX-compatible
@@ -545,6 +555,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         "angles": angles,
         "membership": membership,
         "offsets": offsets_array,
+        "circle_collision_alpha": np.float32(circle_collision_alpha),
     }
 
     def initialize(_):
