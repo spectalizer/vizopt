@@ -259,6 +259,22 @@ def _multi_term_total_bounding_box(optim_vars, input_params):
     )
 
 
+def _multi_term_set_attraction(optim_vars, input_params):
+    """Pulls circles toward the centers of sets they belong to (and vice versa).
+
+    For each set s and each member circle n, penalizes squared distance from
+    circle_positions[n] to centers[s]. The gradient acts on both circle
+    positions and set centers, attracting them toward each other.
+    """
+    circle_positions = optim_vars["circle_positions"]  # (N, 2)
+    centers = optim_vars["centers"]  # (S, 2)
+    membership = input_params["membership"]  # (S, N) bool
+
+    diff = circle_positions[None, :, :] - centers[:, None, :]  # (S, N, 2)
+    dist_sq = jnp.sum(diff**2, axis=2)  # (S, N)
+    return jnp.sum(jnp.where(membership, dist_sq, 0.0))
+
+
 def _multi_term_circle_collision(optim_vars, input_params):
     """Penalty for overlapping circles.
 
@@ -458,6 +474,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     weight_position_anchor=1.0,
     weight_circle_collision=10.0,
     weight_bounding_box=0.0,
+    weight_set_attraction=0.0,
     offsets=0.1,
     term_schedules=None,
     optim_kwargs=None,
@@ -482,13 +499,17 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         weight_circle_collision: weight for penalizing overlapping circles.
         weight_bounding_box: weight for minimizing total width + total height of
             all set boundaries. Default 0.0 (disabled).
+        weight_set_attraction: weight for pulling each circle toward the center
+            of every set it belongs to (and pulling set centers toward their
+            member circles). Default 0.0 (disabled).
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
         term_schedules: optional dict mapping term name to a JAX-compatible
             callable ``(step: Array) -> Array`` that scales the term's weight
             over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
             "smoothness", "area", "perimeter", "position_anchor",
-            "circle_collision", "bounding_box". The effective weight at step t
+            "circle_collision", "bounding_box", "set_attraction". The effective
+            weight at step t
             is ``base_weight * schedule(t)``. Schedules must use JAX ops so
             they can be traced through without recompilation.
         optim_kwargs: keyword arguments forwarded to problem.optimize()
@@ -544,6 +565,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor, schedules.get("position_anchor")),
         ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision, schedules.get("circle_collision")),
         ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box, schedules.get("bounding_box")),
+        ObjectiveTerm("set_attraction", _multi_term_set_attraction, weight_set_attraction, schedules.get("set_attraction")),
     ]
 
     problem = OptimizationProblemTemplate(
