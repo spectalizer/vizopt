@@ -5,6 +5,7 @@ from jax import numpy as jnp
 
 from ..base import ObjectiveTerm, OptimizationProblemTemplate
 from ..components import (
+    calculate_collision_penalty,
     calculate_total_width_penalty,
     calculate_total_width_penalty_ignoring_radii,
     should_be_positive_activation,
@@ -31,19 +32,6 @@ def get_random_node_positions(graph, scale=1.0):
 # Low-level JAX loss components
 # ---------------------------------------------------------------------------
 
-
-def _calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1.0):
-    """Vectorized collision penalty for non-inclusion node pairs."""
-    if len(collision_pairs) == 0:
-        return jnp.array(0.0)
-
-    pos_a = node_xys[collision_pairs[:, 0]]
-    pos_b = node_xys[collision_pairs[:, 1]]
-    dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
-    radii_a = node_radii[collision_pairs[:, 0]]
-    radii_b = node_radii[collision_pairs[:, 1]]
-    d_minus_radiuses = dists - offset - radii_a - radii_b
-    return jnp.sum(should_be_positive_activation(d_minus_radiuses))
 
 
 def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=1.0):
@@ -136,7 +124,7 @@ def _term_total_size(optim_vars, input_params):
 
 def _term_collision(optim_vars, input_params):
     node_radii = _get_node_radii(optim_vars, input_params)
-    return _calculate_collision_penalty(
+    return calculate_collision_penalty(
         optim_vars["node_xys"], node_radii, input_params["collision_pairs"]
     )
 

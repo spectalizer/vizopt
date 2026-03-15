@@ -58,3 +58,27 @@ def calculate_total_width_penalty(node_xys: np.ndarray, node_radii: np.ndarray):
         jnp.max(node_xys + node_radii.reshape(-1, 1), axis=0)
         - jnp.min(node_xys - node_radii.reshape(-1, 1), axis=0)
     )
+
+
+def calculate_collision_penalty(node_xys, node_radii, collision_pairs, offset=1.0):
+    """Vectorized collision penalty for node pairs that should not overlap.
+
+    Args:
+        node_xys: Array of node positions with shape (n, 2).
+        node_radii: Array of node radii with shape (n,).
+        collision_pairs: Integer array of shape (k, 2) with index pairs to check.
+        offset: Minimum required gap between circle boundaries.
+
+    Returns:
+        Scalar penalty value.
+    """
+    if len(collision_pairs) == 0:
+        return jnp.array(0.0)
+
+    pos_a = node_xys[collision_pairs[:, 0]]
+    pos_b = node_xys[collision_pairs[:, 1]]
+    dists = jnp.sqrt(jnp.sum((pos_a - pos_b) ** 2, axis=1))
+    radii_a = node_radii[collision_pairs[:, 0]]
+    radii_b = node_radii[collision_pairs[:, 1]]
+    d_minus_radiuses = dists - offset - radii_a - radii_b
+    return jnp.sum(should_be_positive_activation(d_minus_radiuses))
