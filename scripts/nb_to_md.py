@@ -16,7 +16,33 @@ from pathlib import Path
 
 
 def _save_image(data: dict, image_dir: Path, image_prefix: str, idx: int) -> str | None:
-    """Save an image output to disk and return a markdown image tag, or None."""
+    """Save an image output to disk and return a markdown image tag, or None.
+
+        Prefers SVG, falls back to PNG then JPEG.
+
+        `%config InlineBackend.figure_formats = ['svg']` at the top of the notebook
+        should be used to generate SVG outputs.
+
+        Args:
+            data: The output data dict from a notebook cell.
+            image_dir: Directory to save images to.
+            image_prefix: Prefix for image filenames.
+            idx: Index for image filenames.
+
+        Returns:
+            Markdown image tag, e.g.:
+            `![output](images/nested-circles_0.svg)
+    `
+    """
+    if "image/svg+xml" in data:
+        svg = data["image/svg+xml"]
+        if isinstance(svg, list):
+            svg = "".join(svg)
+        image_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{image_prefix}_{idx}.svg"
+        (image_dir / filename).write_text(svg, encoding="utf-8")
+        return f"![output](images/{filename})"
+
     img_data = data.get("image/png") or data.get("image/jpeg")
     if not img_data:
         return None
@@ -28,7 +54,9 @@ def _save_image(data: dict, image_dir: Path, image_prefix: str, idx: int) -> str
     return f"![output](images/{filename})"
 
 
-def cell_to_md(cell: dict, image_dir: Path, image_prefix: str, image_counter: list) -> str:
+def cell_to_md(
+    cell: dict, image_dir: Path, image_prefix: str, image_counter: list
+) -> str:
     """Convert a single notebook cell to a markdown string."""
     cell_type = cell["cell_type"]
     source = "".join(cell["source"])
@@ -82,6 +110,7 @@ def notebook_to_md(nb_path: Path, out_path: Path, execute: bool = False) -> None
         cells = nb.cells
     else:
         import json
+
         nb = json.loads(nb_path.read_text(encoding="utf-8"))
         cells = nb.get("cells", [])
 
