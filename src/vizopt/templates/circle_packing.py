@@ -12,7 +12,7 @@ from ..components import (
 # ObjectiveTerm compute functions
 #
 # optim_vars keys: "node_xys"
-# input_params keys: "node_radii", "collision_pairs"
+# input_params keys: "node_radii", "collision_pairs", "collision_offset"
 # ---------------------------------------------------------------------------
 
 
@@ -27,6 +27,7 @@ def _term_collision(optim_vars, input_params):
         optim_vars["node_xys"],
         jnp.array(input_params["node_radii"]),
         input_params["collision_pairs"],
+        offset=input_params["collision_offset"],
     )
 
 
@@ -38,6 +39,7 @@ def _term_collision(optim_vars, input_params):
 def optimize_circle_packing(
     radii: list[float],
     weight_total_size=2.0,
+    collision_offset=1.0,
     optim_kwargs=None,
 ):
     """Pack circles of given radii to minimize overlap and overall bounding box.
@@ -49,6 +51,7 @@ def optimize_circle_packing(
     Args:
         radii: List of circle radii.
         weight_total_size: Weight for the total width/height objective.
+        collision_offset: Minimum required gap between circle boundaries.
         optim_kwargs: Optional keyword arguments forwarded to problem.optimize()
             (e.g. n_iters, learning_rate).
 
@@ -67,6 +70,7 @@ def optimize_circle_packing(
     input_parameters = {
         "node_radii": node_radii,
         "collision_pairs": collision_pairs,
+        "collision_offset": collision_offset,
     }
 
     def initialize(_):
