@@ -18,6 +18,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+hyperoptim = [
+    "optuna>=4.0.0",
+]
 dev = [
     "black>=26.1.0",
     "ipykernel>=7.1.0",

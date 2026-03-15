@@ -22,17 +22,24 @@ class ObjectiveTerm:
         compute: A function that computes the value of the term
             with arguments optim_vars, input_parameters
         multiplier: A multiplicative factor for the term.
+        schedule: Optional JAX-compatible callable ``(step: Array) -> Array``
+            that returns a scalar multiplier for the given iteration step.
+            The effective weight is ``multiplier * schedule(step)``.
+            Must use JAX ops (e.g. ``jnp.minimum``, ``jnp.where``) so that
+            it can be traced through without recompilation.
+            ``None`` means constant 1.0 (no scheduling).
     """
 
     name: str
     compute: Callable[[OptimVars, Any], Array]
     multiplier: float = 1.0
+    schedule: Callable[[Array], Array] | None = None
 
 
 def build_objective(
     terms: list[ObjectiveTerm],
     input_parameters: Any,
-) -> Callable[[OptimVars], Array]:
+) -> Callable[[OptimVars, Array], Array]:
     """Build a composite objective function from a list of terms.
 
     Args:
@@ -40,15 +47,19 @@ def build_objective(
         input_parameters: Fixed data passed to each term's compute function.
 
     Returns:
-        A callable ``fun(optim_vars) -> scalar`` suitable for gradient descent.
+        A callable ``fun(optim_vars, step) -> scalar`` suitable for gradient
+        descent. ``step`` is the current iteration as a JAX int32 array and
+        is passed to each term's ``schedule`` (if any).
     """
 
     active_terms = [t for t in terms if t.multiplier != 0.0]
 
-    def fun_to_minimize(optim_vars: OptimVars) -> Array:
+    def fun_to_minimize(optim_vars: OptimVars, step: Array) -> Array:
         return sum(
             (
-                term.compute(optim_vars, input_parameters) * term.multiplier
+                term.compute(optim_vars, input_parameters)
+                * term.multiplier
+                * (term.schedule(step) if term.schedule is not None else 1.0)
                 for term in active_terms
             ),
             jnp.zeros(()),
@@ -182,10 +193,13 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         ) -> None:
             if i_iter % track_every == 0:
                 record: dict = {"iteration": i_iter, "total": float(loss_value)}
+                step = jnp.int32(i_iter)
                 for term in self.terms:
+                    sched = float(term.schedule(step)) if term.schedule is not None else 1.0
                     record[term.name] = float(
                         term.compute(optim_vars, self.input_parameters)
                         * term.multiplier
+                        * sched
                     )
                 history.append(record)
             if callback is not None:
