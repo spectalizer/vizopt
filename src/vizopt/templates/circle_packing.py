@@ -40,6 +40,7 @@ def optimize_circle_packing(
     radii: list[float],
     weight_total_size=2.0,
     collision_offset=1.0,
+    initial_node_xys=None,
     optim_kwargs=None,
 ):
     """Pack circles of given radii to minimize overlap and overall bounding box.
@@ -52,6 +53,8 @@ def optimize_circle_packing(
         radii: List of circle radii.
         weight_total_size: Weight for the total width/height objective.
         collision_offset: Minimum required gap between circle boundaries.
+        initial_node_xys: Optional initial (x, y) positions as an array of
+            shape (n, 2). If None, positions are randomly initialized.
         optim_kwargs: Optional keyword arguments forwarded to problem.optimize()
             (e.g. n_iters, learning_rate).
 
@@ -60,8 +63,11 @@ def optimize_circle_packing(
     """
     node_radii = np.array(radii, dtype=np.float32)
     n = len(node_radii)
-    total_scale = float(node_radii.sum()) if n > 0 else 1.0
-    initial_node_xys = np.random.rand(n, 2).astype(np.float32) * total_scale
+    if initial_node_xys is None:
+        total_scale = float(node_radii.sum()) if n > 0 else 1.0
+        initial_node_xys = np.random.rand(n, 2).astype(np.float32) * total_scale
+    else:
+        initial_node_xys = np.array(initial_node_xys, dtype=np.float32)
 
     collision_pairs = np.array(
         [[i, j] for i in range(n) for j in range(i)], dtype=np.int32
