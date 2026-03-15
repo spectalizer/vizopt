@@ -3,8 +3,8 @@ import networkx as nx
 import numpy as np
 from jax import numpy as jnp
 
-from .base import ObjectiveTerm, OptimizationProblemTemplate
-from .components import (
+from ..base import ObjectiveTerm, OptimizationProblemTemplate
+from ..components import (
     calculate_total_width_penalty,
     calculate_total_width_penalty_ignoring_radii,
     should_be_positive_activation,
