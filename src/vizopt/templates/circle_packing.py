@@ -31,6 +31,14 @@ def _term_collision(optim_vars, input_params):
     )
 
 
+_TAB20 = [
+    "#1f77b4","#aec7e8","#ff7f0e","#ffbb78","#2ca02c",
+    "#98df8a","#d62728","#ff9896","#9467bd","#c5b0d5",
+    "#8c564b","#c49c94","#e377c2","#f7b6d2","#7f7f7f",
+    "#c7c7c7","#bcbd22","#dbdb8d","#17becf","#9edae5",
+]
+
+
 # ---------------------------------------------------------------------------
 # Plot configuration
 # ---------------------------------------------------------------------------
@@ -66,6 +74,42 @@ def _plot_configuration(optim_vars, input_params):
 
 
 # ---------------------------------------------------------------------------
+# SVG configuration
+# ---------------------------------------------------------------------------
+
+
+def _svg_configuration(snapshots, input_params, size):
+    radii = input_params["node_radii"]
+    n = len(radii)
+
+    all_xy = np.concatenate([v["node_xys"] for _, v in snapshots], axis=0)
+    margin = float(max(radii))
+    xmin = float(all_xy[:, 0].min()) - margin
+    ymin = float(all_xy[:, 1].min()) - margin
+    span = max(
+        float(all_xy[:, 0].max()) + margin - xmin,
+        float(all_xy[:, 1].max()) + margin - ymin,
+    )
+
+    def to_svg_scale(x, y):
+        return (x - xmin) / span * size, (span - (y - ymin)) / span * size
+
+    return [
+        {
+            "tag": "circle",
+            "r": f"{float(radii[i]) / span * size:.1f}",
+            "fill": _TAB20[i % len(_TAB20)],
+            "fill-opacity": "0.6",
+            "stroke": "black",
+            "stroke-width": "0.5",
+            "cx": [f"{to_svg_scale(float(v['node_xys'][i, 0]), float(v['node_xys'][i, 1]))[0]:.1f}" for _, v in snapshots],
+            "cy": [f"{to_svg_scale(float(v['node_xys'][i, 0]), float(v['node_xys'][i, 1]))[1]:.1f}" for _, v in snapshots],
+        }
+        for i in range(n)
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -89,7 +133,8 @@ def build_circle_packing_problem(
         initial_node_xys: Optional initial (x, y) positions, shape (n, 2).
 
     Returns:
-        An :class:`OptimizationProblem` with ``plot_configuration`` set.
+        An :class:`OptimizationProblem` with ``plot_configuration`` and
+        ``svg_configuration`` set.
     """
     node_radii = np.array(radii, dtype=np.float32)
     n = len(node_radii)
@@ -122,7 +167,10 @@ def build_circle_packing_problem(
     ]
 
     return OptimizationProblemTemplate(
-        terms=terms, initialize=initialize, plot_configuration=_plot_configuration
+        terms=terms,
+        initialize=initialize,
+        plot_configuration=_plot_configuration,
+        svg_configuration=_svg_configuration,
     ).instantiate(input_parameters)
 
 

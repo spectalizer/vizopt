@@ -89,12 +89,18 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
             When set, validation is performed at instantiation time.
         plot_configuration: Optional callable to visualize a configuration.
             Signature: ``plot_configuration(optim_vars, input_parameters)``.
+        svg_configuration: Optional callable to produce SVG element specs for
+            animation. Signature:
+            ``svg_configuration(snapshots, input_parameters, size) -> list[dict]``
+            where each dict has a ``"tag"`` key and SVG attribute keys; list
+            values are animated per-frame, scalar values are static.
     """
 
     terms: list[ObjectiveTerm]
     initialize: Callable[[InputParams], OptimVars]
     input_params_class: type[InputParams] | None = None
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
+    svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
 
     def instantiate(
         self,
@@ -138,7 +144,8 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
                 for t in terms
             ]
         return OptimizationProblem(
-            input_parameters, terms, self.initialize, self.plot_configuration
+            input_parameters, terms, self.initialize, self.plot_configuration,
+            self.svg_configuration,
         )
 
 
@@ -153,12 +160,16 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
             from input_parameters.
         plot_configuration: Optional callable to visualize a configuration.
             Signature: ``plot_configuration(optim_vars, input_parameters)``.
+        svg_configuration: Optional callable to produce SVG element specs for
+            animation. Signature:
+            ``svg_configuration(snapshots, input_parameters, size) -> list[dict]``.
     """
 
     input_parameters: InputParams
     terms: list[ObjectiveTerm]
     initialize: Callable[[InputParams], OptimVars]
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
+    svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
 
     def optimize(
         self,

@@ -98,6 +98,61 @@ def animate(
     )
 
 
+def snapshots_to_animated_svg(
+    problem: "OptimizationProblem",
+    snapshots: list[tuple[int, Any]],
+    fps: int = 10,
+    size: int = 500,
+    calc_mode: str = "linear",
+) -> str:
+    """Create an animated SVG from optimization snapshots.
+
+    Uses ``problem.svg_configuration`` to obtain per-element SVG specs, then
+    builds SMIL ``<animate>`` elements for attributes that vary across frames.
+
+    Args:
+        problem: The optimization problem; must have ``svg_configuration`` set.
+        snapshots: List of ``(iteration, optim_vars)`` tuples as produced by
+            :class:`SnapshotCallback`.
+        fps: Frames per second.
+        size: Width and height of the output SVG in pixels.
+        calc_mode: ``"linear"`` for smooth interpolation or ``"discrete"``
+            for instant jumps between frames.
+
+    Returns:
+        An SVG string. Save with ``Path("out.svg").write_text(svg)`` or
+        display in Jupyter with ``IPython.display.SVG(data=svg)``.
+
+    Raises:
+        ValueError: If ``problem.svg_configuration`` is not set or
+            ``snapshots`` is empty.
+    """
+    if problem.svg_configuration is None:
+        raise ValueError("problem.svg_configuration must be set to use snapshots_to_animated_svg.")
+    if not snapshots:
+        raise ValueError("snapshots is empty.")
+
+    elements = problem.svg_configuration(snapshots, problem.input_parameters, size)
+    n_frames = len(snapshots)
+    total_dur = n_frames / fps
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}">',
+        f'  <rect width="{size}" height="{size}" fill="white"/>',
+    ]
+    for el in elements:
+        tag = el["tag"]
+        static = {k: v for k, v in el.items() if k != "tag" and not isinstance(v, list)}
+        animated = {k: v for k, v in el.items() if k != "tag" and isinstance(v, list)}
+        attr_str = " ".join(f'{k}="{v}"' for k, v in static.items())
+        lines.append(f"  <{tag} {attr_str}>")
+        for attr, values in animated.items():
+            lines.append(f"    {smil_animate(attr, values, n_frames, total_dur, calc_mode)}")
+        lines.append(f"  </{tag}>")
+    lines.append("</svg>")
+    return "\n".join(lines)
+
+
 def smil_animate(
     attr_name: str,
     per_frame_values: list[str],
