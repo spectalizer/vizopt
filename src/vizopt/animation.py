@@ -96,3 +96,36 @@ def animate(
     return animation.FuncAnimation(
         fig_anim, update, frames=len(images), interval=interval, blit=True
     )
+
+
+def smil_animate(
+    attr_name: str,
+    per_frame_values: list[str],
+    n_frames: int,
+    total_dur: float,
+    calc_mode: str = "linear",
+) -> str:
+    """Build a SMIL ``<animate>`` element string for a numeric SVG attribute.
+
+    Args:
+        attr_name: SVG attribute to animate (e.g. ``"cx"``, ``"opacity"``).
+        per_frame_values: Stringified values, one per frame.
+        n_frames: Total number of frames, used to space ``keyTimes`` evenly.
+        total_dur: Animation duration in seconds.
+        calc_mode: ``"linear"`` or ``"discrete"``. Linear appends the first
+            value at ``keyTime`` ``1.0`` to close the loop smoothly.
+
+    Returns:
+        An SVG ``<animate>`` element string.
+    """
+    if calc_mode == "linear":
+        key_times = ";".join(f"{fi / n_frames:.6f}" for fi in range(n_frames)) + ";1.000000"
+        values = ";".join(per_frame_values + per_frame_values[:1])
+    else:
+        key_times = ";".join(f"{fi / n_frames:.6f}" for fi in range(n_frames))
+        values = ";".join(per_frame_values)
+    return (
+        f'<animate attributeName="{attr_name}" calcMode="{calc_mode}"'
+        f' values="{values}" keyTimes="{key_times}"'
+        f' dur="{total_dur:.3f}s" repeatCount="indefinite"/>'
+    )
