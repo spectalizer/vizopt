@@ -50,3 +50,13 @@ See [examples/examples_with_bubbles.ipynb](examples/examples_with_bubbles.ipynb)
 ## License
 
 MIT
+
+## For developers
+
+### Documentation
+
+Using Zensical.
+
+`uv run zensical serve`
+
+`uv run python scripts/nb_to_md.py --execute examples/circle_packing.ipynb docs/examples/from-notebook-circle-packing.md`
