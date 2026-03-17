@@ -102,6 +102,14 @@ def _coverage(optim_vars, input_parameters):
     return -(lab[:, 1].var() + lab[:, 2].var())
 
 
+def _luminosity(optim_vars, input_parameters):
+    target_L = input_parameters.get("target_L")
+    if target_L is None:
+        return jnp.zeros(())
+    lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
+    return jnp.mean((lab[:, 0] - target_L) ** 2)
+
+
 def plot_colored_words(optim_vars, input_parameters):
     colors = np.array(_build_rgb(optim_vars, input_parameters))
     labels = input_parameters["labels"]
@@ -175,6 +183,7 @@ color_palette_template = OptimizationProblemTemplate(
     terms=[
         ObjectiveTerm(name="stress", compute=_stress),
         ObjectiveTerm(name="coverage", compute=_coverage, multiplier=0.5),
+        ObjectiveTerm(name="luminosity", compute=_luminosity),
     ],
     initialize=lambda params: {"logit_rgb": params["logit_init"]},
     plot_configuration=plot_colored_words,
@@ -187,6 +196,7 @@ def build_color_input_parameters(
     fixed_colors=None,
     *,
     target_max_delta_e=50.0,
+    target_L=None,
     seed=None,
 ):
     """Build the ``input_parameters`` dict for :obj:`color_palette_template`.
@@ -197,6 +207,8 @@ def build_color_input_parameters(
         fixed_colors: Map from label (DataFrame index value) or integer position
             to an sRGB tuple/array in [0, 1]. Those colors are held fixed.
         target_max_delta_e: The largest pairwise distance maps to this ΔE value.
+        target_L: Target CIELAB lightness (L*) in [0, 100], or ``None`` to
+            disable the luminosity term. ~45 for light mode, ~70 for dark mode.
         seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
 
     Returns:
@@ -250,6 +262,7 @@ def build_color_input_parameters(
         "idx_j": idx_j,
         "targets": targets,
         "logit_init": jnp.array(logit_init[np.array(free_idx)]),
+        "target_L": target_L,
     }
 
 
@@ -258,6 +271,7 @@ def optimize_colors(
     fixed_colors=None,
     *,
     target_max_delta_e=50.0,
+    target_L=None,
     learning_rate=0.05,
     n_iters=1000,
     callback=None,
@@ -272,6 +286,10 @@ def optimize_colors(
             to an sRGB tuple/array in [0, 1]. Those colors are held fixed during
             optimization.
         target_max_delta_e: The largest pairwise distance maps to this ΔE value.
+        target_L: Target CIELAB lightness (L*) for all colors, in [0, 100].
+            ``None`` disables the luminosity term. Typical values: ~45 for
+            light-mode palettes (darker colors on white), ~70 for dark-mode
+            palettes (brighter colors on dark backgrounds).
         learning_rate: Adam learning rate.
         n_iters: Number of gradient-descent iterations.
         callback: Called as ``callback(i, loss, params, grads)`` after each step.
@@ -282,10 +300,12 @@ def optimize_colors(
     Returns:
         Tuple of (colors, history) where colors is an sRGB array of shape (n, 3)
         in [0, 1] and history is a list of dicts recorded every 10 iterations
-        with keys ``"iteration"``, ``"total"``, ``"stress"``, and ``"coverage"``.
+        with keys ``"iteration"``, ``"total"``, ``"stress"``, ``"coverage"``,
+        and ``"luminosity"``.
     """
     input_parameters = build_color_input_parameters(
-        distances, fixed_colors, target_max_delta_e=target_max_delta_e, seed=seed
+        distances, fixed_colors, target_max_delta_e=target_max_delta_e,
+        target_L=target_L, seed=seed,
     )
     problem = color_palette_template.instantiate(input_parameters)
     optim_vars, history = problem.optimize(
