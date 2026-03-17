@@ -26,6 +26,7 @@ dev = [
     "ipykernel>=7.1.0",
     "nbconvert>=7.0.0",
     "nbformat>=5.0.0",
+    "pandas-stubs>=3.0.0.260204",
     "pytest>=9.0.2",
     "types-networkx>=3.6.1.20260210",
     "zensical>=0.0.24",
