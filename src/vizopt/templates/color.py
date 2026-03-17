@@ -1,3 +1,5 @@
+"""Optimizing color palettes."""
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -5,33 +7,6 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
-
-
-def classical_mds(D, k=3):
-    """Embed a distance matrix into Euclidean coordinates via classical MDS.
-
-    Args:
-        D: Square symmetric distance matrix of shape (n, n).
-        k: Number of embedding dimensions.
-
-    Returns:
-        Coordinate array of shape (n, k).
-    """
-    n = len(D)
-    D2 = np.array(D) ** 2
-    H = np.eye(n) - np.ones((n, n)) / n
-    B = -0.5 * H @ D2 @ H
-
-    eigenvalues, eigenvectors = np.linalg.eigh(B)
-    eigenvalues, eigenvectors = eigenvalues[::-1], eigenvectors[:, ::-1]
-
-    # Drop negative eigenvalues (edit distance is not Euclidean)
-    k_pos = (eigenvalues > 1e-10).sum()
-    k_use = min(k, k_pos)
-    coords = eigenvectors[:, :k_use] * np.sqrt(eigenvalues[:k_use])
-    if k_use < k:
-        coords = np.hstack([coords, np.zeros((n, k - k_use))])
-    return coords
 
 
 def lab_to_rgb(Lab):
@@ -127,17 +102,73 @@ def _coverage(optim_vars, input_parameters):
     return -(lab[:, 1].var() + lab[:, 2].var())
 
 
-def _plot_colored_words(optim_vars, input_parameters):
+def plot_colored_words(optim_vars, input_parameters):
     colors = np.array(_build_rgb(optim_vars, input_parameters))
     labels = input_parameters["labels"]
     _, ax = plt.subplots(figsize=(7, 2))
     for i, (label, color) in enumerate(zip(labels, colors)):
-        ax.scatter(i, 0.15, color=color, s=500, zorder=3, edgecolors="0.3", linewidths=0.5)
+        ax.scatter(
+            i, 0.15, color=color, s=500, zorder=3, edgecolors="0.3", linewidths=0.5
+        )
         ax.text(i, -0.05, label, ha="center", va="top", fontsize=12)
     ax.set_xlim(-0.7, len(labels) - 0.3)
     ax.set_ylim(-0.3, 0.45)
     ax.axis("off")
     plt.tight_layout()
+
+
+def _color_svg_configuration(snapshots, input_parameters, size):
+    """Build SVG element specs for the animated color palette.
+
+    Args:
+        snapshots: List of ``(iteration, optim_vars)`` tuples.
+        input_parameters: Problem input dict with ``"labels"`` and color data.
+        size: SVG canvas size in pixels.
+
+    Returns:
+        List of element dicts for
+        :func:`~vizopt.animation.snapshots_to_animated_svg`.
+    """
+    labels = input_parameters["labels"]
+    n = len(labels)
+
+    padding = size * 0.1
+    slot = (size - 2 * padding) / n
+    cx_list = [padding + slot * (i + 0.5) for i in range(n)]
+    r = min(slot * 0.35, size * 0.1)
+    cy = size * 0.4
+    text_y = cy + r + size * 0.07
+    font_size = max(10, int(size * 0.04))
+
+    per_color_fills = [[] for _ in range(n)]
+    for _, optim_vars in snapshots:
+        rgb = np.array(_build_rgb(optim_vars, input_parameters))
+        for i in range(n):
+            rv, gv, bv = rgb[i]
+            per_color_fills[i].append(f"#{int(rv*255):02x}{int(gv*255):02x}{int(bv*255):02x}")
+
+    elements = []
+    for i in range(n):
+        elements.append({
+            "tag": "circle",
+            "cx": f"{cx_list[i]:.1f}",
+            "cy": f"{cy:.1f}",
+            "r": f"{r:.1f}",
+            "stroke": "#555555",
+            "stroke-width": "1",
+            "fill": per_color_fills[i],
+        })
+        elements.append({
+            "tag": "text",
+            "x": f"{cx_list[i]:.1f}",
+            "y": f"{text_y:.1f}",
+            "text-anchor": "middle",
+            "font-size": f"{font_size}",
+            "font-family": "sans-serif",
+            "fill": "#333333",
+            "_text": str(labels[i]),
+        })
+    return elements
 
 
 color_palette_template = OptimizationProblemTemplate(
@@ -146,7 +177,8 @@ color_palette_template = OptimizationProblemTemplate(
         ObjectiveTerm(name="coverage", compute=_coverage, multiplier=0.5),
     ],
     initialize=lambda params: {"logit_rgb": params["logit_init"]},
-    plot_configuration=_plot_colored_words,
+    plot_configuration=plot_colored_words,
+    svg_configuration=_color_svg_configuration,
 )
 
 
@@ -205,17 +237,8 @@ def build_color_input_parameters(
     pair_dists = jnp.array([D[i, j] for i, j in pairs], dtype=float)
     targets = pair_dists / pair_dists.max() * target_max_delta_e
 
-    if seed is None:
-        # MDS warm-start
-        coords = classical_mds(D)
-        target_half_ranges = np.array([25.0, 50.0, 50.0])
-        uniform_scale = (target_half_ranges / np.abs(coords).max(axis=0)).min()
-        Lab_init = coords * uniform_scale + np.array([55.0, 0.0, 0.0])
-        rgb_init = np.clip(lab_to_rgb(Lab_init), 1e-4, 1 - 1e-4)
-        logit_init = np.log(rgb_init / (1 - rgb_init))
-    else:
-        rng = jax.random.PRNGKey(seed)
-        logit_init = jax.random.normal(rng, shape=(n, 3))
+    rng = jax.random.PRNGKey(0 if seed is None else seed)
+    logit_init = jax.random.normal(rng, shape=(n, 3))
 
     return {
         "n": n,

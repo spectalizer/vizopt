@@ -142,10 +142,13 @@ def snapshots_to_animated_svg(
     ]
     for el in elements:
         tag = el["tag"]
-        static = {k: v for k, v in el.items() if k != "tag" and not isinstance(v, list)}
-        animated = {k: v for k, v in el.items() if k != "tag" and isinstance(v, list)}
+        static = {k: v for k, v in el.items() if k not in ("tag", "_text") and not isinstance(v, list)}
+        animated = {k: v for k, v in el.items() if k not in ("tag", "_text") and isinstance(v, list)}
+        inner_text = el.get("_text", "")
         attr_str = " ".join(f'{k}="{v}"' for k, v in static.items())
         lines.append(f"  <{tag} {attr_str}>")
+        if inner_text:
+            lines.append(f"    {inner_text}")
         for attr, values in animated.items():
             lines.append(f"    {smil_animate(attr, values, n_frames, total_dur, calc_mode)}")
         lines.append(f"  </{tag}>")
