@@ -99,7 +99,13 @@ def _stress(optim_vars, input_parameters):
 
 def _coverage(optim_vars, input_parameters):
     lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
-    return -(lab[:, 1].var() + lab[:, 2].var())
+    # return -(lab[:, 1].var() + lab[:, 2].var()) # the old version
+    idx_i = input_parameters["idx_i"]
+    idx_j = input_parameters["idx_j"]
+    targets = input_parameters["targets"]
+    color_dists = jnp.sqrt(((lab[idx_i] - lab[idx_j]) ** 2).sum(axis=-1) + 1e-8)
+    weights = targets / targets.max()
+    return -jnp.mean(weights * jnp.log(color_dists))
 
 
 def _luminosity(optim_vars, input_parameters):
@@ -153,29 +159,35 @@ def _color_svg_configuration(snapshots, input_parameters, size):
         rgb = np.array(_build_rgb(optim_vars, input_parameters))
         for i in range(n):
             rv, gv, bv = rgb[i]
-            per_color_fills[i].append(f"#{int(rv*255):02x}{int(gv*255):02x}{int(bv*255):02x}")
+            per_color_fills[i].append(
+                f"#{int(rv*255):02x}{int(gv*255):02x}{int(bv*255):02x}"
+            )
 
     elements = []
     for i in range(n):
-        elements.append({
-            "tag": "circle",
-            "cx": f"{cx_list[i]:.1f}",
-            "cy": f"{cy:.1f}",
-            "r": f"{r:.1f}",
-            "stroke": "#555555",
-            "stroke-width": "1",
-            "fill": per_color_fills[i],
-        })
-        elements.append({
-            "tag": "text",
-            "x": f"{cx_list[i]:.1f}",
-            "y": f"{text_y:.1f}",
-            "text-anchor": "middle",
-            "font-size": f"{font_size}",
-            "font-family": "sans-serif",
-            "fill": "#333333",
-            "_text": str(labels[i]),
-        })
+        elements.append(
+            {
+                "tag": "circle",
+                "cx": f"{cx_list[i]:.1f}",
+                "cy": f"{cy:.1f}",
+                "r": f"{r:.1f}",
+                "stroke": "#555555",
+                "stroke-width": "1",
+                "fill": per_color_fills[i],
+            }
+        )
+        elements.append(
+            {
+                "tag": "text",
+                "x": f"{cx_list[i]:.1f}",
+                "y": f"{text_y:.1f}",
+                "text-anchor": "middle",
+                "font-size": f"{font_size}",
+                "font-family": "sans-serif",
+                "fill": "#333333",
+                "_text": str(labels[i]),
+            }
+        )
     return elements
 
 
@@ -304,8 +316,11 @@ def optimize_colors(
         and ``"luminosity"``.
     """
     input_parameters = build_color_input_parameters(
-        distances, fixed_colors, target_max_delta_e=target_max_delta_e,
-        target_L=target_L, seed=seed,
+        distances,
+        fixed_colors,
+        target_max_delta_e=target_max_delta_e,
+        target_L=target_L,
+        seed=seed,
     )
     problem = color_palette_template.instantiate(input_parameters)
     optim_vars, history = problem.optimize(
