@@ -120,10 +120,9 @@ def _coverage(optim_vars, input_parameters):
     lab = rgb_to_oklab(_build_rgb(optim_vars, input_parameters))
     idx_i = input_parameters["idx_i"]
     idx_j = input_parameters["idx_j"]
-    targets = input_parameters["targets"]
     color_dists = jnp.sqrt(((lab[idx_i] - lab[idx_j]) ** 2).sum(axis=-1) + 1e-8)
-    weights = targets / targets.max()
-    return -jnp.mean(weights * jnp.log(color_dists))
+    temperature = input_parameters.get("coverage_temperature", 0.05)
+    return temperature * jax.scipy.special.logsumexp(-color_dists / temperature)
 
 
 def _luminosity(optim_vars, input_parameters):
@@ -216,9 +215,10 @@ def build_color_input_parameters(
     *,
     target_max_delta_e=0.3,
     target_L=None,
+    coverage_temperature=0.05,
     seed=None,
 ):
-    """Build the ``input_parameters`` dict for :obj:`color_palette_template`.
+    """Build the ``input_parameters`` dict for color palette optimization.
 
     Args:
         distances: Symmetric pairwise distance matrix of shape (n, n). If a
@@ -230,6 +230,9 @@ def build_color_input_parameters(
             the default of 0.3 spans most of the gamut.
         target_L: Target OKLAB/OKLCH lightness in [0, 1], or ``None`` to
             disable the luminosity term. ~0.75 for light mode, ~0.85 for dark mode.
+        coverage_temperature: Temperature for the soft-min coverage term. Smaller
+            values focus more sharply on the closest pair (harder min); larger
+            values average more broadly across all pairs. Default 0.05.
         seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
 
     Returns:
@@ -284,6 +287,7 @@ def build_color_input_parameters(
         "targets": targets,
         "logit_init": jnp.array(logit_init[np.array(free_idx)]),
         "target_L": target_L,
+        "coverage_temperature": coverage_temperature,
     }
 
 
@@ -334,6 +338,7 @@ def optimize_colors(
     stress_weight=1.0,
     coverage_weight=0.5,
     luminosity_weight=1.0,
+    coverage_temperature=0.05,
 ):
     """Optimize a palette so pairwise OKLAB ΔE distances match ``distances``.
 
@@ -357,6 +362,7 @@ def optimize_colors(
         stress_weight: Multiplier for the stress term (default 1.0).
         coverage_weight: Multiplier for the coverage term (default 0.5).
         luminosity_weight: Multiplier for the luminosity term (default 1.0).
+        coverage_temperature: Temperature for the soft-min coverage term (default 0.05).
 
     Returns:
         Tuple of (colors, history) where colors is an sRGB array of shape (n, 3)
@@ -369,6 +375,7 @@ def optimize_colors(
         fixed_colors,
         target_max_delta_e=target_max_delta_e,
         target_L=target_L,
+        coverage_temperature=coverage_temperature,
         seed=seed,
     )
     problem = build_color_problem(
