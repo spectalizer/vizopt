@@ -9,64 +9,83 @@ from matplotlib import pyplot as plt
 from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
 
 
-def lab_to_rgb(Lab):
-    """Convert CIE L*a*b* values to sRGB.
+def oklab_to_rgb(Lab):
+    """Convert OKLAB values to sRGB.
 
     Args:
-        Lab: Array of shape (n, 3) with CIE L*a*b* values.
+        Lab: Array of shape (n, 3) with OKLAB values (L in [0, 1]).
 
     Returns:
         Array of shape (n, 3) with sRGB values clipped to [0, 1].
     """
-    L, a, b = Lab[:, 0], Lab[:, 1], Lab[:, 2]
-    fy = (L + 16) / 116
-    fx = a / 500 + fy
-    fz = fy - b / 200
-
-    def f_inv(t):
-        return np.where(t > 6 / 29, t**3, 3 * (6 / 29) ** 2 * (t - 4 / 29))
-
-    XYZ = np.stack([0.95047 * f_inv(fx), f_inv(fy), 1.08883 * f_inv(fz)], axis=1)
-
-    M = np.array(
+    M2_inv = np.array(
         [
-            [3.2406, -1.5372, -0.4986],
-            [-0.9689, 1.8758, 0.0415],
-            [0.0557, -0.2040, 1.0570],
+            [1.0000000000, 0.3963377774, 0.2158037573],
+            [1.0000000000, -0.1055613458, -0.0638541728],
+            [1.0000000000, -0.0894841775, -1.2914855480],
         ]
     )
-    rgb_lin = XYZ @ M.T
-
+    lms_ = Lab @ M2_inv.T
+    lms = lms_**3
+    M1_inv = np.array(
+        [
+            [4.0767416621, -3.3077115913, 0.2309699292],
+            [-1.2684380046, 2.6097574011, -0.3413193965],
+            [-0.0041960863, -0.7034186147, 1.7076147010],
+        ]
+    )
+    rgb_lin = lms @ M1_inv.T
     rgb = np.where(
         rgb_lin <= 0.0031308, 12.92 * rgb_lin, 1.055 * rgb_lin ** (1 / 2.4) - 0.055
     )
     return np.clip(rgb, 0, 1)
 
 
-def rgb_to_lab(rgb):
-    """Convert sRGB values to CIE L*a*b* (D65 illuminant), differentiable via JAX.
+def rgb_to_oklab(rgb):
+    """Convert sRGB values to OKLAB, differentiable via JAX.
 
     Args:
         rgb: Array of shape (n, 3) with sRGB values in [0, 1].
 
     Returns:
-        Array of shape (n, 3) with CIE L*a*b* values.
+        Array of shape (n, 3) with OKLAB values (L in [0, 1], a and b in ~[-0.4, 0.4]).
     """
     rgb_lin = jnp.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
-    M = jnp.array(
+    M1 = jnp.array(
         [
-            [0.4124564, 0.3575761, 0.1804375],
-            [0.2126729, 0.7151522, 0.0721750],
-            [0.0193339, 0.1191920, 0.9503041],
+            [0.4122214708, 0.5363325363, 0.0514459929],
+            [0.2119034982, 0.6806995451, 0.1073969566],
+            [0.0883024619, 0.2817188376, 0.6299787005],
         ]
     )
-    xyz = (rgb_lin @ M.T) / jnp.array([0.95047, 1.00000, 1.08883])
-    delta = 6 / 29
-    f = jnp.where(xyz > delta**3, xyz ** (1 / 3), xyz / (3 * delta**2) + 4 / 29)
-    L = 116 * f[:, 1] - 16
-    a = 500 * (f[:, 0] - f[:, 1])
-    b = 200 * (f[:, 1] - f[:, 2])
-    return jnp.stack([L, a, b], axis=1)
+    lms = rgb_lin @ M1.T
+    lms_ = jnp.cbrt(lms)
+    M2 = jnp.array(
+        [
+            [0.2104542553, 0.7936177850, -0.0040720468],
+            [1.9779984951, -2.4285922050, 0.4505937099],
+            [0.0259040371, 0.7827717662, -0.8086757660],
+        ]
+    )
+    return lms_ @ M2.T
+
+
+def rgb_to_oklch(rgb):
+    """Convert sRGB values to OKLCH, differentiable via JAX.
+
+    OKLCH is the polar form of OKLAB: L (lightness), C (chroma), H (hue in radians).
+
+    Args:
+        rgb: Array of shape (n, 3) with sRGB values in [0, 1].
+
+    Returns:
+        Array of shape (n, 3) with OKLCH values: L in [0, 1], C >= 0, H in [-pi, pi].
+    """
+    lab = rgb_to_oklab(rgb)
+    L = lab[:, 0]
+    C = jnp.sqrt(lab[:, 1] ** 2 + lab[:, 2] ** 2)
+    H = jnp.arctan2(lab[:, 2], lab[:, 1])
+    return jnp.stack([L, C, H], axis=1)
 
 
 def _build_rgb(optim_vars, input_parameters):
@@ -89,7 +108,7 @@ def _build_rgb(optim_vars, input_parameters):
 
 
 def _stress(optim_vars, input_parameters):
-    lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
+    lab = rgb_to_oklab(_build_rgb(optim_vars, input_parameters))
     idx_i = input_parameters["idx_i"]
     idx_j = input_parameters["idx_j"]
     targets = input_parameters["targets"]
@@ -98,8 +117,7 @@ def _stress(optim_vars, input_parameters):
 
 
 def _coverage(optim_vars, input_parameters):
-    lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
-    # return -(lab[:, 1].var() + lab[:, 2].var()) # the old version
+    lab = rgb_to_oklab(_build_rgb(optim_vars, input_parameters))
     idx_i = input_parameters["idx_i"]
     idx_j = input_parameters["idx_j"]
     targets = input_parameters["targets"]
@@ -112,7 +130,7 @@ def _luminosity(optim_vars, input_parameters):
     target_L = input_parameters.get("target_L")
     if target_L is None:
         return jnp.zeros(())
-    lab = rgb_to_lab(_build_rgb(optim_vars, input_parameters))
+    lab = rgb_to_oklab(_build_rgb(optim_vars, input_parameters))
     return jnp.mean((lab[:, 0] - target_L) ** 2)
 
 
@@ -207,7 +225,7 @@ def build_color_input_parameters(
     distances,
     fixed_colors=None,
     *,
-    target_max_delta_e=50.0,
+    target_max_delta_e=0.3,
     target_L=None,
     seed=None,
 ):
@@ -218,9 +236,11 @@ def build_color_input_parameters(
             DataFrame, its index is used as labels.
         fixed_colors: Map from label (DataFrame index value) or integer position
             to an sRGB tuple/array in [0, 1]. Those colors are held fixed.
-        target_max_delta_e: The largest pairwise distance maps to this ΔE value.
-        target_L: Target CIELAB lightness (L*) in [0, 100], or ``None`` to
-            disable the luminosity term. ~45 for light mode, ~70 for dark mode.
+        target_max_delta_e: The largest pairwise distance maps to this OKLAB ΔE
+            value. OKLAB distances are in [0, ~0.4] for typical sRGB colors;
+            the default of 0.3 spans most of the gamut.
+        target_L: Target OKLAB/OKLCH lightness in [0, 1], or ``None`` to
+            disable the luminosity term. ~0.75 for light mode, ~0.85 for dark mode.
         seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
 
     Returns:
@@ -282,14 +302,14 @@ def optimize_colors(
     distances,
     fixed_colors=None,
     *,
-    target_max_delta_e=50.0,
+    target_max_delta_e=0.3,
     target_L=None,
     learning_rate=0.05,
     n_iters=1000,
     callback=None,
     seed=None,
 ):
-    """Optimize a palette so pairwise CIELAB ΔE distances match ``distances``.
+    """Optimize a palette so pairwise OKLAB ΔE distances match ``distances``.
 
     Args:
         distances: Symmetric pairwise distance matrix of shape (n, n). If a
@@ -297,11 +317,11 @@ def optimize_colors(
         fixed_colors: Map from label (DataFrame index value) or integer position
             to an sRGB tuple/array in [0, 1]. Those colors are held fixed during
             optimization.
-        target_max_delta_e: The largest pairwise distance maps to this ΔE value.
-        target_L: Target CIELAB lightness (L*) for all colors, in [0, 100].
-            ``None`` disables the luminosity term. Typical values: ~45 for
-            light-mode palettes (darker colors on white), ~70 for dark-mode
-            palettes (brighter colors on dark backgrounds).
+        target_max_delta_e: The largest pairwise distance maps to this OKLAB ΔE
+            value. OKLAB distances are in [0, ~0.4] for typical sRGB colors.
+        target_L: Target OKLAB/OKLCH lightness for all colors, in [0, 1].
+            ``None`` disables the luminosity term. Typical values: ~0.75 for
+            light-mode palettes, ~0.85 for dark-mode palettes.
         learning_rate: Adam learning rate.
         n_iters: Number of gradient-descent iterations.
         callback: Called as ``callback(i, loss, params, grads)`` after each step.
