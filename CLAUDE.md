@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**vizopt** is a mathematical optimization library for data visualization. It provides a general framework for defining and solving layout optimization problems (e.g., bubble layouts, label placement) using JAX for automatic differentiation and JIT compilation.
+**vizopt** is a mathematical optimization library for data visualization. It provides a general framework for defining and solving layout optimization problems (e.g., star-shaped set boundaries, label placement) using JAX for automatic differentiation and JIT compilation.
 
 ## Development Commands
 
@@ -46,9 +46,14 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
    - `SnapshotCallback`: Callback that saves numpy copies of `optim_vars` at regular intervals into `.snapshots`
    - `animate()`: Renders each snapshot via `problem.plot_configuration` and returns a `FuncAnimation`
 
-5. **[bubblejax.py](src/vizopt/bubblejax.py)** - Specialized bubble layout optimizer
-   - `optimize_bubble_layout()`: Main entry point for optimizing graph layouts with inclusion constraints
-   - Pre-processes NetworkX graphs into JAX-compatible numpy arrays for vectorized operations
+5. **[radially_convex.py](src/vizopt/radially_convex.py)** - Star-shaped (radially convex) set optimizer
+   - `optimize_multiple_radially_convex_sets()`: Finds star-shaped boundaries enclosing each set of circles while minimizing area/perimeter and avoiding overlap with other sets
+   - `optimize_multiple_radially_convex_sets_with_movable_circles()`: Same, but circle positions are also optimization variables
+   - Each boundary is represented by a center + K radii at uniformly-spaced angles
+
+6. **[schedules.py](src/vizopt/schedules.py)** - Loss term weight scheduling
+   - `warmup()` / `cooldown()`: JAX-compatible schedule factories that ramp a term's weight up or down over a fraction of the run
+   - `make_term_schedules()`: Builds a `term_schedules` dict from a flat parameter dict for use with `radially_convex` optimizers
 
 ### Key Architectural Concepts
 
@@ -74,13 +79,14 @@ Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to lo
 - **JIT compilation**: The composite loss function built by `build_objective()` is JIT-compiled via `jaxopt.optimize_gradient_descent()`
 - **Parameter dictionaries**: `optim_vars` are plain dicts (e.g., `{"rectangle_positions": ...}`)
 
-#### Bubble Layout (bubblejax.py)
+#### Radially Convex Sets (radially_convex.py)
 
-`bubblejax.py` implements the bubble layout use-case on top of the general framework:
+`radially_convex.py` implements circle-set boundary optimization on top of the general framework:
 
-- Handles two NetworkX graphs: **graph** (nodes/edges to lay out) and **inclusion_tree** (DiGraph where `(u, v)` means `u` is inside `v`)
-- Multi-objective loss: edge lengths, total width, collision penalty (pre-computed `collision_pairs`), non-inclusion penalty
-- Two node types: fixed-radius nodes (from graph) and enclosing nodes (radii are optimization variables)
+- Input: N circles (cx, cy, r) and S subsets; each subset gets its own star-shaped boundary
+- Multi-objective loss: enclosure, exclusion (no overlap with non-members), area, perimeter, smoothness, and optional terms (circle collision, position anchor, set attraction, bounding box)
+- Two variants: fixed circle positions or jointly optimized circle positions
+- Boundaries are parametrized as center + K radii at uniformly-spaced angles (star polygon)
 
 ### Data Flow
 
