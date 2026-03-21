@@ -101,6 +101,24 @@ Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to lo
 - Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas, pydantic
 - Dev dependencies: black (formatting), pytest (testing), ipykernel (notebooks)
 
+## Documentation
+
+The docs site is built with [Zensical](https://zensical.org) (configured in `zensical.toml`) and the API reference is auto-generated from docstrings via [mkdocstrings](https://mkdocstrings.github.io).
+
+```bash
+# Install docs dependencies
+uv add mkdocstrings-python
+
+# Serve docs locally
+uv run zensical serve
+
+# Build static site
+uv run zensical build
+```
+
+- Docs source lives in `docs/`; `docs/api.md` uses `::: vizopt.module.Symbol` directives — do not write API docs by hand there
+- All public functions and classes must have Google-style docstrings so mkdocstrings can render them
+
 ## Style guide
 
 - Google-style docstrings
