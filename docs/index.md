@@ -10,6 +10,10 @@
 - **NetworkX integration** — works directly with NetworkX graphs
 - **Pydantic validation** — optional input validation for problem templates
 
+## Examples
+
+See the [examples gallery](examples/index.md) for worked examples.
+
 ## Quick Example
 
 
