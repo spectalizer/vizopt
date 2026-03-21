@@ -72,7 +72,7 @@ def cell_to_md(
         for output in cell.get("outputs", []):
             output_type = output.get("output_type", "")
 
-            if output_type in ("stream", "execute_result", "display_data"):
+            if output_type in ("execute_result", "display_data"):
                 text = output.get("text", [])
                 if isinstance(text, list):
                     text = "".join(text)
