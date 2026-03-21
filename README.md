@@ -4,6 +4,8 @@ Mathematical optimization for data visualization, specifically designed for grap
 
 Uses JAX for automatic differentiation and JIT compilation to efficiently optimize layouts via gradient descent.
 
+Read the documentation [https://spectalizer.github.io/vizopt/](https://spectalizer.github.io/vizopt/).
+
 ## Installation
 
 ```bash
