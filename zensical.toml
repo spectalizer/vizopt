@@ -51,6 +51,7 @@ nav = [
   { "Home" = "index.md" },
   { "Getting Started" = "getting-started.md" },
   { "Concepts" = "concepts.md" },
+  { "Examples" = "examples" },
   { "API Reference" = "api.md" },
 ]
 
@@ -312,5 +313,18 @@ toggle.name = "Switch to light mode"
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
 link = "https://github.com/spectalizer/vizopt"
+
+# ----------------------------------------------------------------------------
+# mkdocstrings: auto-generate API docs from source docstrings
+# Install with: uv add mkdocstrings-python
+# ----------------------------------------------------------------------------
+
+[project.plugins.mkdocstrings.config.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.config.handlers.python.options]
+docstring_style = "google"
+inherited_members = false
+show_source = false
 
 

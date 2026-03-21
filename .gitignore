@@ -51,6 +51,11 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# generated docs pages
+docs/examples/*
+
+*/output/*
+
 # Translations
 *.mo
 *.pot

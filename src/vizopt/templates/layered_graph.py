@@ -142,6 +142,88 @@ def _initialize(input_params):
     return {"node_xys": input_params["initial_node_xys"].copy()}
 
 
+def _svg_configuration(snapshots, input_params, size):
+    all_xys = np.stack([s["node_xys"] for _, s in snapshots])  # (frames, n, 2)
+    edge_indices = input_params["edge_indices"]
+    node_names = input_params.get("node_names", None)
+
+    margin = 0.5
+    x_min = all_xys[:, :, 0].min() - margin
+    x_max = all_xys[:, :, 0].max() + margin
+    y_min = all_xys[:, :, 1].min() - margin
+    y_max = all_xys[:, :, 1].max() + margin
+    span = max(x_max - x_min, y_max - y_min)
+
+    def to_x(x): return float((x - x_min) / span * size)
+    def to_y(y): return float((1 - (y - y_min) / span) * size)
+
+    node_r = 6  # node circle radius in SVG pixels
+
+    elements = [
+        {
+            "tag": "defs",
+            "_text": (
+                '<marker id="arrow" markerWidth="8" markerHeight="6"'
+                ' refX="7" refY="3" orient="auto">'
+                '<path d="M0,0 L0,6 L8,3 z" fill="gray"/>'
+                "</marker>"
+            ),
+        }
+    ]
+
+    # Edges
+    for i, j in edge_indices:
+        x1_vals, y1_vals, x2_vals, y2_vals = [], [], [], []
+        for _, s in snapshots:
+            xi = to_x(s["node_xys"][i, 0])
+            yi = to_y(s["node_xys"][i, 1])
+            xj = to_x(s["node_xys"][j, 0])
+            yj = to_y(s["node_xys"][j, 1])
+            dx, dy = xj - xi, yj - yi
+            dist = (dx**2 + dy**2) ** 0.5 + 1e-8
+            dx_n, dy_n = dx / dist, dy / dist
+            x1_vals.append(f"{xi + dx_n * node_r:.2f}")
+            y1_vals.append(f"{yi + dy_n * node_r:.2f}")
+            x2_vals.append(f"{xj - dx_n * node_r:.2f}")
+            y2_vals.append(f"{yj - dy_n * node_r:.2f}")
+        elements.append({
+            "tag": "line",
+            "stroke": "gray",
+            "stroke-width": "1.5",
+            "marker-end": "url(#arrow)",
+            "x1": x1_vals,
+            "y1": y1_vals,
+            "x2": x2_vals,
+            "y2": y2_vals,
+        })
+
+    # Nodes
+    n = all_xys.shape[1]
+    for k in range(n):
+        elements.append({
+            "tag": "circle",
+            "r": str(node_r),
+            "fill": "steelblue",
+            "cx": [f"{to_x(s['node_xys'][k, 0]):.2f}" for _, s in snapshots],
+            "cy": [f"{to_y(s['node_xys'][k, 1]):.2f}" for _, s in snapshots],
+        })
+
+    # Labels
+    if node_names is not None:
+        for k, name in enumerate(node_names):
+            elements.append({
+                "tag": "text",
+                "font-size": "12",
+                "font-family": "sans-serif",
+                "fill": "black",
+                "_text": str(name),
+                "x": [f"{to_x(s['node_xys'][k, 0]) + node_r + 2:.2f}" for _, s in snapshots],
+                "y": [f"{to_y(s['node_xys'][k, 1]) - 4:.2f}" for _, s in snapshots],
+            })
+
+    return elements
+
+
 def _plot_configuration(optim_vars, input_params):
     node_xys = optim_vars["node_xys"]
     edge_indices = input_params["edge_indices"]
@@ -182,6 +264,7 @@ layered_graph_template = OptimizationProblemTemplate(
     ],
     initialize=_initialize,
     plot_configuration=_plot_configuration,
+    svg_configuration=_svg_configuration,
 )
 
 
