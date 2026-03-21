@@ -21,7 +21,7 @@ jobs:
           python-version: 3.x
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
-      - run: uv run python scripts/convert_all_notebooks.py
+      - run: uv run python scripts/convert_all_notebooks.py --execute
       - run: uv run zensical build --clean
       - uses: actions/upload-pages-artifact@v4
         with:
