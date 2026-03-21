@@ -314,4 +314,17 @@ toggle.name = "Switch to light mode"
 icon = "fontawesome/brands/github"
 link = "https://github.com/spectalizer/vizopt"
 
+# ----------------------------------------------------------------------------
+# mkdocstrings: auto-generate API docs from source docstrings
+# Install with: uv add mkdocstrings-python
+# ----------------------------------------------------------------------------
+
+[project.plugins.mkdocstrings.config.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.config.handlers.python.options]
+docstring_style = "google"
+inherited_members = false
+show_source = false
+
 
