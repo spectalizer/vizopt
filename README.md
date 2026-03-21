@@ -13,27 +13,21 @@ pip install vizopt
 ## Quick Start
 
 ```python
-import networkx as nx
-from vizopt.bubblejax import optimize_bubble_layout
+import numpy as np
+from vizopt.templates import circle_packing
 
-# Create a graph
-graph = nx.Graph()
-graph.add_edges_from([("Munich", "Vienna"), ("Vienna", "Prague")])
+# Define circle radii
+rng = np.random.default_rng(0)
+radii = rng.uniform(0.1, 1.0, size=20).tolist()
 
-# Define inclusion tree (cities in countries)
-inclusion_tree = nx.DiGraph()
-inclusion_tree.add_edges_from([
-    ("Munich", "Germany"),
-    ("Vienna", "Austria"),
-    ("Prague", "Czechia"),
-])
-
-# Optimize layout
-result = optimize_bubble_layout(
-    graph=graph,
-    inclusion_tree=inclusion_tree,
-    node_radii={"Munich": 0.3, "Vienna": 0.3, "Prague": 0.3},
+# Pack circles to minimize overlap and bounding box size
+positions = circle_packing.optimize_circle_packing(
+    radii=radii,
+    weight_total_size=10.0,
+    collision_offset=0.05,
+    optim_kwargs={"n_iters": 3000, "learning_rate": 0.01},
 )
+# positions is a list of (x, y) tuples, one per circle
 ```
 
 ## Features
