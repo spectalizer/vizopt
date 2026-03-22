@@ -32,9 +32,7 @@ Reusable JAX loss components.
 
 ::: vizopt.components.multiple_bbox_intersections
 
-::: vizopt.components.calculate_collision_penalty
-
-::: vizopt.components.calculate_total_width_penalty
+::: vizopt.components.calculate_total_width_penalty_for_circular_layout
 
 ::: vizopt.components.calculate_total_width_penalty_ignoring_radii
 
