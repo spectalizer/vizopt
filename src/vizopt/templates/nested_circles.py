@@ -6,7 +6,7 @@ from jax import numpy as jnp
 from ..base import ObjectiveTerm, OptimizationProblemTemplate
 from ..components import (
     calculate_collision_penalty,
-    calculate_total_width_penalty,
+    calculate_total_width_penalty_for_circular_layout,
     calculate_total_width_penalty_ignoring_radii,
     should_be_positive_activation,
 )
@@ -31,7 +31,6 @@ def get_random_node_positions(graph, scale=1.0):
 # ---------------------------------------------------------------------------
 # Low-level JAX loss components
 # ---------------------------------------------------------------------------
-
 
 
 def _non_inclusion_penalty(node_xys, node_radii, inclusion_edge_indices, offset=1.0):
@@ -119,7 +118,9 @@ def _get_node_radii(optim_vars, input_params):
 def _term_total_size(optim_vars, input_params):
     # return calculate_total_width_penalty_ignoring_radii(optim_vars["node_xys"])
     node_radii = _get_node_radii(optim_vars, input_params)
-    return calculate_total_width_penalty(optim_vars["node_xys"], node_radii)
+    return calculate_total_width_penalty_for_circular_layout(
+        optim_vars["node_xys"], node_radii
+    )
 
 
 def _term_collision(optim_vars, input_params):

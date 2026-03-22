@@ -47,8 +47,10 @@ def calculate_total_width_penalty_ignoring_radii(node_xys: np.ndarray):
     return jnp.sum(jnp.max(node_xys, axis=0) - jnp.min(node_xys, axis=0))
 
 
-def calculate_total_width_penalty(node_xys: np.ndarray, node_radii: np.ndarray):
-    """A penalty for the overall width and height of the drawing.
+def calculate_total_width_penalty_for_circular_layout(
+    node_xys: np.ndarray, node_radii: np.ndarray
+):
+    """A penalty for the overall width and height of the drawing with circular nodes.
 
     Args:
         node_xys: Array of node positions with shape (n, 2).

@@ -4,9 +4,8 @@ from jax import numpy as jnp
 from ..base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate
 from ..components import (
     calculate_collision_penalty,
-    calculate_total_width_penalty,
+    calculate_total_width_penalty_for_circular_layout,
 )
-
 
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions
@@ -17,7 +16,7 @@ from ..components import (
 
 
 def _term_total_size(optim_vars, input_params):
-    return calculate_total_width_penalty(
+    return calculate_total_width_penalty_for_circular_layout(
         optim_vars["node_xys"], jnp.array(input_params["node_radii"])
     )
 
@@ -32,10 +31,26 @@ def _term_collision(optim_vars, input_params):
 
 
 _TAB20 = [
-    "#1f77b4","#aec7e8","#ff7f0e","#ffbb78","#2ca02c",
-    "#98df8a","#d62728","#ff9896","#9467bd","#c5b0d5",
-    "#8c564b","#c49c94","#e377c2","#f7b6d2","#7f7f7f",
-    "#c7c7c7","#bcbd22","#dbdb8d","#17becf","#9edae5",
+    "#1f77b4",
+    "#aec7e8",
+    "#ff7f0e",
+    "#ffbb78",
+    "#2ca02c",
+    "#98df8a",
+    "#d62728",
+    "#ff9896",
+    "#9467bd",
+    "#c5b0d5",
+    "#8c564b",
+    "#c49c94",
+    "#e377c2",
+    "#f7b6d2",
+    "#7f7f7f",
+    "#c7c7c7",
+    "#bcbd22",
+    "#dbdb8d",
+    "#17becf",
+    "#9edae5",
 ]
 
 
@@ -65,8 +80,12 @@ def _plot_configuration(optim_vars, input_params):
             )
         )
     margin = float(max(radii))
-    ax.set_xlim(float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin)
-    ax.set_ylim(float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin)
+    ax.set_xlim(
+        float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin
+    )
+    ax.set_ylim(
+        float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin
+    )
     ax.set_aspect("equal")
     ax.set_title(f"Circle packing: {n} circles")
     plt.axis("off")
@@ -102,8 +121,14 @@ def _svg_configuration(snapshots, input_params, size):
             "fill-opacity": "0.6",
             "stroke": "black",
             "stroke-width": "0.5",
-            "cx": [f"{to_svg_scale(float(v['node_xys'][i, 0]), float(v['node_xys'][i, 1]))[0]:.1f}" for _, v in snapshots],
-            "cy": [f"{to_svg_scale(float(v['node_xys'][i, 0]), float(v['node_xys'][i, 1]))[1]:.1f}" for _, v in snapshots],
+            "cx": [
+                f"{to_svg_scale(float(v['node_xys'][i, 0]), float(v['node_xys'][i, 1]))[0]:.1f}"
+                for _, v in snapshots
+            ],
+            "cy": [
+                f"{to_svg_scale(float(v['node_xys'][i, 0]), float(v['node_xys'][i, 1]))[1]:.1f}"
+                for _, v in snapshots
+            ],
         }
         for i in range(n)
     ]
