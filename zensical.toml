@@ -51,7 +51,7 @@ nav = [
   { "Home" = "index.md" },
   { "Getting Started" = "getting-started.md" },
   { "Concepts" = "concepts.md" },
-  { "Examples" = "/examples" },
+  { "Examples" = "examples/index.md" },
   { "API Reference" = "api.md" },
 ]
 
