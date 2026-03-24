@@ -6,6 +6,7 @@ from pydantic import BaseModel, ValidationError
 
 from vizopt.base import (
     ObjectiveTerm,
+    OptimConfig,
     OptimizationProblem,
     OptimizationProblemTemplate,
     build_objective,
@@ -96,7 +97,7 @@ def _make_simple_template() -> OptimizationProblemTemplate:
     term = ObjectiveTerm(name="sq", compute=lambda v, p: v["x"] ** 2, multiplier=1.0)
     return OptimizationProblemTemplate(
         terms=[term],
-        initialize=lambda p: {"x": jnp.array(p.get("x0", 1.0))},
+        initialize=lambda p, seed: {"x": jnp.array(p.get("x0", 1.0))},
     )
 
 
@@ -122,7 +123,7 @@ def test_instantiate_pydantic_validates_ok():
     term = ObjectiveTerm(name="t", compute=lambda v, p: v["x"], multiplier=1.0)
     template = OptimizationProblemTemplate(
         terms=[term],
-        initialize=lambda p: {"x": jnp.array(p["value"])},
+        initialize=lambda p, seed: {"x": jnp.array(p["value"])},
         input_params_class=Params,
     )
     problem = template.instantiate({"value": 3.0})
@@ -136,7 +137,7 @@ def test_instantiate_pydantic_validation_error():
     term = ObjectiveTerm(name="t", compute=lambda v, p: v["x"], multiplier=1.0)
     template = OptimizationProblemTemplate(
         terms=[term],
-        initialize=lambda p: {"x": jnp.array(p["value"])},
+        initialize=lambda p, seed: {"x": jnp.array(p["value"])},
         input_params_class=Params,
     )
     with pytest.raises(ValidationError):
@@ -153,7 +154,7 @@ def _simple_problem(x0: float = 3.0) -> OptimizationProblem:
 
 def test_optimize_returns_optim_vars_and_history():
     optim_vars, history = _simple_problem().optimize(
-        n_iters=10, learning_rate=0.1, callback=_NO_PRINT
+        OptimConfig(n_iters=10, learning_rate=0.1), callback=_NO_PRINT
     )
     assert isinstance(optim_vars, dict)
     assert isinstance(history, list)
@@ -161,14 +162,14 @@ def test_optimize_returns_optim_vars_and_history():
 
 def test_optimize_minimizes():
     optim_vars, _ = _simple_problem(x0=3.0).optimize(
-        n_iters=500, learning_rate=0.01, callback=_NO_PRINT
+        OptimConfig(n_iters=500, learning_rate=0.01), callback=_NO_PRINT
     )
     assert abs(float(optim_vars["x"])) < 0.5
 
 
 def test_optimize_history_structure():
     _, history = _simple_problem().optimize(
-        n_iters=20, learning_rate=0.01, track_every=5, callback=_NO_PRINT
+        OptimConfig(n_iters=20, learning_rate=0.01), track_every=5, callback=_NO_PRINT
     )
     assert len(history) == 4  # steps 0, 5, 10, 15
     for record in history:
@@ -179,7 +180,7 @@ def test_optimize_history_structure():
 
 def test_optimize_track_every():
     _, history = _simple_problem().optimize(
-        n_iters=100, learning_rate=0.01, track_every=25, callback=_NO_PRINT
+        OptimConfig(n_iters=100, learning_rate=0.01), track_every=25, callback=_NO_PRINT
     )
     assert [r["iteration"] for r in history] == [0, 25, 50, 75]
 
@@ -187,6 +188,7 @@ def test_optimize_track_every():
 def test_optimize_callback_called_every_iteration():
     calls = []
     _simple_problem().optimize(
-        n_iters=5, learning_rate=0.01, callback=lambda i, *_: calls.append(i)
+        OptimConfig(n_iters=5, learning_rate=0.01),
+        callback=lambda i, *_: calls.append(i),
     )
     assert calls == [0, 1, 2, 3, 4]
