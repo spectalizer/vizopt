@@ -138,7 +138,7 @@ def _term_sibling_separation(optim_vars, input_params):
     return jnp.sum(should_be_positive_activation(perp_dists - min_distance))
 
 
-def _initialize(input_params):
+def _initialize(input_params, _seed):
     return {"node_xys": input_params["initial_node_xys"].copy()}
 
 

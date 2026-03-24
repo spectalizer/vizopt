@@ -14,7 +14,7 @@ This module provides:
 import numpy as np
 from jax import numpy as jnp
 
-from .base import ObjectiveTerm, OptimizationProblemTemplate
+from .base import ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
 
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions
@@ -377,7 +377,7 @@ def optimize_multiple_radially_convex_sets(
     weight_smoothness=1.0,
     offsets=0.1,
     term_schedules=None,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
 ):
     """Find star-shaped regions enclosing each set of circles without overlapping others.
 
@@ -405,8 +405,8 @@ def optimize_multiple_radially_convex_sets(
             "smoothness", "area", "perimeter". The effective weight at step t is
             ``base_weight * schedule(t)``. Schedules must use JAX ops so they
             can be traced through without recompilation.
-        optim_kwargs: keyword arguments forwarded to problem.optimize()
-            (e.g. n_iters, learning_rate).
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`OptimConfig` defaults when ``None``.
 
     Returns:
         Tuple of (results, history) where results is a list of S dicts, each with:
@@ -437,7 +437,7 @@ def optimize_multiple_radially_convex_sets(
         "offsets": offsets_array,
     }
 
-    def initialize(_):
+    def initialize(_, seed):
         return {
             "centers": initial_centers,
             "radii": initial_radii,
@@ -456,7 +456,7 @@ def optimize_multiple_radially_convex_sets(
     problem = OptimizationProblemTemplate(
         terms=terms, initialize=initialize
     ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, history = problem.optimize(optim_config)
 
     return [
         {
@@ -483,7 +483,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     circle_collision_alpha=0.0,
     offsets=0.1,
     term_schedules=None,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
 ):
     """Like optimize_multiple_radially_convex_sets, but circle positions are also optimized.
 
@@ -522,8 +522,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
             weight at step t
             is ``base_weight * schedule(t)``. Schedules must use JAX ops so
             they can be traced through without recompilation.
-        optim_kwargs: keyword arguments forwarded to problem.optimize()
-            (e.g. n_iters, learning_rate).
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`OptimConfig` defaults when ``None``.
 
     Returns:
         Tuple of (results, circles_out, history) where results is a list of S
@@ -558,7 +558,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         "circle_collision_alpha": np.float32(circle_collision_alpha),
     }
 
-    def initialize(_):
+    def initialize(_, seed):
         return {
             "centers": initial_centers,
             "radii": initial_radii,
@@ -582,7 +582,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     problem = OptimizationProblemTemplate(
         terms=terms, initialize=initialize
     ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, history = problem.optimize(optim_config)
 
     circles_out = np.concatenate(
         [np.array(optim_vars["circle_positions"]), circle_radii[:, None]], axis=1

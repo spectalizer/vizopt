@@ -14,6 +14,25 @@ Callback = Callable[[int, Array, Any, Any], None]
 
 
 @dataclass
+class OptimConfig:
+    """Configuration for the gradient-descent optimizer.
+
+    Attributes:
+        n_iters: Number of optimization iterations.
+        learning_rate: Step size for the Adam optimizer.
+        n_restarts: Number of random restarts. The run with the lowest final
+            loss is returned. Default 1 (single run).
+        seed: Base random seed passed to ``initialize``. Restart ``i``
+            receives ``seed + i``.
+    """
+
+    n_iters: int = 1000
+    learning_rate: float = 0.001
+    n_restarts: int = 1
+    seed: int = 0
+
+
+@dataclass
 class ObjectiveTerm:
     """A term in an objective function.
 
@@ -97,7 +116,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
     """
 
     terms: list[ObjectiveTerm]
-    initialize: Callable[[InputParams], OptimVars]
+    initialize: Callable[[InputParams, int], OptimVars]
     input_params_class: type[InputParams] | None = None
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
@@ -167,22 +186,25 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
     input_parameters: InputParams
     terms: list[ObjectiveTerm]
-    initialize: Callable[[InputParams], OptimVars]
+    initialize: Callable[[InputParams, int], OptimVars]
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
 
     def optimize(
         self,
-        n_iters: int = 1000,
-        learning_rate: float = 0.001,
+        optim_config: OptimConfig | None = None,
         callback: Callback | None = None,
         track_every: int = 10,
     ) -> tuple[OptimVars, list[dict]]:
         """Run gradient descent to minimize the objective.
 
+        When ``optim_config.n_restarts > 1``, the optimization is run that
+        many times with seeds ``seed``, ``seed + 1``, …. The result with the
+        lowest final loss is returned.
+
         Args:
-            n_iters: Number of optimization iterations.
-            learning_rate: Step size for Adam optimizer.
+            optim_config: Optimizer settings (iterations, learning rate, seeds,
+                restarts). Uses :class:`OptimConfig` defaults when ``None``.
             callback: Optional callback called after each iteration with
                 (iteration, loss, optim_vars, grads).
             track_every: Record per-term history every this many iterations.
@@ -191,41 +213,57 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
             Tuple of (optimized variables, history). History is a list of
             dicts with keys ``"iteration"``, ``"total"``, and one key per
             term name containing the weighted term value at that iteration.
+            When using multiple restarts, history corresponds to the best run.
         """
         from . import jaxopt  # lazy import to avoid circular dependency
+
+        config = optim_config or OptimConfig()
 
         if callback is None:
             callback = jaxopt.default_print_callback
 
-        history: list[dict] = []
-
-        def tracking_callback(
-            i_iter: int, loss_value: Array, optim_vars: OptimVars, grads: Any
-        ) -> None:
-            if i_iter % track_every == 0:
-                record: dict = {"iteration": i_iter, "total": float(loss_value)}
-                step = jnp.int32(i_iter)
-                for term in self.terms:
-                    sched = float(term.schedule(step)) if term.schedule is not None else 1.0
-                    record[term.name] = float(
-                        term.compute(optim_vars, self.input_parameters)
-                        * term.multiplier
-                        * sched
-                    )
-                history.append(record)
-            if callback is not None:
-                callback(i_iter, loss_value, optim_vars, grads)
-
-        optim_vars = self.initialize(self.input_parameters)
         fun = build_objective(self.terms, self.input_parameters)
-        optim_vars_opt, _ = jaxopt.optimize_gradient_descent(
-            optim_vars,
-            fun,
-            n_iters=n_iters,
-            learning_rate=learning_rate,
-            callback=tracking_callback,
-        )
-        return optim_vars_opt, history
+
+        best_vars: OptimVars | None = None
+        best_history: list[dict] = []
+        best_loss = float("inf")
+
+        for restart in range(config.n_restarts):
+            history: list[dict] = []
+
+            def tracking_callback(
+                i_iter: int, loss_value: Array, optim_vars: OptimVars, grads: Any,
+                _history: list[dict] = history,
+            ) -> None:
+                if i_iter % track_every == 0:
+                    record: dict = {"iteration": i_iter, "total": float(loss_value)}
+                    step = jnp.int32(i_iter)
+                    for term in self.terms:
+                        sched = float(term.schedule(step)) if term.schedule is not None else 1.0
+                        record[term.name] = float(
+                            term.compute(optim_vars, self.input_parameters)
+                            * term.multiplier
+                            * sched
+                        )
+                    _history.append(record)
+                if callback is not None:
+                    callback(i_iter, loss_value, optim_vars, grads)
+
+            optim_vars = self.initialize(self.input_parameters, config.seed + restart)
+            optim_vars_result, final_loss = jaxopt.optimize_gradient_descent(
+                optim_vars,
+                fun,
+                n_iters=config.n_iters,
+                learning_rate=config.learning_rate,
+                callback=tracking_callback,
+            )
+            if final_loss < best_loss:
+                best_loss = final_loss
+                best_vars = optim_vars_result
+                best_history = history
+
+        assert best_vars is not None
+        return best_vars, best_history
 
 
 def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:
