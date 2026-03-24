@@ -8,7 +8,6 @@ from matplotlib import pyplot as plt
 from ..base import ObjectiveTerm, OptimizationProblemTemplate
 from ..components import should_be_positive_activation
 
-
 # ---------------------------------------------------------------------------
 # Preprocessing
 # ---------------------------------------------------------------------------
@@ -37,9 +36,7 @@ def _compute_sibling_pairs(graph: nx.DiGraph, node_name_to_id: dict) -> np.ndarr
                 sibling_pairs.add((min(a, b), max(a, b)))
     pairs = sorted(sibling_pairs)
     return (
-        np.array(pairs, dtype=np.int32)
-        if pairs
-        else np.zeros((0, 2), dtype=np.int32)
+        np.array(pairs, dtype=np.int32) if pairs else np.zeros((0, 2), dtype=np.int32)
     )
 
 
@@ -138,8 +135,15 @@ def _term_sibling_separation(optim_vars, input_params):
     return jnp.sum(should_be_positive_activation(perp_dists - min_distance))
 
 
-def _initialize(input_params, _seed):
-    return {"node_xys": input_params["initial_node_xys"].copy()}
+def _initialize(input_params, seed):
+    initial = input_params["initial_node_xys"]
+    rng = np.random.default_rng(seed)
+    noise = (
+        rng.standard_normal(initial.shape).astype(np.float32)
+        * float(input_params["min_distance"])
+        * 0.1
+    )
+    return {"node_xys": initial + noise}
 
 
 def _svg_configuration(snapshots, input_params, size):
@@ -154,8 +158,11 @@ def _svg_configuration(snapshots, input_params, size):
     y_max = all_xys[:, :, 1].max() + margin
     span = max(x_max - x_min, y_max - y_min)
 
-    def to_x(x): return float((x - x_min) / span * size)
-    def to_y(y): return float((1 - (y - y_min) / span) * size)
+    def to_x(x):
+        return float((x - x_min) / span * size)
+
+    def to_y(y):
+        return float((1 - (y - y_min) / span) * size)
 
     node_r = 6  # node circle radius in SVG pixels
 
@@ -186,40 +193,49 @@ def _svg_configuration(snapshots, input_params, size):
             y1_vals.append(f"{yi + dy_n * node_r:.2f}")
             x2_vals.append(f"{xj - dx_n * node_r:.2f}")
             y2_vals.append(f"{yj - dy_n * node_r:.2f}")
-        elements.append({
-            "tag": "line",
-            "stroke": "gray",
-            "stroke-width": "1.5",
-            "marker-end": "url(#arrow)",
-            "x1": x1_vals,
-            "y1": y1_vals,
-            "x2": x2_vals,
-            "y2": y2_vals,
-        })
+        elements.append(
+            {
+                "tag": "line",
+                "stroke": "gray",
+                "stroke-width": "1.5",
+                "marker-end": "url(#arrow)",
+                "x1": x1_vals,
+                "y1": y1_vals,
+                "x2": x2_vals,
+                "y2": y2_vals,
+            }
+        )
 
     # Nodes
     n = all_xys.shape[1]
     for k in range(n):
-        elements.append({
-            "tag": "circle",
-            "r": str(node_r),
-            "fill": "steelblue",
-            "cx": [f"{to_x(s['node_xys'][k, 0]):.2f}" for _, s in snapshots],
-            "cy": [f"{to_y(s['node_xys'][k, 1]):.2f}" for _, s in snapshots],
-        })
+        elements.append(
+            {
+                "tag": "circle",
+                "r": str(node_r),
+                "fill": "steelblue",
+                "cx": [f"{to_x(s['node_xys'][k, 0]):.2f}" for _, s in snapshots],
+                "cy": [f"{to_y(s['node_xys'][k, 1]):.2f}" for _, s in snapshots],
+            }
+        )
 
     # Labels
     if node_names is not None:
         for k, name in enumerate(node_names):
-            elements.append({
-                "tag": "text",
-                "font-size": "12",
-                "font-family": "sans-serif",
-                "fill": "black",
-                "_text": str(name),
-                "x": [f"{to_x(s['node_xys'][k, 0]) + node_r + 2:.2f}" for _, s in snapshots],
-                "y": [f"{to_y(s['node_xys'][k, 1]) - 4:.2f}" for _, s in snapshots],
-            })
+            elements.append(
+                {
+                    "tag": "text",
+                    "font-size": "12",
+                    "font-family": "sans-serif",
+                    "fill": "black",
+                    "_text": str(name),
+                    "x": [
+                        f"{to_x(s['node_xys'][k, 0]) + node_r + 2:.2f}"
+                        for _, s in snapshots
+                    ],
+                    "y": [f"{to_y(s['node_xys'][k, 1]) - 4:.2f}" for _, s in snapshots],
+                }
+            )
 
     return elements
 

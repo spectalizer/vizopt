@@ -1,7 +1,14 @@
+"""Circle packing"""
+
 import numpy as np
 from jax import numpy as jnp
 
-from ..base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, OptimConfig
+from ..base import (
+    ObjectiveTerm,
+    OptimConfig,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+)
 from ..components import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
@@ -67,7 +74,7 @@ def _plot_configuration(optim_vars, input_params):
     radii = input_params["node_radii"]
     n = len(radii)
     colors = plt.colormaps["tab20"].colors
-    fig, ax = plt.subplots(figsize=(5, 5))
+    _, ax = plt.subplots(figsize=(5, 5))
     for i in range(n):
         ax.add_patch(
             mpatches.Circle(
