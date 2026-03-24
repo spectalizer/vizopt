@@ -788,4 +788,5 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         ],
         circles_out,
         history,
+        problem,
     )
