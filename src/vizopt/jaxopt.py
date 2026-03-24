@@ -1,5 +1,6 @@
+"""Optimization using JAX and Optax"""
+
 from collections.abc import Callable
-from typing import Any, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -25,16 +26,18 @@ def optimize_gradient_descent(
     @jax.jit
     def perform_optim_step(params, opt_state, step):
         """Do one gradient-based optimization step"""
-        loss_value, grads = jax.value_and_grad(
-            lambda p: fun_to_minimize(p, step)
-        )(params)
+        loss_value, grads = jax.value_and_grad(lambda p: fun_to_minimize(p, step))(
+            params
+        )
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss_value, grads
 
     for i_iter in range(n_iters):
         step = jnp.int32(i_iter)
-        params, opt_state, loss_value, grads = perform_optim_step(params, opt_state, step)
+        params, opt_state, loss_value, grads = perform_optim_step(
+            params, opt_state, step
+        )
         if callback is not None:
             callback(i_iter, loss_value, params, grads)
 
