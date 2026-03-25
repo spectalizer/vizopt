@@ -33,7 +33,7 @@ class LabelPositionParams(BaseModel):
         return self
 
 
-def initialize(input_parameters):
+def initialize(input_parameters, _seed):
     return {"rectangle_positions": input_parameters["point_positions"].copy()}
 
 

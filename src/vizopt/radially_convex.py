@@ -14,7 +14,7 @@ This module provides:
 import numpy as np
 from jax import numpy as jnp
 
-from .base import ObjectiveTerm, OptimizationProblemTemplate
+from .base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
 
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions
@@ -363,6 +363,176 @@ def _init_centers_and_radii(
 
 
 # ---------------------------------------------------------------------------
+# SVG animation helpers
+# ---------------------------------------------------------------------------
+
+_SVG_SET_COLORS = [
+    "#e05252",  # red
+    "#4472c4",  # blue
+    "#9966cc",  # violet
+    "#339966",  # green
+    "#e07d39",  # orange
+    "#3cbfcf",  # teal
+    "#c05e88",  # pink
+    "#888888",  # gray
+]
+
+
+def _compute_svg_transform(snapshots, circles_array, has_movable_circles, size):
+    """Compute a world→SVG coordinate transform from the bounding box of all frames."""
+    all_x, all_y = [], []
+    for _, v in snapshots:
+        centers = np.array(v["centers"])
+        radii = np.array(v["radii"])
+        angles_arr = np.linspace(0, 2 * np.pi, radii.shape[1], endpoint=False)
+        for s in range(len(centers)):
+            bx = centers[s, 0] + radii[s] * np.cos(angles_arr)
+            by = centers[s, 1] + radii[s] * np.sin(angles_arr)
+            all_x.extend(bx.tolist())
+            all_y.extend(by.tolist())
+        if has_movable_circles:
+            pos = np.array(v["circle_positions"])
+            all_x.extend(pos[:, 0].tolist())
+            all_y.extend(pos[:, 1].tolist())
+    # Include input circle extents
+    r_col = circles_array[:, 2]
+    all_x.extend((circles_array[:, 0] + r_col).tolist())
+    all_x.extend((circles_array[:, 0] - r_col).tolist())
+    all_y.extend((circles_array[:, 1] + r_col).tolist())
+    all_y.extend((circles_array[:, 1] - r_col).tolist())
+
+    x_min, y_min = min(all_x), min(all_y)
+    span = max(max(all_x) - x_min, max(all_y) - y_min)
+    margin = span * 0.05
+    x_min -= margin
+    y_max = y_min + span + 2 * margin
+    span += 2 * margin
+
+    def to_svg(x, y):
+        sx = (x - x_min) / span * size
+        sy = (y_max - y) / span * size
+        return sx, sy
+
+    def r_to_svg(r):
+        return r / span * size
+
+    return to_svg, r_to_svg
+
+
+def _svg_configuration_fixed(snapshots, input_params, size):
+    """SVG configuration for fixed-circles radially convex sets."""
+    circles = input_params["circles"]
+    angles = input_params["angles"]
+    S = input_params["membership"].shape[0]
+    N = len(circles)
+    to_svg, r_to_svg = _compute_svg_transform(snapshots, circles, False, size)
+
+    elements = []
+
+    # Static input circles (drawn first, behind boundaries)
+    for i in range(N):
+        cx, cy, r = float(circles[i, 0]), float(circles[i, 1]), float(circles[i, 2])
+        sx, sy = to_svg(cx, cy)
+        elements.append({
+            "tag": "circle",
+            "cx": f"{sx:.1f}",
+            "cy": f"{sy:.1f}",
+            "r": f"{r_to_svg(r):.1f}",
+            "fill": "#4472c4",
+            "fill-opacity": "0.45",
+            "stroke": "#2a52a0",
+            "stroke-width": "1",
+        })
+
+    # Animated star-shaped boundaries (one polygon per set)
+    for s in range(S):
+        color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
+        points_frames = []
+        for _, v in snapshots:
+            cx, cy = float(v["centers"][s, 0]), float(v["centers"][s, 1])
+            s_radii = np.array(v["radii"][s])
+            pts = []
+            for k in range(len(angles)):
+                bx = cx + s_radii[k] * np.cos(angles[k])
+                by = cy + s_radii[k] * np.sin(angles[k])
+                px, py = to_svg(bx, by)
+                pts.append(f"{px:.1f},{py:.1f}")
+            points_frames.append(" ".join(pts))
+        elements.append({
+            "tag": "polygon",
+            "fill": color,
+            "fill-opacity": "0.12",
+            "stroke": color,
+            "stroke-width": "1.5",
+            "stroke-linejoin": "round",
+            "points": points_frames,
+        })
+
+    return elements
+
+
+def _svg_configuration_movable(snapshots, input_params, size):
+    """SVG configuration for movable-circles radially convex sets."""
+    circle_radii = input_params["circle_radii"]
+    circles_array = np.column_stack([
+        input_params["initial_circle_positions"],
+        circle_radii,
+    ])
+    angles = input_params["angles"]
+    S = input_params["membership"].shape[0]
+    N = len(circle_radii)
+    to_svg, r_to_svg = _compute_svg_transform(snapshots, circles_array, True, size)
+
+    elements = []
+
+    # Animated star-shaped boundaries (drawn first, behind circles)
+    for s in range(S):
+        color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
+        points_frames = []
+        for _, v in snapshots:
+            cx, cy = float(v["centers"][s, 0]), float(v["centers"][s, 1])
+            s_radii = np.array(v["radii"][s])
+            pts = []
+            for k in range(len(angles)):
+                bx = cx + s_radii[k] * np.cos(angles[k])
+                by = cy + s_radii[k] * np.sin(angles[k])
+                px, py = to_svg(bx, by)
+                pts.append(f"{px:.1f},{py:.1f}")
+            points_frames.append(" ".join(pts))
+        elements.append({
+            "tag": "polygon",
+            "fill": color,
+            "fill-opacity": "0.12",
+            "stroke": color,
+            "stroke-width": "1.5",
+            "stroke-linejoin": "round",
+            "points": points_frames,
+        })
+
+    # Animated circles
+    for i in range(N):
+        r = float(circle_radii[i])
+        cx_frames, cy_frames = [], []
+        for _, v in snapshots:
+            px, py = float(v["circle_positions"][i, 0]), float(v["circle_positions"][i, 1])
+            sx, sy = to_svg(px, py)
+            cx_frames.append(f"{sx:.1f}")
+            cy_frames.append(f"{sy:.1f}")
+        elements.append({
+            "tag": "circle",
+            "r": f"{r_to_svg(r):.1f}",
+            "fill": "#4472c4",
+            "fill-opacity": "0.45",
+            "stroke": "#2a52a0",
+            "stroke-width": "1",
+            "cx": cx_frames,
+            "cy": cy_frames,
+        })
+
+    return elements
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -377,7 +547,8 @@ def optimize_multiple_radially_convex_sets(
     weight_smoothness=1.0,
     offsets=0.1,
     term_schedules=None,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
+    callback: Callback | None = None,
 ):
     """Find star-shaped regions enclosing each set of circles without overlapping others.
 
@@ -405,15 +576,22 @@ def optimize_multiple_radially_convex_sets(
             "smoothness", "area", "perimeter". The effective weight at step t is
             ``base_weight * schedule(t)``. Schedules must use JAX ops so they
             can be traced through without recompilation.
-        optim_kwargs: keyword arguments forwarded to problem.optimize()
-            (e.g. n_iters, learning_rate).
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`OptimConfig` defaults when ``None``.
+        callback: Optional callback called after each iteration with
+            ``(iteration, loss, optim_vars, grads)``. Pass a
+            :class:`~vizopt.animation.SnapshotCallback` to capture frames for
+            :func:`~vizopt.animation.snapshots_to_animated_svg`.
 
     Returns:
-        Tuple of (results, history) where results is a list of S dicts, each with:
+        Tuple of (results, history, problem) where results is a list of S dicts,
+        each with:
             "center": array of shape (2,), the center of the star-shaped region
             "radii": array of shape (K,), boundary radii at each angle
             "angles": array of shape (K,), uniformly spaced in [0, 2π)
-        and history is the list of per-iteration loss dicts.
+        history is the list of per-iteration loss dicts, and problem is the
+        :class:`~vizopt.base.OptimizationProblem` instance (needed for
+        :func:`~vizopt.animation.snapshots_to_animated_svg`).
     """
     circles_array = np.asarray(circles, dtype=np.float32)
     if circles_array.ndim == 1:
@@ -437,7 +615,7 @@ def optimize_multiple_radially_convex_sets(
         "offsets": offsets_array,
     }
 
-    def initialize(_):
+    def initialize(_, seed):
         return {
             "centers": initial_centers,
             "radii": initial_radii,
@@ -454,18 +632,22 @@ def optimize_multiple_radially_convex_sets(
     ]
 
     problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize
+        terms=terms, initialize=initialize, svg_configuration=_svg_configuration_fixed
     ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, history = problem.optimize(optim_config, callback=callback)
 
-    return [
-        {
-            "center": np.array(optim_vars["centers"][s]),
-            "radii": np.array(optim_vars["radii"][s]),
-            "angles": angles,
-        }
-        for s in range(S)
-    ], history
+    return (
+        [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": np.array(optim_vars["radii"][s]),
+                "angles": angles,
+            }
+            for s in range(S)
+        ],
+        history,
+        problem,
+    )
 
 
 def optimize_multiple_radially_convex_sets_with_movable_circles(
@@ -483,7 +665,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     circle_collision_alpha=0.0,
     offsets=0.1,
     term_schedules=None,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
+    callback: Callback | None = None,
 ):
     """Like optimize_multiple_radially_convex_sets, but circle positions are also optimized.
 
@@ -522,14 +705,20 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
             weight at step t
             is ``base_weight * schedule(t)``. Schedules must use JAX ops so
             they can be traced through without recompilation.
-        optim_kwargs: keyword arguments forwarded to problem.optimize()
-            (e.g. n_iters, learning_rate).
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`OptimConfig` defaults when ``None``.
+        callback: Optional callback called after each iteration with
+            ``(iteration, loss, optim_vars, grads)``. Pass a
+            :class:`~vizopt.animation.SnapshotCallback` to capture frames for
+            :func:`~vizopt.animation.snapshots_to_animated_svg`.
 
     Returns:
-        Tuple of (results, circles_out, history) where results is a list of S
-        dicts each with "center", "radii", "angles"; circles_out is an array of
-        shape (N, 3) with optimized [cx, cy, r]; and history is the list of
-        per-iteration loss dicts.
+        Tuple of (results, circles_out, history, problem) where results is a
+        list of S dicts each with "center", "radii", "angles"; circles_out is
+        an array of shape (N, 3) with optimized [cx, cy, r]; history is the
+        list of per-iteration loss dicts; and problem is the
+        :class:`~vizopt.base.OptimizationProblem` instance (needed for
+        :func:`~vizopt.animation.snapshots_to_animated_svg`).
     """
     circles_array = np.asarray(circles, dtype=np.float32)
     if circles_array.ndim == 1:
@@ -558,7 +747,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         "circle_collision_alpha": np.float32(circle_collision_alpha),
     }
 
-    def initialize(_):
+    def initialize(_, seed):
         return {
             "centers": initial_centers,
             "radii": initial_radii,
@@ -580,9 +769,9 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     ]
 
     problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize
+        terms=terms, initialize=initialize, svg_configuration=_svg_configuration_movable
     ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, history = problem.optimize(optim_config, callback=callback)
 
     circles_out = np.concatenate(
         [np.array(optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
@@ -599,4 +788,5 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         ],
         circles_out,
         history,
+        problem,
     )

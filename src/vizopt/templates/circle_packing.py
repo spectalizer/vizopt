@@ -1,7 +1,14 @@
+"""Circle packing"""
+
 import numpy as np
 from jax import numpy as jnp
 
-from ..base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate
+from ..base import (
+    ObjectiveTerm,
+    OptimConfig,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+)
 from ..components import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
@@ -66,8 +73,8 @@ def _plot_configuration(optim_vars, input_params):
     positions = optim_vars["node_xys"]
     radii = input_params["node_radii"]
     n = len(radii)
-    colors = plt.cm.tab20.colors
-    fig, ax = plt.subplots(figsize=(5, 5))
+    colors = plt.colormaps["tab20"].colors
+    _, ax = plt.subplots(figsize=(5, 5))
     for i in range(n):
         ax.add_patch(
             mpatches.Circle(
@@ -182,9 +189,12 @@ def build_circle_packing_problem(
     }
 
     _initial = initial_node_xys
+    _total_scale = float(node_radii.sum()) if n > 0 else 1.0
 
-    def initialize(_):
-        return {"node_xys": _initial}
+    def initialize(_, seed):
+        rng = np.random.default_rng(seed)
+        noise = rng.standard_normal((n, 2)).astype(np.float32) * _total_scale * 0.1
+        return {"node_xys": _initial + noise}
 
     terms = [
         ObjectiveTerm("total_size", _term_total_size, weight_total_size),
@@ -204,7 +214,7 @@ def optimize_circle_packing(
     weight_total_size=2.0,
     collision_offset=1.0,
     initial_node_xys=None,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
 ):
     """Pack circles of given radii to minimize overlap and overall bounding box.
 
@@ -218,8 +228,8 @@ def optimize_circle_packing(
         collision_offset: Minimum required gap between circle boundaries.
         initial_node_xys: Optional initial (x, y) positions as an array of
             shape (n, 2). If None, positions are randomly initialized.
-        optim_kwargs: Optional keyword arguments forwarded to problem.optimize()
-            (e.g. n_iters, learning_rate).
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`~vizopt.base.OptimConfig` defaults when ``None``.
 
     Returns:
         List of (x, y) tuples, one per circle, in the same order as radii.
@@ -230,6 +240,6 @@ def optimize_circle_packing(
         collision_offset=collision_offset,
         initial_node_xys=initial_node_xys,
     )
-    optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, _ = problem.optimize(optim_config)
 
     return [tuple(float(c) for c in xy) for xy in optim_vars["node_xys"]]

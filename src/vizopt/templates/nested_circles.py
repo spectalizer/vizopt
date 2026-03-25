@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 from jax import numpy as jnp
 
-from ..base import ObjectiveTerm, OptimizationProblemTemplate
+from ..base import ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
 from ..components import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
@@ -149,7 +149,7 @@ def _term_edge_length(optim_vars, input_params):
 def optimize_circular_layout_with_enclosed_nodes(
     inclusion_tree: nx.DiGraph,
     weight_total_size=2.0,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
 ):
     """Optimize drawing of a tree with circular nodes and inclusion constraints.
 
@@ -163,8 +163,8 @@ def optimize_circular_layout_with_enclosed_nodes(
             Leaf nodes must have a "size" attribute (fixed radius).
             Non-leaf nodes will have optimizable radii.
         weight_total_size: weight for the total width/height objective.
-        optim_kwargs: optional keyword arguments forwarded to problem.optimize()
-            (e.g. n_iters, learning_rate).
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`~vizopt.base.OptimConfig` defaults when ``None``.
 
     Returns:
         Tuple of (pos, non_leaf_node_radius_dict) where pos maps node names to
@@ -209,7 +209,7 @@ def optimize_circular_layout_with_enclosed_nodes(
         "inclusion_edge_indices": inclusion_edge_indices,
     }
 
-    def initialize(_):
+    def initialize(_, _seed):
         return {
             "node_xys": initial_node_xys,
             "variable_node_radii": initial_variable_radii,
@@ -224,7 +224,7 @@ def optimize_circular_layout_with_enclosed_nodes(
     problem = OptimizationProblemTemplate(
         terms=terms, initialize=initialize
     ).instantiate(input_parameters)
-    optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, _ = problem.optimize(optim_config)
 
     pos = {
         node: tuple(float(c) for c in xy)
@@ -241,7 +241,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     inclusion_tree: nx.DiGraph,
     weight_edge_length=1.0,
     weight_total_size=2.0,
-    optim_kwargs=None,
+    optim_config: OptimConfig | None = None,
 ):
     """Optimize drawing of a graph with circular nodes and inclusion constraints.
 
@@ -256,7 +256,8 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
         inclusion_tree: a networkx DiGraph with an edge (u, v) if v is contained in u.
         weight_edge_length: weight for the edge length objective.
         weight_total_size: weight for the total width/height objective.
-        optim_kwargs: optional keyword arguments forwarded to problem.optimize()
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`~vizopt.base.OptimConfig` defaults when ``None``.
             (e.g. n_iters, learning_rate).
 
     Returns:
@@ -318,7 +319,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
         "inclusion_edge_indices": inclusion_edge_indices,
     }
 
-    def initialize(_):
+    def initialize(_, _seed):
         return {
             "node_xys": initial_node_xys,
             "variable_node_radii": initial_variable_radii,
@@ -334,7 +335,7 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     problem = OptimizationProblemTemplate(
         terms=terms, initialize=initialize
     ).instantiate(input_parameters)
-    optim_vars, _ = problem.optimize(**(optim_kwargs or {}))
+    optim_vars, _ = problem.optimize(optim_config)
 
     pos = {
         node: tuple(float(c) for c in xy)

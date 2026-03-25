@@ -33,6 +33,10 @@ dev = [
     "zensical>=0.0.24",
 ]
 
+[[tool.mypy.overrides]]
+module = ["optax", "optax.*", "jax", "jax.*"]
+ignore_missing_imports = true
+
 [build-system]
 requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"

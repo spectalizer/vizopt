@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
+from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
 
 
 def oklab_to_rgb(Lab):
@@ -318,7 +318,7 @@ def build_color_problem(
             ObjectiveTerm(name="coverage", compute=_coverage, multiplier=coverage_weight),
             ObjectiveTerm(name="luminosity", compute=_luminosity, multiplier=luminosity_weight),
         ],
-        initialize=lambda params: {"logit_rgb": params["logit_init"]},
+        initialize=lambda params, _seed: {"logit_rgb": params["logit_init"]},
         plot_configuration=plot_colored_words,
         svg_configuration=_color_svg_configuration,
     )
@@ -331,10 +331,9 @@ def optimize_colors(
     *,
     target_max_delta_e=0.3,
     target_L=None,
-    learning_rate=0.05,
-    n_iters=1000,
+    init_seed=None,
+    optim_config: OptimConfig | None = None,
     callback=None,
-    seed=None,
     stress_weight=1.0,
     coverage_weight=0.5,
     luminosity_weight=1.0,
@@ -353,12 +352,12 @@ def optimize_colors(
         target_L: Target OKLAB/OKLCH lightness for all colors, in [0, 1].
             ``None`` disables the luminosity term. Typical values: ~0.75 for
             light-mode palettes, ~0.85 for dark-mode palettes.
-        learning_rate: Adam learning rate.
-        n_iters: Number of gradient-descent iterations.
+        init_seed: Integer random seed for initialization. When ``None``
+            (default), uses an MDS warm-start. Pass an integer to use random
+            initialization instead.
+        optim_config: Optimizer settings (iterations, learning rate, seeds,
+            restarts). Uses :class:`OptimConfig` defaults when ``None``.
         callback: Called as ``callback(i, loss, params, grads)`` after each step.
-        seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
-            Pass an integer to use random initialization instead, enabling multiple
-            restarts with different starting points.
         stress_weight: Multiplier for the stress term (default 1.0).
         coverage_weight: Multiplier for the coverage term (default 0.5).
         luminosity_weight: Multiplier for the luminosity term (default 1.0).
@@ -376,7 +375,7 @@ def optimize_colors(
         target_max_delta_e=target_max_delta_e,
         target_L=target_L,
         coverage_temperature=coverage_temperature,
-        seed=seed,
+        seed=init_seed,
     )
     problem = build_color_problem(
         input_parameters,
@@ -384,9 +383,5 @@ def optimize_colors(
         coverage_weight=coverage_weight,
         luminosity_weight=luminosity_weight,
     )
-    optim_vars, history = problem.optimize(
-        n_iters=n_iters,
-        learning_rate=learning_rate,
-        callback=callback,
-    )
+    optim_vars, history = problem.optimize(optim_config, callback=callback)
     return np.array(_build_rgb(optim_vars, input_parameters)), history
