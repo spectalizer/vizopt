@@ -104,6 +104,8 @@ def snapshots_to_animated_svg(
     fps: int = 10,
     size: int = 500,
     calc_mode: str = "linear",
+    history: list[dict] | None = None,
+    loss_curve_height: int = 120,
 ) -> str:
     """Create an animated SVG from optimization snapshots.
 
@@ -118,6 +120,13 @@ def snapshots_to_animated_svg(
         size: Width and height of the output SVG in pixels.
         calc_mode: ``"linear"`` for smooth interpolation or ``"discrete"``
             for instant jumps between frames.
+        history: Optional list of history dicts as returned by
+            :meth:`OptimizationProblem.optimize` (each dict has an
+            ``"iteration"`` key and a ``"total"`` key with the aggregate loss).
+            When provided, a loss curve is rendered below the animation with an
+            animated marker tracking the current frame.
+        loss_curve_height: Height in pixels of the loss curve panel, used only
+            when ``history`` is provided.
 
     Returns:
         An SVG string. Save with ``Path("out.svg").write_text(svg)`` or
@@ -136,9 +145,11 @@ def snapshots_to_animated_svg(
     n_frames = len(snapshots)
     total_dur = n_frames / fps
 
+    total_height = size + (loss_curve_height if history else 0)
+
     lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}">',
-        f'  <rect width="{size}" height="{size}" fill="white"/>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{total_height}">',
+        f'  <rect width="{size}" height="{total_height}" fill="white"/>',
     ]
     for el in elements:
         tag = el["tag"]
@@ -152,8 +163,92 @@ def snapshots_to_animated_svg(
         for attr, values in animated.items():
             lines.append(f"    {smil_animate(attr, values, n_frames, total_dur, calc_mode)}")
         lines.append(f"  </{tag}>")
+
+    if history:
+        lines += _loss_curve_svg_lines(
+            history, snapshots, size, loss_curve_height, n_frames, total_dur, calc_mode
+        )
+
     lines.append("</svg>")
     return "\n".join(lines)
+
+
+def _loss_curve_svg_lines(
+    history: list[dict],
+    snapshots: list[tuple[int, Any]],
+    size: int,
+    panel_height: int,
+    n_frames: int,
+    total_dur: float,
+    calc_mode: str,
+) -> list[str]:
+    """Build SVG lines for a loss curve panel placed below the main animation.
+
+    Args:
+        history: List of history dicts with ``"iteration"`` and ``"total"`` keys.
+        snapshots: List of ``(iteration, optim_vars)`` tuples.
+        size: Width of the SVG (same as the animation width).
+        panel_height: Height of the loss curve panel in pixels.
+        n_frames: Number of animation frames.
+        total_dur: Total animation duration in seconds.
+        calc_mode: SMIL ``calcMode`` (``"linear"`` or ``"discrete"``).
+
+    Returns:
+        A list of SVG element strings to append before the closing ``</svg>``.
+    """
+    pad_left = 40
+    pad_right = 12
+    pad_top = 12
+    pad_bottom = 24
+    panel_y = size  # y-offset of the panel inside the SVG
+
+    iters = [d["iteration"] for d in history]
+    losses = [float(d["total"]) for d in history]
+
+    min_iter, max_iter = min(iters), max(iters)
+    min_loss, max_loss = min(losses), max(losses)
+    loss_range = max_loss - min_loss or 1.0
+
+    plot_w = size - pad_left - pad_right
+    plot_h = panel_height - pad_top - pad_bottom
+
+    def to_x(it: float) -> float:
+        return pad_left + (it - min_iter) / (max_iter - min_iter or 1) * plot_w
+
+    def to_y(loss: float) -> float:
+        return panel_y + pad_top + (1.0 - (loss - min_loss) / loss_range) * plot_h
+
+    # Static polyline of the full loss curve
+    points = " ".join(f"{to_x(it):.1f},{to_y(l):.1f}" for it, l in zip(iters, losses))
+
+    # Animated marker x positions — one per snapshot frame
+    snapshot_iters = [it for it, _ in snapshots]
+    marker_xs = [f"{to_x(it):.1f}" for it in snapshot_iters]
+
+    # Axis tick labels (y-axis: min and max)
+    y_label_max = f"{max_loss:.3g}"
+    y_label_min = f"{min_loss:.3g}"
+
+    lines = [
+        f'  <!-- loss curve panel -->',
+        f'  <rect x="0" y="{panel_y}" width="{size}" height="{panel_height}" fill="#f8f8f8"/>',
+        # Axes
+        f'  <line x1="{pad_left}" y1="{panel_y + pad_top}" x2="{pad_left}" y2="{panel_y + pad_top + plot_h}" stroke="#888" stroke-width="1"/>',
+        f'  <line x1="{pad_left}" y1="{panel_y + pad_top + plot_h}" x2="{pad_left + plot_w}" y2="{panel_y + pad_top + plot_h}" stroke="#888" stroke-width="1"/>',
+        # Y-axis tick labels
+        f'  <text x="{pad_left - 4}" y="{panel_y + pad_top + 4}" text-anchor="end" font-size="9" fill="#555">{y_label_max}</text>',
+        f'  <text x="{pad_left - 4}" y="{panel_y + pad_top + plot_h}" text-anchor="end" font-size="9" fill="#555">{y_label_min}</text>',
+        # X-axis label
+        f'  <text x="{pad_left + plot_w // 2}" y="{panel_y + panel_height - 4}" text-anchor="middle" font-size="9" fill="#555">iteration</text>',
+        # Loss curve polyline
+        f'  <polyline points="{points}" fill="none" stroke="#4477cc" stroke-width="1.5" stroke-linejoin="round"/>',
+        # Animated vertical marker line
+        f'  <line y1="{panel_y + pad_top}" y2="{panel_y + pad_top + plot_h}" stroke="#e55" stroke-width="1.5" stroke-dasharray="3,2">',
+        f'    {smil_animate("x1", marker_xs, n_frames, total_dur, calc_mode)}',
+        f'    {smil_animate("x2", marker_xs, n_frames, total_dur, calc_mode)}',
+        f'  </line>',
+    ]
+    return lines
 
 
 def smil_animate(
