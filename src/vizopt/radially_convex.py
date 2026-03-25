@@ -15,6 +15,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from .base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
+from .utils import _SVG_SET_COLORS
 
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions
@@ -366,16 +367,6 @@ def _init_centers_and_radii(
 # SVG animation helpers
 # ---------------------------------------------------------------------------
 
-_SVG_SET_COLORS = [
-    "#e05252",  # red
-    "#4472c4",  # blue
-    "#9966cc",  # violet
-    "#339966",  # green
-    "#e07d39",  # orange
-    "#3cbfcf",  # teal
-    "#c05e88",  # pink
-    "#888888",  # gray
-]
 
 
 def _compute_svg_transform(snapshots, circles_array, has_movable_circles, size):

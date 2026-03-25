@@ -13,6 +13,7 @@ from ..components import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
 )
+from ..utils import _TAB20
 
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions
@@ -36,29 +37,6 @@ def _term_collision(optim_vars, input_params):
         offset=input_params["collision_offset"],
     )
 
-
-_TAB20 = [
-    "#1f77b4",
-    "#aec7e8",
-    "#ff7f0e",
-    "#ffbb78",
-    "#2ca02c",
-    "#98df8a",
-    "#d62728",
-    "#ff9896",
-    "#9467bd",
-    "#c5b0d5",
-    "#8c564b",
-    "#c49c94",
-    "#e377c2",
-    "#f7b6d2",
-    "#7f7f7f",
-    "#c7c7c7",
-    "#bcbd22",
-    "#dbdb8d",
-    "#17becf",
-    "#9edae5",
-]
 
 
 # ---------------------------------------------------------------------------
