@@ -248,6 +248,25 @@ def _loss_curve_svg_lines(
         f'    {smil_animate("x2", marker_xs, n_frames, total_dur, calc_mode)}',
         f'  </line>',
     ]
+
+    # Per-frame iteration + loss label (SMIL cannot animate text content directly,
+    # so one <text> per frame uses a discrete display animation: "inline" only
+    # during its own frame slot, "none" for all others).
+    label_x = pad_left + plot_w
+    label_y = panel_y + pad_top + 10
+    for fi, (snap_iter, _) in enumerate(snapshots):
+        closest = min(history, key=lambda d: abs(d["iteration"] - snap_iter))
+        snap_loss = float(closest["total"])
+        label = f"iter {snap_iter}  loss {snap_loss:.3g}"
+        display_values = ["none"] * n_frames
+        display_values[fi] = "inline"
+        lines += [
+            f'  <text x="{label_x}" y="{label_y}" text-anchor="end" font-size="9" fill="#333" display="none">',
+            f'    {label}',
+            f'    {smil_animate("display", display_values, n_frames, total_dur, "discrete")}',
+            f'  </text>',
+        ]
+
     return lines
 
 
