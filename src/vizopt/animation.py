@@ -254,8 +254,30 @@ def _loss_curve_svg_lines(
             t = (loss - min_loss) / loss_range
         return panel_y + pad_top + (1.0 - t) * plot_h
 
-    # Static polyline of the full loss curve
-    points = " ".join(f"{to_x(it):.1f},{to_y(l):.1f}" for it, l in zip(iters, losses))
+    # Polyline points for full loss curve
+    curve_pts = [(to_x(it), to_y(l)) for it, l in zip(iters, losses)]
+    points = " ".join(f"{x:.1f},{y:.1f}" for x, y in curve_pts)
+
+    # Cumulative arc-length along the polyline (for stroke-dashoffset animation)
+    cumulative = [0.0]
+    for i in range(1, len(curve_pts)):
+        dx = curve_pts[i][0] - curve_pts[i - 1][0]
+        dy = curve_pts[i][1] - curve_pts[i - 1][1]
+        cumulative.append(cumulative[-1] + math.sqrt(dx * dx + dy * dy))
+    total_len = cumulative[-1] or 1.0
+
+    # For each snapshot frame, find cumulative length at that snapshot's iteration
+    def _cum_len_at(snap_iter: int) -> float:
+        idx = 0
+        for j, it in enumerate(iters):
+            if it <= snap_iter:
+                idx = j
+        return cumulative[idx]
+
+    # stroke-dashoffset per frame: total_len - d means only the first d px are drawn
+    dashoffsets = [
+        f"{total_len - _cum_len_at(sit):.1f}" for sit, _ in snapshots
+    ]
 
     # Animated marker x positions — one per snapshot frame
     snapshot_iters = [it for it, _ in snapshots]
@@ -276,10 +298,15 @@ def _loss_curve_svg_lines(
         f'  <text x="{pad_left - 4}" y="{panel_y + pad_top + plot_h}" text-anchor="end" font-size="9" fill="#555">{y_label_min}</text>',
         # X-axis label
         f'  <text x="{pad_left + plot_w // 2}" y="{panel_y + panel_height - 4}" text-anchor="middle" font-size="9" fill="#555">iteration</text>',
-        # Loss curve polyline
-        f'  <polyline points="{points}" fill="none" stroke="#4477cc" stroke-width="1.5" stroke-linejoin="round"/>',
+        # Full curve — light/thin, represents the "future" portion
+        f'  <polyline points="{points}" fill="none" stroke="#4477cc" stroke-width="1" stroke-linejoin="round" opacity="0.3"/>',
+        # Animated "past" overlay — thick, reveals up to the current frame via stroke-dashoffset
+        f'  <polyline points="{points}" fill="none" stroke="#4477cc" stroke-width="2.5" stroke-linejoin="round"',
+        f'    stroke-dasharray="{total_len:.1f}" stroke-dashoffset="{total_len:.1f}">',
+        f'    {smil_animate("stroke-dashoffset", dashoffsets, n_frames, total_dur, calc_mode)}',
+        "  </polyline>",
         # Animated vertical marker line
-        f'  <line y1="{panel_y + pad_top}" y2="{panel_y + pad_top + plot_h}" stroke="#e55" stroke-width="1.5" stroke-dasharray="3,2">',
+        f'  <line y1="{panel_y + pad_top}" y2="{panel_y + pad_top + plot_h}" stroke="gray" stroke-width="1.5" stroke-dasharray="3,2">',
         f'    {smil_animate("x1", marker_xs, n_frames, total_dur, calc_mode)}',
         f'    {smil_animate("x2", marker_xs, n_frames, total_dur, calc_mode)}',
         "  </line>",
