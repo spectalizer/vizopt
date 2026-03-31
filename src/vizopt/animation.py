@@ -5,6 +5,7 @@ from typing import Any
 import jax
 import numpy as np
 from jax import Array
+from matplotlib.ticker import AutoLocator
 
 from .base import OptimizationProblem, default_print_callback
 
@@ -137,7 +138,9 @@ def snapshots_to_animated_svg(
             ``snapshots`` is empty.
     """
     if problem.svg_configuration is None:
-        raise ValueError("problem.svg_configuration must be set to use snapshots_to_animated_svg.")
+        raise ValueError(
+            "problem.svg_configuration must be set to use snapshots_to_animated_svg."
+        )
     if not snapshots:
         raise ValueError("snapshots is empty.")
 
@@ -153,15 +156,25 @@ def snapshots_to_animated_svg(
     ]
     for el in elements:
         tag = el["tag"]
-        static = {k: v for k, v in el.items() if k not in ("tag", "_text") and not isinstance(v, list)}
-        animated = {k: v for k, v in el.items() if k not in ("tag", "_text") and isinstance(v, list)}
+        static = {
+            k: v
+            for k, v in el.items()
+            if k not in ("tag", "_text") and not isinstance(v, list)
+        }
+        animated = {
+            k: v
+            for k, v in el.items()
+            if k not in ("tag", "_text") and isinstance(v, list)
+        }
         inner_text = el.get("_text", "")
         attr_str = " ".join(f'{k}="{v}"' for k, v in static.items())
         lines.append(f"  <{tag} {attr_str}>")
         if inner_text:
             lines.append(f"    {inner_text}")
         for attr, values in animated.items():
-            lines.append(f"    {smil_animate(attr, values, n_frames, total_dur, calc_mode)}")
+            lines.append(
+                f"    {smil_animate(attr, values, n_frames, total_dur, calc_mode)}"
+            )
         lines.append(f"  </{tag}>")
 
     if history:
@@ -206,7 +219,9 @@ def _loss_curve_svg_lines(
     losses = [float(d["total"]) for d in history]
 
     min_iter, max_iter = min(iters), max(iters)
-    min_loss, max_loss = min(losses), max(losses)
+    _locator = AutoLocator()
+    _ticks = _locator.tick_values(min(losses), max(losses))
+    min_loss, max_loss = float(_ticks[0]), float(_ticks[-1])
     loss_range = max_loss - min_loss or 1.0
 
     plot_w = size - pad_left - pad_right
@@ -230,7 +245,7 @@ def _loss_curve_svg_lines(
     y_label_min = f"{min_loss:.3g}"
 
     lines = [
-        f'  <!-- loss curve panel -->',
+        "  <!-- loss curve panel -->",
         f'  <rect x="0" y="{panel_y}" width="{size}" height="{panel_height}" fill="#f8f8f8"/>',
         # Axes
         f'  <line x1="{pad_left}" y1="{panel_y + pad_top}" x2="{pad_left}" y2="{panel_y + pad_top + plot_h}" stroke="#888" stroke-width="1"/>',
@@ -246,7 +261,7 @@ def _loss_curve_svg_lines(
         f'  <line y1="{panel_y + pad_top}" y2="{panel_y + pad_top + plot_h}" stroke="#e55" stroke-width="1.5" stroke-dasharray="3,2">',
         f'    {smil_animate("x1", marker_xs, n_frames, total_dur, calc_mode)}',
         f'    {smil_animate("x2", marker_xs, n_frames, total_dur, calc_mode)}',
-        f'  </line>',
+        "  </line>",
     ]
 
     # Per-frame iteration + loss label (SMIL cannot animate text content directly,
@@ -262,9 +277,9 @@ def _loss_curve_svg_lines(
         display_values[fi] = "inline"
         lines += [
             f'  <text x="{label_x}" y="{label_y}" text-anchor="end" font-size="9" fill="#333" display="none">',
-            f'    {label}',
+            f"    {label}",
             f'    {smil_animate("display", display_values, n_frames, total_dur, "discrete")}',
-            f'  </text>',
+            "  </text>",
         ]
 
     return lines
@@ -291,7 +306,9 @@ def smil_animate(
         An SVG ``<animate>`` element string.
     """
     if calc_mode == "linear":
-        key_times = ";".join(f"{fi / n_frames:.6f}" for fi in range(n_frames)) + ";1.000000"
+        key_times = (
+            ";".join(f"{fi / n_frames:.6f}" for fi in range(n_frames)) + ";1.000000"
+        )
         values = ";".join(per_frame_values + per_frame_values[:1])
     else:
         key_times = ";".join(f"{fi / n_frames:.6f}" for fi in range(n_frames))
