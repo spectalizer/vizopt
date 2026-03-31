@@ -1,5 +1,6 @@
 """Animation utilities for visualizing optimization progress."""
 
+import math
 from typing import Any
 
 import jax
@@ -107,6 +108,7 @@ def snapshots_to_animated_svg(
     calc_mode: str = "linear",
     history: list[dict] | None = None,
     loss_curve_height: int = 120,
+    log_scale: bool = False,
 ) -> str:
     """Create an animated SVG from optimization snapshots.
 
@@ -128,6 +130,7 @@ def snapshots_to_animated_svg(
             animated marker tracking the current frame.
         loss_curve_height: Height in pixels of the loss curve panel, used only
             when ``history`` is provided.
+        log_scale: If ``True``, the loss axis uses a log10 scale.
 
     Returns:
         An SVG string. Save with ``Path("out.svg").write_text(svg)`` or
@@ -179,7 +182,14 @@ def snapshots_to_animated_svg(
 
     if history:
         lines += _loss_curve_svg_lines(
-            history, snapshots, size, loss_curve_height, n_frames, total_dur, calc_mode
+            history,
+            snapshots,
+            size,
+            loss_curve_height,
+            n_frames,
+            total_dur,
+            calc_mode,
+            log_scale,
         )
 
     lines.append("</svg>")
@@ -194,6 +204,7 @@ def _loss_curve_svg_lines(
     n_frames: int,
     total_dur: float,
     calc_mode: str,
+    log_scale: bool = False,
 ) -> list[str]:
     """Build SVG lines for a loss curve panel placed below the main animation.
 
@@ -205,6 +216,7 @@ def _loss_curve_svg_lines(
         n_frames: Number of animation frames.
         total_dur: Total animation duration in seconds.
         calc_mode: SMIL ``calcMode`` (``"linear"`` or ``"discrete"``).
+        log_scale: If ``True``, the loss axis uses a log10 scale.
 
     Returns:
         A list of SVG element strings to append before the closing ``</svg>``.
@@ -219,9 +231,14 @@ def _loss_curve_svg_lines(
     losses = [float(d["total"]) for d in history]
 
     min_iter, max_iter = min(iters), max(iters)
-    _locator = AutoLocator()
-    _ticks = _locator.tick_values(min(losses), max(losses))
-    min_loss, max_loss = float(_ticks[0]), float(_ticks[-1])
+    if log_scale:
+        _log_min = math.floor(math.log10(min(losses)))
+        _log_max = math.ceil(math.log10(max(losses)))
+        min_loss, max_loss = 10.0**_log_min, 10.0**_log_max
+        _log_range = _log_max - _log_min or 1.0
+    else:
+        _ticks = AutoLocator().tick_values(min(losses), max(losses))
+        min_loss, max_loss = float(_ticks[0]), float(_ticks[-1])
     loss_range = max_loss - min_loss or 1.0
 
     plot_w = size - pad_left - pad_right
@@ -231,7 +248,11 @@ def _loss_curve_svg_lines(
         return pad_left + (it - min_iter) / (max_iter - min_iter or 1) * plot_w
 
     def to_y(loss: float) -> float:
-        return panel_y + pad_top + (1.0 - (loss - min_loss) / loss_range) * plot_h
+        if log_scale:
+            t = (math.log10(loss) - _log_min) / _log_range
+        else:
+            t = (loss - min_loss) / loss_range
+        return panel_y + pad_top + (1.0 - t) * plot_h
 
     # Static polyline of the full loss curve
     points = " ".join(f"{to_x(it):.1f},{to_y(l):.1f}" for it, l in zip(iters, losses))
