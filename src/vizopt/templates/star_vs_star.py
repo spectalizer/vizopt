@@ -52,6 +52,8 @@ def _multi_term_star_exclusion(optim_vars, input_params):
     # Adding 1e-7 to the x-component prevents arctan2(0, 0) from producing NaN
     # gradients: when diff=(0,0) the upstream gradient is 0 (no violation when
     # dist=0 < r_interp), so 0 * finite = 0 rather than 0 * NaN = NaN.
+    # There is a bug lurking here:
+    # + 1e-7 avoids division by zero when dx=0, but if I am unlucky I could have dx=-1e-7 and end up with 0 again...
     diff_unit = diff / dist[..., None]  # (S, S, K, 2)
     alpha = jnp.arctan2(diff_unit[..., 1], diff_unit[..., 0] + 1e-7)  # (S, S, K)
 
@@ -274,7 +276,7 @@ def optimize_star_domains(
         ObjectiveTerm("area", _multi_term_area, weight_area),
         ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
     ]
-
+    _multi_term_star_exclusion(initialize(input_parameters, 0), input_parameters)
     problem = OptimizationProblemTemplate(
         terms=terms,
         initialize=initialize,
