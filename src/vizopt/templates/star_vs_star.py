@@ -18,6 +18,7 @@ from vizopt.radially_convex import (
     _multi_term_smoothness,
     _svg_configuration_fixed,
 )
+from vizopt.utils import _SVG_SET_COLORS
 
 
 def _dist_and_angle(diff):
@@ -86,8 +87,11 @@ def _multi_term_star_exclusion(optim_vars, input_params):
     r_hi = radii[t_range[None, :, None], idx_hi]  # (S, S, K)
     r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (S, S, K)
 
-    # Penalise when boundary point of s is inside t  (dist < r_interp)
-    violations = jnp.where(mask[:, :, None], jnp.maximum(0.0, r_interp - dist), 0.0)
+    offset = input_params.get("exclusion_offset", 0.0)
+    # Penalise when boundary point of s is inside t  (dist < r_interp + offset)
+    violations = jnp.where(
+        mask[:, :, None], jnp.maximum(0.0, r_interp + offset - dist), 0.0
+    )
     return jnp.sum(violations**2)
 
 
@@ -136,10 +140,11 @@ def _multi_term_star_enclosure(optim_vars, input_params):
     r_hi = radii[outer_range[None, :, None], idx_hi]
     r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (S, S, K)
 
-    # Violation: boundary point of inner is OUTSIDE outer  →  dist > r_interp
+    offset = input_params.get("enclosure_offset", 0.0)
+    # Violation: boundary point of inner is OUTSIDE outer minus offset  →  dist > r_interp - offset
     violations = jnp.where(
         mask[:, :, None],
-        jnp.maximum(0.0, dist - r_interp),
+        jnp.maximum(0.0, dist - (r_interp - offset)),
         0.0,
     )
     return jnp.sum(violations**2)
@@ -182,6 +187,58 @@ def _build_exclusion_mask(S, enclosures):
     return mask
 
 
+def _svg_configuration_star_only(snapshots, input_params, size):
+    """SVG configuration for pure star domains (no underlying circles)."""
+    angles = input_params["angles"]
+    S = snapshots[0][1]["centers"].shape[0]
+
+    # Compute bounding box from all boundary points across all frames
+    all_x, all_y = [], []
+    for _, v in snapshots:
+        centers = np.array(v["centers"])
+        radii = np.array(v["radii"])
+        for s in range(len(centers)):
+            bx = centers[s, 0] + radii[s] * np.cos(angles)
+            by = centers[s, 1] + radii[s] * np.sin(angles)
+            all_x.extend(bx.tolist())
+            all_y.extend(by.tolist())
+
+    x_min, y_min = min(all_x), min(all_y)
+    span = max(max(all_x) - x_min, max(all_y) - y_min)
+    margin = span * 0.05
+    x_min -= margin
+    y_max = y_min + span + 2 * margin
+    span += 2 * margin
+
+    def to_svg(x, y):
+        return (x - x_min) / span * size, (y_max - y) / span * size
+
+    elements = []
+    for s in range(S):
+        color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
+        points_frames = []
+        for _, v in snapshots:
+            cx, cy = float(v["centers"][s, 0]), float(v["centers"][s, 1])
+            s_radii = np.array(v["radii"][s])
+            pts = []
+            for k in range(len(angles)):
+                bx = cx + s_radii[k] * np.cos(angles[k])
+                by = cy + s_radii[k] * np.sin(angles[k])
+                px, py = to_svg(bx, by)
+                pts.append(f"{px:.1f},{py:.1f}")
+            points_frames.append(" ".join(pts))
+        elements.append({
+            "tag": "polygon",
+            "fill": color,
+            "fill-opacity": "0.12",
+            "stroke": color,
+            "stroke-width": "1.5",
+            "stroke-linejoin": "round",
+            "points": points_frames,
+        })
+    return elements
+
+
 def _radius_from_target_area(target_area, K):
     """Uniform radius r such that a regular K-gon star polygon has the given area."""
     factor = 0.5 * K * np.sin(2 * np.pi / K)  # ≈ π for large K
@@ -201,6 +258,8 @@ def optimize_star_domains(
     weight_enclosure=20.0,
     weight_smoothness=1.0,
     enclosures=None,
+    exclusion_offset=0.1,
+    enclosure_offset=0.1,
     optim_config=None,
     callback=None,
 ):
@@ -231,6 +290,11 @@ def optimize_star_domains(
         weight_enclosure: weight for star-vs-star enclosure constraints.
         weight_smoothness: weight for adjacent-radii smoothness penalty.
         enclosures: list of (inner_idx, outer_idx) pairs.
+        exclusion_offset: minimum gap enforced between non-nested boundaries.
+            A positive value pushes boundaries apart beyond mere non-overlap.
+        enclosure_offset: minimum inset enforced for enclosure constraints.
+            A positive value requires the inner boundary to stay at least this
+            far inside the outer boundary.
         optim_config: OptimConfig; uses defaults when None.
         callback: optional iteration callback.
 
@@ -269,6 +333,8 @@ def optimize_star_domains(
         "target_areas": target_arr,
         "enclosure_mask": enclosure_mask,
         "exclusion_mask": exclusion_mask,
+        "exclusion_offset": float(exclusion_offset),
+        "enclosure_offset": float(enclosure_offset),
     }
 
     def initialize(_, seed):
@@ -290,7 +356,7 @@ def optimize_star_domains(
     problem = OptimizationProblemTemplate(
         terms=terms,
         initialize=initialize,
-        svg_configuration=_svg_configuration_fixed,
+        svg_configuration=_svg_configuration_star_only,
     ).instantiate(input_parameters)
 
     optim_vars, history = problem.optimize(optim_config, callback=callback)
