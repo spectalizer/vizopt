@@ -20,6 +20,30 @@ from vizopt.radially_convex import (
 )
 
 
+def _dist_and_angle(diff):
+    """Compute distance and angle for an array of 2-D displacement vectors.
+
+    Uses the "double where" trick so that both the value and the gradient of
+    arctan2 are finite even when diff = (0, 0).  At the origin the angle is
+    set to 0 (an arbitrary but finite fallback); the caller is responsible for
+    ensuring the origin case does not affect the final loss value.
+
+    Args:
+        diff: (..., 2) array of displacement vectors.
+
+    Returns:
+        dist: (...) Euclidean distances (with a small epsilon for safety).
+        alpha: (...) angles in (-π, π].
+    """
+    rho2 = jnp.sum(diff**2, axis=-1)  # (...)
+    dist = jnp.sqrt(rho2 + 1e-12)  # (...)
+    safe = rho2 > 0
+    dx_safe = jnp.where(safe, diff[..., 0], 1.0)
+    dy_safe = jnp.where(safe, diff[..., 1], 0.0)
+    alpha = jnp.arctan2(dy_safe, dx_safe)  # (...)
+    return dist, alpha
+
+
 def _multi_term_star_exclusion(optim_vars, input_params):
     """Star-vs-star exclusion: boundary of each set must not enter any other set's interior.
 
@@ -45,17 +69,8 @@ def _multi_term_star_exclusion(optim_vars, input_params):
     #   diff[s, t, k] = points[s, k] - centers[t]
     diff = points[:, None, :, :] - centers[None, :, None, :]  # (S, S, K, 2)
 
-    # Distance from center_t to each boundary point of s
-    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)  # (S, S, K)
-
-    # Normalise diff before atan2 to bound gradients when diff ≈ 0.
-    # Adding 1e-7 to the x-component prevents arctan2(0, 0) from producing NaN
-    # gradients: when diff=(0,0) the upstream gradient is 0 (no violation when
-    # dist=0 < r_interp), so 0 * finite = 0 rather than 0 * NaN = NaN.
-    # There is a bug lurking here:
-    # + 1e-7 avoids division by zero when dx=0, but if I am unlucky I could have dx=-1e-7 and end up with 0 again...
-    diff_unit = diff / dist[..., None]  # (S, S, K, 2)
-    alpha = jnp.arctan2(diff_unit[..., 1], diff_unit[..., 0] + 1e-7)  # (S, S, K)
+    # Distance and angle from center_t to each boundary point of s
+    dist, alpha = _dist_and_angle(diff)  # (S, S, K) each
 
     # Convert angle to fractional index in [0, K) and linearly interpolate t's radii
     delta_theta = 2 * jnp.pi / K
@@ -104,13 +119,8 @@ def _multi_term_star_enclosure(optim_vars, input_params):
     # diff[inner, outer, k] = points[inner, k] - centers[outer]
     diff = points[:, None, :, :] - centers[None, :, None, :]  # (S, S, K, 2)
 
-    # Distance from center_outer to each boundary point of inner
-    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)  # (S, S, K)
-
-    # Normalise diff before atan2; add 1e-7 to x to prevent arctan2(0,0) NaN
-    # gradient (same reasoning as in _multi_term_star_exclusion above).
-    diff_unit = diff / dist[..., None]  # (S, S, K, 2)
-    alpha = jnp.arctan2(diff_unit[..., 1], diff_unit[..., 0] + 1e-7)  # (S, S, K)
+    # Distance and angle from center_outer to each boundary point of inner
+    dist, alpha = _dist_and_angle(diff)  # (S, S, K) each
 
     # Linearly interpolate outer's radius at that angle
     delta_theta = 2 * jnp.pi / K
