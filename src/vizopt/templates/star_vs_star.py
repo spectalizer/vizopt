@@ -79,33 +79,33 @@ def _multi_term_star_exclusion(optim_vars, input_params):
 
     # points[s, f, k] = center_s + frac_f * radii[s, k] * direction_k
     points = (
-        centers[:, None, None, :]                            # (S, 1, 1, 2)
-        + fracs[None, :, None, None]                         # (1, F, 1, 1)
-        * radii[:, None, :, None]                            # (S, 1, K, 1)
-        * directions[None, None, :, :]                       # (1, 1, K, 2)
+        centers[:, None, None, :]  # (S, 1, 1, 2)
+        + fracs[None, :, None, None]  # (1, F, 1, 1)
+        * radii[:, None, :, None]  # (S, 1, K, 1)
+        * directions[None, None, :, :]  # (1, 1, K, 2)
     )  # (S, F, K, 2)
 
     # Flatten the F*K sample dimension for joint processing
-    points_flat = points.reshape(S, F * K, 2)                # (S, F*K, 2)
+    points_flat = points.reshape(S, F * K, 2)  # (S, F*K, 2)
 
     # diff[s, t, p] = points[s, p] - centers[t]
     diff = points_flat[:, None, :, :] - centers[None, :, None, :]  # (S, S, F*K, 2)
 
     # Distance and angle from center_t to each sample point of s
-    dist, alpha = _dist_and_angle(diff)                      # (S, S, F*K)
+    dist, alpha = _dist_and_angle(diff)  # (S, S, F*K)
 
     # Convert angle to fractional index in [0, K) and linearly interpolate t's radii
     delta_theta = 2 * jnp.pi / K
-    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta          # (S, S, F*K)
+    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta  # (S, S, F*K)
 
-    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K      # (S, S, F*K)
-    idx_hi = (idx_lo + 1) % K                                # (S, S, F*K)
-    w_hi = frac_idx - jnp.floor(frac_idx)                    # (S, S, F*K)
+    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K  # (S, S, F*K)
+    idx_hi = (idx_lo + 1) % K  # (S, S, F*K)
+    w_hi = frac_idx - jnp.floor(frac_idx)  # (S, S, F*K)
 
-    t_range = jnp.arange(S)                                  # (S,)
-    r_lo = radii[t_range[None, :, None], idx_lo]             # (S, S, F*K)
-    r_hi = radii[t_range[None, :, None], idx_hi]             # (S, S, F*K)
-    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi            # (S, S, F*K)
+    t_range = jnp.arange(S)  # (S,)
+    r_lo = radii[t_range[None, :, None], idx_lo]  # (S, S, F*K)
+    r_hi = radii[t_range[None, :, None], idx_hi]  # (S, S, F*K)
+    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (S, S, F*K)
 
     offset = input_params.get("exclusion_offset", 0.0)
     # Penalise when a sample point of s lies inside t  (dist < r_interp + offset)
@@ -268,15 +268,17 @@ def _svg_configuration_star_only(snapshots, input_params, size):
                 px, py = to_svg(bx, by)
                 pts.append(f"{px:.1f},{py:.1f}")
             points_frames.append(" ".join(pts))
-        elements.append({
-            "tag": "polygon",
-            "fill": color,
-            "fill-opacity": "0.12",
-            "stroke": color,
-            "stroke-width": "1.5",
-            "stroke-linejoin": "round",
-            "points": points_frames,
-        })
+        elements.append(
+            {
+                "tag": "polygon",
+                "fill": color,
+                "fill-opacity": "0.12",
+                "stroke": color,
+                "stroke-width": "1.5",
+                "stroke-linejoin": "round",
+                "points": points_frames,
+            }
+        )
     return elements
 
 
@@ -301,6 +303,7 @@ def optimize_star_domains(
     enclosures=None,
     exclusion_offset=0.1,
     enclosure_offset=0.1,
+    exclusion_interior_fracs=None,
     optim_config=None,
     callback=None,
 ):
@@ -343,6 +346,9 @@ def optimize_star_domains(
         (results, history, problem) where results is a list of S dicts with
         "center" (2,), "radii" (K,), "angles" (K,).
     """
+
+    if exclusion_interior_fracs is None:
+        exclusion_interior_fracs = [0.5]
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
     initial_centers = np.asarray(initial_centers, dtype=np.float32)  # (S, 2)
 
@@ -376,6 +382,7 @@ def optimize_star_domains(
         "exclusion_mask": exclusion_mask,
         "exclusion_offset": float(exclusion_offset),
         "enclosure_offset": float(enclosure_offset),
+        "exclusion_interior_fracs": exclusion_interior_fracs,
     }
 
     def initialize(_, seed):
