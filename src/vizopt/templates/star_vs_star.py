@@ -46,13 +46,22 @@ def _dist_and_angle(diff):
 
 
 def _multi_term_star_exclusion(optim_vars, input_params):
-    """Star-vs-star exclusion: boundary of each set must not enter any other set's interior.
+    """Star-vs-star exclusion: boundary and interior of each set must not enter any other set's interior.
 
     For each pair (s, t) where exclusion_mask[s, t] is True, penalises boundary
-    points of s that lie inside the star domain of t.
+    and interior points of s that lie inside the star domain of t.  Interior
+    points are sampled at uniform fractions of each radial direction (0.5 by
+    default), in addition to the boundary (fraction 1.0).  This ensures a
+    nonzero penalty — and nonzero gradient — even when the two domains are
+    identical or one completely encloses the other.
 
     optim_vars keys: "centers" (S, 2), "radii" (S, K)
     input_params keys: "angles" (K,), "exclusion_mask" (S, S) bool
+    Optional input_params keys:
+        "exclusion_offset" (float): minimum gap enforced between domains.
+        "exclusion_interior_fracs" (list[float]): fractions in (0, 1) at which
+            to sample interior points along each radial direction.
+            Defaults to [0.5].
     """
     centers = optim_vars["centers"]  # (S, 2)
     radii = optim_vars["radii"]  # (S, K)
@@ -60,35 +69,46 @@ def _multi_term_star_exclusion(optim_vars, input_params):
     mask = input_params["exclusion_mask"]  # (S, S) bool
     S, K = radii.shape
 
-    # Boundary points for every set: (S, K, 2)
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)  # (K, 2)
+
+    # Fractions along each radial direction to sample.
+    # 1.0 = boundary; values in (0, 1) sample the interior.
+    interior_fracs = input_params.get("exclusion_interior_fracs", [0.5])
+    fracs = jnp.array(interior_fracs + [1.0])  # (F,)
+    F = fracs.shape[0]
+
+    # points[s, f, k] = center_s + frac_f * radii[s, k] * direction_k
     points = (
-        centers[:, None, :] + radii[:, :, None] * directions[None, :, :]
-    )  # (S, K, 2)
+        centers[:, None, None, :]                            # (S, 1, 1, 2)
+        + fracs[None, :, None, None]                         # (1, F, 1, 1)
+        * radii[:, None, :, None]                            # (S, 1, K, 1)
+        * directions[None, None, :, :]                       # (1, 1, K, 2)
+    )  # (S, F, K, 2)
 
-    # Vector from center_t to each boundary point of s:
-    #   diff[s, t, k] = points[s, k] - centers[t]
-    diff = points[:, None, :, :] - centers[None, :, None, :]  # (S, S, K, 2)
+    # Flatten the F*K sample dimension for joint processing
+    points_flat = points.reshape(S, F * K, 2)                # (S, F*K, 2)
 
-    # Distance and angle from center_t to each boundary point of s
-    dist, alpha = _dist_and_angle(diff)  # (S, S, K) each
+    # diff[s, t, p] = points[s, p] - centers[t]
+    diff = points_flat[:, None, :, :] - centers[None, :, None, :]  # (S, S, F*K, 2)
+
+    # Distance and angle from center_t to each sample point of s
+    dist, alpha = _dist_and_angle(diff)                      # (S, S, F*K)
 
     # Convert angle to fractional index in [0, K) and linearly interpolate t's radii
     delta_theta = 2 * jnp.pi / K
-    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta  # (S, S, K)
+    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta          # (S, S, F*K)
 
-    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K  # (S, S, K)
-    idx_hi = (idx_lo + 1) % K  # (S, S, K)
-    w_hi = frac_idx - jnp.floor(frac_idx)  # (S, S, K)
+    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K      # (S, S, F*K)
+    idx_hi = (idx_lo + 1) % K                                # (S, S, F*K)
+    w_hi = frac_idx - jnp.floor(frac_idx)                    # (S, S, F*K)
 
-    # r_lo[s, t, k] = radii[t, idx_lo[s, t, k]]
-    t_range = jnp.arange(S)  # (S,)
-    r_lo = radii[t_range[None, :, None], idx_lo]  # (S, S, K)
-    r_hi = radii[t_range[None, :, None], idx_hi]  # (S, S, K)
-    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (S, S, K)
+    t_range = jnp.arange(S)                                  # (S,)
+    r_lo = radii[t_range[None, :, None], idx_lo]             # (S, S, F*K)
+    r_hi = radii[t_range[None, :, None], idx_hi]             # (S, S, F*K)
+    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi            # (S, S, F*K)
 
     offset = input_params.get("exclusion_offset", 0.0)
-    # Penalise when boundary point of s is inside t  (dist < r_interp + offset)
+    # Penalise when a sample point of s lies inside t  (dist < r_interp + offset)
     violations = jnp.where(
         mask[:, :, None], jnp.maximum(0.0, r_interp + offset - dist), 0.0
     )
