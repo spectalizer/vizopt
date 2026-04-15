@@ -178,12 +178,33 @@ def _multi_term_target_area(optim_vars, input_params):
 
 
 def _build_exclusion_mask(S, enclosures):
-    """Build a boolean (S, S) exclusion mask. ..."""
+    """Build a boolean (S, S) exclusion mask.
+
+    Exclusion is disabled for (A, B) if and only if A and B have a common
+    descendant in the directed enclosure graph (edges go from outer to inner;
+    a node is considered a descendant of itself).
+    """
+    import networkx as nx
+
     mask = np.ones((S, S), dtype=bool)
     np.fill_diagonal(mask, False)
-    for inner, outer in enclosures or []:
-        mask[inner, outer] = False
-        mask[outer, inner] = False
+
+    if not enclosures:
+        return mask
+
+    G = nx.DiGraph()
+    G.add_nodes_from(range(S))
+    for inner, outer in enclosures:
+        G.add_edge(outer, inner)
+
+    desc = {s: nx.descendants(G, s) | {s} for s in range(S)}
+
+    for a in range(S):
+        for b in range(a + 1, S):
+            if desc[a] & desc[b]:
+                mask[a, b] = False
+                mask[b, a] = False
+
     return mask
 
 
