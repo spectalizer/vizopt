@@ -53,14 +53,14 @@ def soft_rasterize_star(
     temperature=0.05,
     offset=0.0,
 ):
-    """Soft-rasterize S star domains onto a pixel grid.
+    """Soft-rasterize n_sets star domains onto a pixel grid.
 
     For each pixel and each domain, computes a soft membership value in [0, 1]
     using a sigmoid of (r_interp + offset - dist) / temperature.
 
     Args:
-        centers: (S, 2) domain centers.
-        radii: (S, K) domain radii at K uniformly-spaced angles.
+        centers: (n_sets, 2) domain centers.
+        radii: (n_sets, K) domain radii at K uniformly-spaced angles.
         grid_xy: (H, W, 2) pixel centre coordinates.
         temperature: sigmoid sharpness; smaller → harder boundary.
         offset: outward shift applied to the boundary before the sigmoid;
@@ -68,20 +68,20 @@ def soft_rasterize_star(
             between non-overlapping domains.
 
     Returns:
-        masks: (S, H, W) soft membership values in (0, 1).
+        masks: (n_sets, H, W) soft membership values in (0, 1).
     """
-    S, K = radii.shape
+    _, K = radii.shape
 
-    # diff[s, h, w] = grid_xy[h, w] - centers[s]  →  (S, H, W, 2)
+    # diff[s, h, w] = grid_xy[h, w] - centers[s]  →  (n_sets, H, W, 2)
     diff = grid_xy[None, :, :, :] - centers[:, None, None, :]
 
-    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)  # (S, H, W)
+    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)  # (n_sets, H, W)
 
     # Double-where trick: safe for autodiff even at the origin
     rho2 = jnp.sum(diff**2, axis=-1)
     dx_safe = jnp.where(rho2 > 0, diff[..., 0], 1.0)
     dy_safe = jnp.where(rho2 > 0, diff[..., 1], 0.0)
-    alpha = jnp.arctan2(dy_safe, dx_safe)  # (S, H, W)
+    alpha = jnp.arctan2(dy_safe, dx_safe)  # (n_sets, H, W)
 
     def _interp_one(r_s, alpha_s):
         delta_theta = 2 * jnp.pi / K
@@ -103,12 +103,12 @@ def raster_collision_loss(optim_vars, input_params):
     overlap area computed by soft rasterization.
 
     optim_vars keys:
-        "centers": (S, 2)
-        "radii":   (S, K)
+        "centers": (n_sets, 2)
+        "radii":   (n_sets, K)
     input_params keys:
         "grid_xy":        (H, W, 2) pixel-centre coordinates
         "pixel_area":     scalar area of one pixel
-        "exclusion_mask": (S, S) bool — True where (s, t) must not overlap
+        "exclusion_mask": (n_sets, n_sets) bool — True where (s, t) must not overlap
     Optional input_params keys:
         "temperature":      sigmoid temperature (default 0.05)
         "exclusion_offset": outward boundary shift enforcing a minimum gap
@@ -132,7 +132,7 @@ def raster_collision_loss(optim_vars, input_params):
 
 
 def optimize_star_domains_raster(
-    S,
+    n_sets,
     initial_centers,
     k_angles=64,
     target_areas=None,
@@ -164,10 +164,10 @@ def optimize_star_domains_raster(
     throughout optimisation.
 
     Args:
-        S: number of star domains.
-        initial_centers: (S, 2) starting centers.
+        n_sets: number of star domains.
+        initial_centers: (n_sets, 2) starting centers.
         k_angles: angular resolution of each boundary polygon.
-        target_areas: list of S values (float or None).
+        target_areas: list of n_sets values (float or None).
         initial_radius: fallback starting radius for sets without a target area.
         weight_target_area: weight for target-area penalty.
         weight_area: weight for area-minimisation regulariser.
@@ -187,19 +187,19 @@ def optimize_star_domains_raster(
         callback: optional iteration callback.
 
     Returns:
-        (results, history, problem) where results is a list of S dicts with
+        (results, history, problem) where results is a list of n_sets dicts with
         "center" (2,), "radii" (K,), "angles" (K,).
     """
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
     initial_centers = np.asarray(initial_centers, dtype=np.float32)
 
-    targets_raw = target_areas if target_areas is not None else [None] * S
+    targets_raw = target_areas if target_areas is not None else [None] * n_sets
     target_arr = np.array(
         [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
     )
 
-    initial_radii = np.zeros((S, k_angles), dtype=np.float32)
-    for s in range(S):
+    initial_radii = np.zeros((n_sets, k_angles), dtype=np.float32)
+    for s in range(n_sets):
         r0 = (
             _radius_from_target_area(target_arr[s], k_angles)
             if np.isfinite(target_arr[s])
@@ -213,13 +213,15 @@ def optimize_star_domains_raster(
     y_min = float(initial_centers[:, 1].min()) - max_r - grid_margin
     y_max = float(initial_centers[:, 1].max()) + max_r + grid_margin
     grid_xy, pixel_area = make_pixel_grid(x_min, x_max, y_min, y_max, grid_resolution)
-    print(f"Pixel grid: {grid_xy.shape[0]}x{grid_xy.shape[1]}, pixel_area={pixel_area:.4f}")
+    print(
+        f"Pixel grid: {grid_xy.shape[0]}x{grid_xy.shape[1]}, pixel_area={pixel_area:.4f}"
+    )
 
-    enclosure_mask = np.zeros((S, S), dtype=bool)
+    enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
     for inner, outer in enclosures or []:
         enclosure_mask[inner, outer] = True
 
-    exclusion_mask = _build_exclusion_mask(S, enclosures)
+    exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
 
     input_parameters = {
         "angles": angles,
@@ -263,6 +265,6 @@ def optimize_star_domains_raster(
             "radii": np.array(optim_vars["radii"][s]),
             "angles": angles,
         }
-        for s in range(S)
+        for s in range(n_sets)
     ]
     return results, history, problem
