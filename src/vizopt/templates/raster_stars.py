@@ -131,6 +131,128 @@ def raster_collision_loss(optim_vars, input_params):
     return jnp.sum(jnp.where(mask, overlap**2, 0.0))
 
 
+def fourier_to_radii(coeffs, angles):
+    """Evaluate the Fourier boundary r(θ) at given angles.
+
+    The boundary is parameterised as
+
+        r(θ) = a₀ + Σ_{k=1}^{M} (aₖ cos(kθ) + bₖ sin(kθ))
+
+    with coefficients stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+
+    Args:
+        coeffs: (n_sets, 2M+1) Fourier coefficients.
+        angles: (K,) evaluation angles in radians.
+
+    Returns:
+        (n_sets, K) radius values.
+    """
+    M = (coeffs.shape[-1] - 1) // 2
+    ks = jnp.arange(1, M + 1)             # (M,)
+    theta = ks[:, None] * angles[None, :]  # (M, K)
+    return (
+        coeffs[:, 0:1]
+        + coeffs[:, 1::2] @ jnp.cos(theta)
+        + coeffs[:, 2::2] @ jnp.sin(theta)
+    )
+
+
+def soft_rasterize_star_fourier(
+    centers,
+    fourier_coeffs,
+    grid_xy,
+    temperature=0.05,
+    offset=0.0,
+):
+    """Soft-rasterize n_sets star domains using a Fourier boundary representation.
+
+    Like `soft_rasterize_star` but r(θ) is evaluated directly from Fourier
+    coefficients rather than linearly-interpolated discrete radii, giving exact
+    gradients at any angle without interpolation artefacts.
+
+    Args:
+        centers: (n_sets, 2) domain centers.
+        fourier_coeffs: (n_sets, 2M+1) Fourier coefficients [a₀, a₁, b₁, …].
+        grid_xy: (H, W, 2) pixel centre coordinates.
+        temperature: sigmoid sharpness; smaller → harder boundary.
+        offset: outward boundary shift (same semantics as `soft_rasterize_star`).
+
+    Returns:
+        masks: (n_sets, H, W) soft membership values in (0, 1).
+    """
+    M = (fourier_coeffs.shape[-1] - 1) // 2
+
+    diff = grid_xy[None, :, :, :] - centers[:, None, None, :]
+    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)
+
+    rho2 = jnp.sum(diff**2, axis=-1)
+    dx_safe = jnp.where(rho2 > 0, diff[..., 0], 1.0)
+    dy_safe = jnp.where(rho2 > 0, diff[..., 1], 0.0)
+    alpha = jnp.arctan2(dy_safe, dx_safe)  # (n_sets, H, W)
+
+    def _r_fourier(coeffs_s, alpha_s):
+        # coeffs_s: (2M+1,)  alpha_s: (H, W)
+        ks = jnp.arange(1, M + 1)                        # (M,)
+        theta = ks[:, None, None] * alpha_s[None, :, :]  # (M, H, W)
+        r = coeffs_s[0]
+        r = r + jnp.einsum("m,mhw->hw", coeffs_s[1::2], jnp.cos(theta))
+        r = r + jnp.einsum("m,mhw->hw", coeffs_s[2::2], jnp.sin(theta))
+        return r
+
+    r_interp = jax.vmap(_r_fourier)(fourier_coeffs, alpha)  # (n_sets, H, W)
+    return jax.nn.sigmoid((r_interp + offset - dist) / temperature)
+
+
+def raster_collision_loss_fourier(optim_vars, input_params):
+    """Raster-based pairwise collision loss using a Fourier boundary representation.
+
+    Same semantics as `raster_collision_loss` but reads ``fourier_coeffs`` from
+    *optim_vars* instead of ``radii``.
+
+    optim_vars keys:
+        "centers":        (n_sets, 2)
+        "fourier_coeffs": (n_sets, 2M+1)
+    input_params keys: same as `raster_collision_loss`.
+    """
+    centers = optim_vars["centers"]
+    fourier_coeffs = optim_vars["fourier_coeffs"]
+    grid_xy = input_params["grid_xy"]
+    pixel_area = input_params["pixel_area"]
+    mask = input_params["exclusion_mask"]
+    temperature = input_params.get("temperature", 0.05)
+    exclusion_offset = input_params.get("exclusion_offset", 0.0)
+
+    masks = soft_rasterize_star_fourier(
+        centers, fourier_coeffs, grid_xy, temperature, exclusion_offset
+    )
+    HW = grid_xy.shape[0] * grid_xy.shape[1]
+    masks_flat = masks.reshape(masks.shape[0], HW)
+    overlap = pixel_area * (masks_flat @ masks_flat.T)
+    return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+
+
+def _svg_configuration_fourier(snapshots, input_params, size):
+    """SVG configuration for Fourier star domains; converts fourier_coeffs → radii."""
+    angles = input_params["angles"]
+    angles_jnp = jnp.array(angles)
+    # Inject radii into each snapshot so the existing renderer can be reused
+    converted = [
+        (i, {**v, "radii": np.array(fourier_to_radii(v["fourier_coeffs"], angles_jnp))})
+        for i, v in snapshots
+    ]
+    return _svg_configuration_star_only(converted, input_params, size)
+
+
+def _wrap_fourier_term(fn, angles):
+    """Adapt a loss term that reads optim_vars["radii"] to accept fourier_coeffs."""
+
+    def wrapped(optim_vars, input_params):
+        radii = fourier_to_radii(optim_vars["fourier_coeffs"], angles)
+        return fn({**optim_vars, "radii": radii}, input_params)
+
+    return wrapped
+
+
 def optimize_star_domains_raster(
     n_sets,
     initial_centers,
@@ -149,6 +271,8 @@ def optimize_star_domains_raster(
     grid_resolution=128,
     grid_margin=0.5,
     temperature=0.05,
+    representation="discrete",
+    n_harmonics=8,
     optim_config=None,
     callback=None,
 ):
@@ -166,7 +290,9 @@ def optimize_star_domains_raster(
     Args:
         n_sets: number of star domains.
         initial_centers: (n_sets, 2) starting centers.
-        k_angles: angular resolution of each boundary polygon.
+        k_angles: angular resolution of each boundary polygon (discrete mode) or
+            number of angles at which the Fourier series is sampled for analytical
+            loss terms (Fourier mode).
         target_areas: list of n_sets values (float or None).
         initial_radius: fallback starting radius for sets without a target area.
         weight_target_area: weight for target-area penalty.
@@ -183,14 +309,24 @@ def optimize_star_domains_raster(
         grid_resolution: pixels along the longer axis of the bounding box.
         grid_margin: extra margin (in scene units) around the bounding box.
         temperature: sigmoid sharpness for soft rasterization.
+        representation: ``"discrete"`` (default) stores one radius per angle;
+            ``"fourier"`` stores Fourier coefficients and evaluates r(θ) exactly
+            at any angle, giving exact gradients without interpolation artefacts.
+        n_harmonics: number of Fourier harmonics M when ``representation="fourier"``;
+            the optimisation variable has shape ``(n_sets, 2M+1)``.
         optim_config: OptimConfig; uses defaults when None.
         callback: optional iteration callback.
 
     Returns:
         (results, history, problem) where results is a list of n_sets dicts with
-        "center" (2,), "radii" (K,), "angles" (K,).
+        keys ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,), and
+        (Fourier mode only) ``"fourier_coeffs"`` (2M+1,).
     """
+    if representation not in ("discrete", "fourier"):
+        raise ValueError(f"representation must be 'discrete' or 'fourier', got {representation!r}")
+
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
+    angles_jnp = jnp.array(angles)
     initial_centers = np.asarray(initial_centers, dtype=np.float32)
 
     targets_raw = target_areas if target_areas is not None else [None] * n_sets
@@ -235,36 +371,73 @@ def optimize_star_domains_raster(
         "exclusion_offset": float(exclusion_offset),
     }
 
-    def initialize(_, seed):
-        return {
-            "centers": initial_centers.copy(),
-            "radii": initial_radii.copy(),
-        }
+    if representation == "fourier":
+        n_coeffs = 2 * n_harmonics + 1
+        initial_fourier_coeffs = np.zeros((n_sets, n_coeffs), dtype=np.float32)
+        for s in range(n_sets):
+            initial_fourier_coeffs[s, 0] = initial_radii[s, 0]  # DC = mean radius
 
-    terms = [
-        ObjectiveTerm("target_area", _multi_term_target_area, weight_target_area),
-        ObjectiveTerm("raster_excl", raster_collision_loss, weight_exclusion),
-        ObjectiveTerm("star_enclose", _multi_term_star_enclosure, weight_enclosure),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
-        ObjectiveTerm("area", _multi_term_area, weight_area),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
-    ]
+        def initialize(*_):
+            return {
+                "centers": initial_centers.copy(),
+                "fourier_coeffs": initial_fourier_coeffs.copy(),
+            }
+
+        wrap = lambda fn: _wrap_fourier_term(fn, angles_jnp)
+        terms = [
+            ObjectiveTerm("target_area", wrap(_multi_term_target_area), weight_target_area),
+            ObjectiveTerm("raster_excl", raster_collision_loss_fourier, weight_exclusion),
+            ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
+            ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
+            ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness),
+            ObjectiveTerm("area", wrap(_multi_term_area), weight_area),
+            ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
+        ]
+        svg_configuration = _svg_configuration_fourier
+    else:
+        def initialize(*_):
+            return {
+                "centers": initial_centers.copy(),
+                "radii": initial_radii.copy(),
+            }
+
+        terms = [
+            ObjectiveTerm("target_area", _multi_term_target_area, weight_target_area),
+            ObjectiveTerm("raster_excl", raster_collision_loss, weight_exclusion),
+            ObjectiveTerm("star_enclose", _multi_term_star_enclosure, weight_enclosure),
+            ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
+            ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
+            ObjectiveTerm("area", _multi_term_area, weight_area),
+            ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
+        ]
+        svg_configuration = _svg_configuration_star_only
 
     problem = OptimizationProblemTemplate(
         terms=terms,
         initialize=initialize,
-        svg_configuration=_svg_configuration_star_only,
+        svg_configuration=svg_configuration,
     ).instantiate(input_parameters)
 
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
-    results = [
-        {
-            "center": np.array(optim_vars["centers"][s]),
-            "radii": np.array(optim_vars["radii"][s]),
-            "angles": angles,
-        }
-        for s in range(n_sets)
-    ]
+    if representation == "fourier":
+        radii_arr = np.array(fourier_to_radii(optim_vars["fourier_coeffs"], angles_jnp))
+        results = [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": radii_arr[s],
+                "angles": angles,
+                "fourier_coeffs": np.array(optim_vars["fourier_coeffs"][s]),
+            }
+            for s in range(n_sets)
+        ]
+    else:
+        results = [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": np.array(optim_vars["radii"][s]),
+                "angles": angles,
+            }
+            for s in range(n_sets)
+        ]
     return results, history, problem
