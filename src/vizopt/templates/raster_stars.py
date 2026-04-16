@@ -145,7 +145,7 @@ def optimize_star_domains_raster(
     weight_smoothness=1.0,
     enclosures=None,
     enclosure_offset=0.1,
-    exclusion_offset=0.0,
+    exclusion_offset=0.1,
     grid_resolution=128,
     grid_margin=0.5,
     temperature=0.05,
