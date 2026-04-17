@@ -4,7 +4,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from ..base import ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
-from ..components import (
+from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
     calculate_total_width_penalty_ignoring_radii,

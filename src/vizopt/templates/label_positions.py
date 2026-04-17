@@ -5,7 +5,7 @@ from jax import numpy as jnp
 from matplotlib import pyplot as plt
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from .. import components
+from ..components import common
 from ..base import ObjectiveTerm, OptimizationProblemTemplate
 
 
@@ -47,7 +47,7 @@ def calculate_intersection_loss(optim_vars, input_parameters):
         axis=1,
     )
 
-    interlabel_inters_matrix = components.multiple_bbox_intersections(
+    interlabel_inters_matrix = common.multiple_bbox_intersections(
         bbox_matrix, bbox_matrix
     )
     interlabel_inters_array = interlabel_inters_matrix[

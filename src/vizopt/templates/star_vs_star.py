@@ -8,7 +8,7 @@ from jax import numpy as jnp
 
 from vizopt.animation import SnapshotCallback, snapshots_to_animated_svg
 from vizopt.base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
-from vizopt.templates.radially_convex import (
+from vizopt.components.stars import (
     _build_membership,
     _init_centers_and_radii,
     _multi_term_area,
