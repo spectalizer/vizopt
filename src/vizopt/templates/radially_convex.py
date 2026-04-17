@@ -14,8 +14,8 @@ This module provides:
 import numpy as np
 from jax import numpy as jnp
 
-from .base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
-from .utils import _SVG_SET_COLORS
+from ..base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
+from ..utils import _SVG_SET_COLORS
 
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from vizopt.base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
-from vizopt.radially_convex import (
+from vizopt.templates.radially_convex import (
     _multi_term_area,
     _multi_term_min_radius,
     _multi_term_perimeter,
