@@ -55,19 +55,19 @@ def _multi_term_star_exclusion(optim_vars, input_params):
     nonzero penalty — and nonzero gradient — even when the two domains are
     identical or one completely encloses the other.
 
-    optim_vars keys: "centers" (S, 2), "radii" (S, K)
-    input_params keys: "angles" (K,), "exclusion_mask" (S, S) bool
+    optim_vars keys: "centers" (n_sets, 2), "radii" (n_sets, K)
+    input_params keys: "angles" (K,), "exclusion_mask" (n_sets, n_sets) bool
     Optional input_params keys:
         "exclusion_offset" (float): minimum gap enforced between domains.
         "exclusion_interior_fracs" (list[float]): fractions in (0, 1) at which
             to sample interior points along each radial direction.
             Defaults to [0.5].
     """
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]  # (S, K)
+    centers = optim_vars["centers"]  # (n_sets, 2)
+    radii = optim_vars["radii"]  # (n_sets, K)
     angles = input_params["angles"]  # (K,)
-    mask = input_params["exclusion_mask"]  # (S, S) bool
-    S, K = radii.shape
+    mask = input_params["exclusion_mask"]  # (n_sets, n_sets) bool
+    n_sets, K = radii.shape
 
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)  # (K, 2)
 
@@ -79,33 +79,33 @@ def _multi_term_star_exclusion(optim_vars, input_params):
 
     # points[s, f, k] = center_s + frac_f * radii[s, k] * direction_k
     points = (
-        centers[:, None, None, :]  # (S, 1, 1, 2)
+        centers[:, None, None, :]  # (n_sets, 1, 1, 2)
         + fracs[None, :, None, None]  # (1, F, 1, 1)
-        * radii[:, None, :, None]  # (S, 1, K, 1)
+        * radii[:, None, :, None]  # (n_sets, 1, K, 1)
         * directions[None, None, :, :]  # (1, 1, K, 2)
-    )  # (S, F, K, 2)
+    )  # (n_sets, F, K, 2)
 
     # Flatten the F*K sample dimension for joint processing
-    points_flat = points.reshape(S, F * K, 2)  # (S, F*K, 2)
+    points_flat = points.reshape(n_sets, F * K, 2)  # (n_sets, F*K, 2)
 
     # diff[s, t, p] = points[s, p] - centers[t]
-    diff = points_flat[:, None, :, :] - centers[None, :, None, :]  # (S, S, F*K, 2)
+    diff = points_flat[:, None, :, :] - centers[None, :, None, :]  # (n_sets, n_sets, F*K, 2)
 
     # Distance and angle from center_t to each sample point of s
-    dist, alpha = _dist_and_angle(diff)  # (S, S, F*K)
+    dist, alpha = _dist_and_angle(diff)  # (n_sets, n_sets, F*K)
 
     # Convert angle to fractional index in [0, K) and linearly interpolate t's radii
     delta_theta = 2 * jnp.pi / K
-    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta  # (S, S, F*K)
+    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta  # (n_sets, n_sets, F*K)
 
-    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K  # (S, S, F*K)
-    idx_hi = (idx_lo + 1) % K  # (S, S, F*K)
-    w_hi = frac_idx - jnp.floor(frac_idx)  # (S, S, F*K)
+    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K  # (n_sets, n_sets, F*K)
+    idx_hi = (idx_lo + 1) % K  # (n_sets, n_sets, F*K)
+    w_hi = frac_idx - jnp.floor(frac_idx)  # (n_sets, n_sets, F*K)
 
-    t_range = jnp.arange(S)  # (S,)
-    r_lo = radii[t_range[None, :, None], idx_lo]  # (S, S, F*K)
-    r_hi = radii[t_range[None, :, None], idx_hi]  # (S, S, F*K)
-    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (S, S, F*K)
+    t_range = jnp.arange(n_sets)  # (n_sets,)
+    r_lo = radii[t_range[None, :, None], idx_lo]  # (n_sets, n_sets, F*K)
+    r_hi = radii[t_range[None, :, None], idx_hi]  # (n_sets, n_sets, F*K)
+    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (n_sets, n_sets, F*K)
 
     offset = input_params.get("exclusion_offset", 0.0)
     # Penalise when a sample point of s lies inside t  (dist < r_interp + offset)
@@ -123,42 +123,42 @@ def _multi_term_star_enclosure(optim_vars, input_params):
     of the outer set — i.e. when their distance from center_outer exceeds the
     outer set's radius interpolated at that angle.
 
-    optim_vars keys: "centers" (S, 2), "radii" (S, K)
-    input_params keys: "angles" (K,), "enclosure_mask" (S, S) bool
+    optim_vars keys: "centers" (n_sets, 2), "radii" (n_sets, K)
+    input_params keys: "angles" (K,), "enclosure_mask" (n_sets, n_sets) bool
       enclosure_mask[inner, outer] = True  →  inner must be inside outer
     """
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]  # (S, K)
+    centers = optim_vars["centers"]  # (n_sets, 2)
+    radii = optim_vars["radii"]  # (n_sets, K)
     angles = input_params["angles"]  # (K,)
-    mask = input_params["enclosure_mask"]  # (S, S) bool
+    mask = input_params["enclosure_mask"]  # (n_sets, n_sets) bool
 
-    S, K = radii.shape
+    n_sets, K = radii.shape
 
-    # Boundary points of every set: (S, K, 2)
+    # Boundary points of every set: (n_sets, K, 2)
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)  # (K, 2)
     points = (
         centers[:, None, :] + radii[:, :, None] * directions[None, :, :]
-    )  # (S, K, 2)
+    )  # (n_sets, K, 2)
 
     # diff[inner, outer, k] = points[inner, k] - centers[outer]
-    diff = points[:, None, :, :] - centers[None, :, None, :]  # (S, S, K, 2)
+    diff = points[:, None, :, :] - centers[None, :, None, :]  # (n_sets, n_sets, K, 2)
 
     # Distance and angle from center_outer to each boundary point of inner
-    dist, alpha = _dist_and_angle(diff)  # (S, S, K) each
+    dist, alpha = _dist_and_angle(diff)  # (n_sets, n_sets, K) each
 
     # Linearly interpolate outer's radius at that angle
     delta_theta = 2 * jnp.pi / K
-    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta  # (S, S, K) in [0, K)
+    frac_idx = (alpha % (2 * jnp.pi)) / delta_theta  # (n_sets, n_sets, K) in [0, K)
 
-    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K  # (S, S, K)
+    idx_lo = jnp.floor(frac_idx).astype(jnp.int32) % K  # (n_sets, n_sets, K)
     idx_hi = (idx_lo + 1) % K
     w_hi = frac_idx - jnp.floor(frac_idx)
 
     # r_lo[inner, outer, k] = radii[outer, idx_lo[inner, outer, k]]
-    outer_range = jnp.arange(S)  # (S,)
-    r_lo = radii[outer_range[None, :, None], idx_lo]  # (S, S, K)
+    outer_range = jnp.arange(n_sets)  # (n_sets,)
+    r_lo = radii[outer_range[None, :, None], idx_lo]  # (n_sets, n_sets, K)
     r_hi = radii[outer_range[None, :, None], idx_hi]
-    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (S, S, K)
+    r_interp = (1.0 - w_hi) * r_lo + w_hi * r_hi  # (n_sets, n_sets, K)
 
     offset = input_params.get("enclosure_offset", 0.0)
     # Violation: boundary point of inner is OUTSIDE outer minus offset  →  dist > r_interp - offset
@@ -178,18 +178,18 @@ def _multi_term_target_area(optim_vars, input_params):
     The area of a star polygon with K uniformly-spaced radii r_k is:
         A = (1/2) sin(2π/K) Σ_k r_k · r_{k+1}
 
-    optim_vars keys: "radii" (S, K)
-    input_params keys: "target_areas" (S,)  — nan where unspecified
+    optim_vars keys: "radii" (n_sets, K)
+    input_params keys: "target_areas" (n_sets,)  — nan where unspecified
     """
-    radii = optim_vars["radii"]  # (S, K)
-    target = input_params["target_areas"]  # (S,)
+    radii = optim_vars["radii"]  # (n_sets, K)
+    target = input_params["target_areas"]  # (n_sets,)
     K = radii.shape[1]
     delta_theta = 2 * jnp.pi / K
     areas = (
         0.5
         * jnp.sin(delta_theta)
         * jnp.sum(radii * jnp.roll(radii, -1, axis=1), axis=1)
-    )  # (S,)
+    )  # (n_sets,)
     has_target = jnp.isfinite(target)
     # Replace nan targets with current area so the true branch stays finite;
     # without this, (areas - nan)**2 = nan and 0*nan = nan in the backward pass.
@@ -197,8 +197,8 @@ def _multi_term_target_area(optim_vars, input_params):
     return jnp.sum(jnp.where(has_target, (areas - safe_target) ** 2, 0.0))
 
 
-def _build_exclusion_mask(S, enclosures):
-    """Build a boolean (S, S) exclusion mask.
+def _build_exclusion_mask(n_sets, enclosures):
+    """Build a boolean (n_sets, n_sets) exclusion mask.
 
     Exclusion is disabled for (A, B) if and only if A and B have a common
     descendant in the directed enclosure graph (edges go from outer to inner;
@@ -206,21 +206,21 @@ def _build_exclusion_mask(S, enclosures):
     """
     import networkx as nx
 
-    mask = np.ones((S, S), dtype=bool)
+    mask = np.ones((n_sets, n_sets), dtype=bool)
     np.fill_diagonal(mask, False)
 
     if not enclosures:
         return mask
 
     G = nx.DiGraph()
-    G.add_nodes_from(range(S))
+    G.add_nodes_from(range(n_sets))
     for inner, outer in enclosures:
         G.add_edge(outer, inner)
 
-    desc = {s: nx.descendants(G, s) | {s} for s in range(S)}
+    desc = {s: nx.descendants(G, s) | {s} for s in range(n_sets)}
 
-    for a in range(S):
-        for b in range(a + 1, S):
+    for a in range(n_sets):
+        for b in range(a + 1, n_sets):
             if desc[a] & desc[b]:
                 mask[a, b] = False
                 mask[b, a] = False
@@ -231,7 +231,7 @@ def _build_exclusion_mask(S, enclosures):
 def _svg_configuration_star_only(snapshots, input_params, size):
     """SVG configuration for pure star domains (no underlying circles)."""
     angles = input_params["angles"]
-    S = snapshots[0][1]["centers"].shape[0]
+    n_sets = snapshots[0][1]["centers"].shape[0]
 
     # Compute bounding box from all boundary points across all frames
     all_x, all_y = [], []
@@ -255,7 +255,7 @@ def _svg_configuration_star_only(snapshots, input_params, size):
         return (x - x_min) / span * size, (y_max - y) / span * size
 
     elements = []
-    for s in range(S):
+    for s in range(n_sets):
         color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
         points_frames = []
         for _, v in snapshots:
@@ -289,7 +289,7 @@ def _radius_from_target_area(target_area, K):
 
 
 def optimize_star_domains(
-    S,
+    n_sets,
     initial_centers,
     k_angles=64,
     target_areas=None,
@@ -319,10 +319,10 @@ def optimize_star_domains(
     enclosure constraints allow).
 
     Args:
-        S: number of star domains.
-        initial_centers: (S, 2) starting centers for each domain.
+        n_sets: number of star domains.
+        initial_centers: (n_sets, 2) starting centers for each domain.
         k_angles: angular resolution of each boundary polygon.
-        target_areas: list of S values (float or None). None means no area
+        target_areas: list of n_sets values (float or None). None means no area
             target for that set; its area is then minimised by weight_area.
         initial_radius: fallback starting radius for sets without a target area.
         weight_target_area: weight for the target-area penalty.
@@ -343,23 +343,23 @@ def optimize_star_domains(
         callback: optional iteration callback.
 
     Returns:
-        (results, history, problem) where results is a list of S dicts with
+        (results, history, problem) where results is a list of n_sets dicts with
         "center" (2,), "radii" (K,), "angles" (K,).
     """
 
     if exclusion_interior_fracs is None:
         exclusion_interior_fracs = [0.5]
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
-    initial_centers = np.asarray(initial_centers, dtype=np.float32)  # (S, 2)
+    initial_centers = np.asarray(initial_centers, dtype=np.float32)  # (n_sets, 2)
 
     # Build per-set initial radii from target areas where available
-    targets_raw = target_areas if target_areas is not None else [None] * S
+    targets_raw = target_areas if target_areas is not None else [None] * n_sets
     target_arr = np.array(
         [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
-    )  # (S,) with nan for unspecified
+    )  # (n_sets,) with nan for unspecified
 
-    initial_radii = np.zeros((S, k_angles), dtype=np.float32)
-    for s in range(S):
+    initial_radii = np.zeros((n_sets, k_angles), dtype=np.float32)
+    for s in range(n_sets):
         r0 = (
             _radius_from_target_area(target_arr[s], k_angles)
             if np.isfinite(target_arr[s])
@@ -368,12 +368,12 @@ def optimize_star_domains(
         initial_radii[s] = r0
 
     # Enclosure mask
-    enclosure_mask = np.zeros((S, S), dtype=bool)
+    enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
     for inner, outer in enclosures or []:
         enclosure_mask[inner, outer] = True
 
     # Exclusion is disabled for pairs in a containment relationship
-    exclusion_mask = _build_exclusion_mask(S, enclosures)
+    exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
 
     input_parameters = {
         "angles": angles,
@@ -415,7 +415,7 @@ def optimize_star_domains(
             "radii": np.array(optim_vars["radii"][s]),
             "angles": angles,
         }
-        for s in range(S)
+        for s in range(n_sets)
     ]
     return results, history, problem
 
@@ -441,7 +441,7 @@ def optimize_star_vs_star(
 
     Args:
         circles: (N, 3) array [cx, cy, r].
-        sets: list of S index subsets into circles.
+        sets: list of n_sets index subsets into circles.
         k_angles: number of angular samples per boundary.
         weight_area, weight_perimeter, weight_smoothness: loss weights.
         weight_exclusion: weight for the star-vs-star exclusion penalty
@@ -462,24 +462,24 @@ def optimize_star_vs_star(
     if circles_array.ndim == 1:
         circles_array = circles_array[None, :]
     N = len(circles_array)
-    S = len(sets)
+    n_sets = len(sets)
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
 
-    membership = _build_membership(S, N, sets)
+    membership = _build_membership(n_sets, N, sets)
     initial_centers, initial_radii = _init_centers_and_radii(
         circles_array, sets, angles
     )
     offsets_array = np.broadcast_to(
-        np.asarray(offsets, dtype=np.float32), (S, N)
+        np.asarray(offsets, dtype=np.float32), (n_sets, N)
     ).copy()
 
-    # Build enclosure mask (S, S): [inner, outer]
-    enclosure_mask = np.zeros((S, S), dtype=bool)
+    # Build enclosure mask (n_sets, n_sets): [inner, outer]
+    enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
     for inner, outer in enclosures or []:
         enclosure_mask[inner, outer] = True
 
     # Exclusion is disabled for pairs in a containment relationship
-    exclusion_mask = _build_exclusion_mask(S, enclosures)
+    exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
 
     input_parameters = {
         "circles": circles_array,
@@ -517,6 +517,6 @@ def optimize_star_vs_star(
             "radii": np.array(optim_vars["radii"][s]),
             "angles": angles,
         }
-        for s in range(S)
+        for s in range(n_sets)
     ]
     return results, history, problem
