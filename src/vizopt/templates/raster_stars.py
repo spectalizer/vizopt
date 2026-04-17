@@ -253,6 +253,129 @@ def _wrap_fourier_term(fn, angles):
     return wrapped
 
 
+def _interp_bspline(ctrl_s, alpha_s):
+    """Evaluate a uniform periodic cubic B-spline at angles alpha_s.
+
+    Args:
+        ctrl_s: (P,) control points.
+        alpha_s: (...) evaluation angles in radians.
+
+    Returns:
+        (...) interpolated radius values.
+    """
+    P = ctrl_s.shape[0]
+    dt = 2.0 * jnp.pi / P
+    raw = (alpha_s % (2.0 * jnp.pi)) / dt  # fractional index in [0, P)
+    i = jnp.floor(raw).astype(jnp.int32) % P
+    t = raw - jnp.floor(raw)  # local parameter in [0, 1)
+    t2 = t * t
+    t3 = t2 * t
+    b0 = (1.0 - t) ** 3 / 6.0
+    b1 = (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0
+    b2 = (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0
+    b3 = t3 / 6.0
+    return (
+        b0 * ctrl_s[(i - 1) % P]
+        + b1 * ctrl_s[i]
+        + b2 * ctrl_s[(i + 1) % P]
+        + b3 * ctrl_s[(i + 2) % P]
+    )
+
+
+def bspline_to_radii(ctrl_pts, angles):
+    """Evaluate uniform periodic cubic B-splines at given angles.
+
+    Args:
+        ctrl_pts: (n_sets, P) B-spline control points.
+        angles: (K,) evaluation angles in radians.
+
+    Returns:
+        (n_sets, K) radius values.
+    """
+    return jax.vmap(lambda c: _interp_bspline(c, angles))(ctrl_pts)
+
+
+def soft_rasterize_star_bspline(
+    centers,
+    ctrl_pts,
+    grid_xy,
+    temperature=0.05,
+    offset=0.0,
+):
+    """Soft-rasterize n_sets star domains using a B-spline boundary representation.
+
+    Like `soft_rasterize_star` but r(θ) is a uniform periodic cubic B-spline,
+    giving C² smooth boundaries at O(1) per-pixel cost (no trig evaluations).
+
+    Args:
+        centers: (n_sets, 2) domain centers.
+        ctrl_pts: (n_sets, P) B-spline control points.
+        grid_xy: (H, W, 2) pixel centre coordinates.
+        temperature: sigmoid sharpness; smaller → harder boundary.
+        offset: outward boundary shift (same semantics as `soft_rasterize_star`).
+
+    Returns:
+        masks: (n_sets, H, W) soft membership values in (0, 1).
+    """
+    diff = grid_xy[None, :, :, :] - centers[:, None, None, :]
+    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)
+
+    rho2 = jnp.sum(diff**2, axis=-1)
+    dx_safe = jnp.where(rho2 > 0, diff[..., 0], 1.0)
+    dy_safe = jnp.where(rho2 > 0, diff[..., 1], 0.0)
+    alpha = jnp.arctan2(dy_safe, dx_safe)  # (n_sets, H, W)
+
+    r_interp = jax.vmap(_interp_bspline)(ctrl_pts, alpha)  # (n_sets, H, W)
+    return jax.nn.sigmoid((r_interp + offset - dist) / temperature)
+
+
+def raster_collision_loss_bspline(optim_vars, input_params):
+    """Raster-based pairwise collision loss using a B-spline boundary representation.
+
+    Same semantics as `raster_collision_loss` but reads ``bspline_ctrl`` from
+    *optim_vars* instead of ``radii``.
+
+    optim_vars keys:
+        "centers":      (n_sets, 2)
+        "bspline_ctrl": (n_sets, P)
+    input_params keys: same as `raster_collision_loss`.
+    """
+    centers = optim_vars["centers"]
+    ctrl_pts = optim_vars["bspline_ctrl"]
+    grid_xy = input_params["grid_xy"]
+    pixel_area = input_params["pixel_area"]
+    mask = input_params["exclusion_mask"]
+    temperature = input_params.get("temperature", 0.05)
+    exclusion_offset = input_params.get("exclusion_offset", 0.0)
+
+    masks = soft_rasterize_star_bspline(centers, ctrl_pts, grid_xy, temperature, exclusion_offset)
+    HW = grid_xy.shape[0] * grid_xy.shape[1]
+    masks_flat = masks.reshape(masks.shape[0], HW)
+    overlap = pixel_area * (masks_flat @ masks_flat.T)
+    return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+
+
+def _wrap_bspline_term(fn, angles):
+    """Adapt a loss term that reads optim_vars["radii"] to accept bspline_ctrl."""
+
+    def wrapped(optim_vars, input_params):
+        radii = bspline_to_radii(optim_vars["bspline_ctrl"], angles)
+        return fn({**optim_vars, "radii": radii}, input_params)
+
+    return wrapped
+
+
+def _svg_configuration_bspline(snapshots, input_params, size):
+    """SVG configuration for B-spline star domains; converts bspline_ctrl → radii."""
+    angles = input_params["angles"]
+    angles_jnp = jnp.array(angles)
+    converted = [
+        (i, {**v, "radii": np.array(bspline_to_radii(v["bspline_ctrl"], angles_jnp))})
+        for i, v in snapshots
+    ]
+    return _svg_configuration_star_only(converted, input_params, size)
+
+
 def optimize_star_domains_raster(
     n_sets,
     initial_centers,
@@ -273,6 +396,7 @@ def optimize_star_domains_raster(
     temperature=0.05,
     representation="discrete",
     n_harmonics=8,
+    n_ctrl_pts=16,
     optim_config=None,
     callback=None,
 ):
@@ -309,21 +433,28 @@ def optimize_star_domains_raster(
         grid_resolution: pixels along the longer axis of the bounding box.
         grid_margin: extra margin (in scene units) around the bounding box.
         temperature: sigmoid sharpness for soft rasterization.
-        representation: ``"discrete"`` (default) stores one radius per angle;
-            ``"fourier"`` stores Fourier coefficients and evaluates r(θ) exactly
-            at any angle, giving exact gradients without interpolation artefacts.
+        representation: boundary parameterisation — ``"discrete"`` (default) stores
+            one radius per angle; ``"fourier"`` stores Fourier coefficients;
+            ``"b-spline"`` stores uniform periodic cubic B-spline control points
+            (C² smooth, O(1) per-pixel evaluation, no trig).
         n_harmonics: number of Fourier harmonics M when ``representation="fourier"``;
-            the optimisation variable has shape ``(n_sets, 2M+1)``.
+            optimisation variable shape ``(n_sets, 2M+1)``.
+        n_ctrl_pts: number of B-spline control points when
+            ``representation="b-spline"``; optimisation variable shape
+            ``(n_sets, n_ctrl_pts)``.
         optim_config: OptimConfig; uses defaults when None.
         callback: optional iteration callback.
 
     Returns:
         (results, history, problem) where results is a list of n_sets dicts with
         keys ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,), and
-        (Fourier mode only) ``"fourier_coeffs"`` (2M+1,).
+        representation-specific extras: ``"fourier_coeffs"`` (2M+1,) or
+        ``"bspline_ctrl"`` (P,).
     """
-    if representation not in ("discrete", "fourier"):
-        raise ValueError(f"representation must be 'discrete' or 'fourier', got {representation!r}")
+    if representation not in ("discrete", "fourier", "b-spline"):
+        raise ValueError(
+            f"representation must be 'discrete', 'fourier', or 'b-spline', got {representation!r}"
+        )
 
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
     angles_jnp = jnp.array(angles)
@@ -394,6 +525,28 @@ def optimize_star_domains_raster(
             ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
         ]
         svg_configuration = _svg_configuration_fourier
+    elif representation == "b-spline":
+        initial_ctrl_pts = np.zeros((n_sets, n_ctrl_pts), dtype=np.float32)
+        for s in range(n_sets):
+            initial_ctrl_pts[s] = initial_radii[s, 0]
+
+        def initialize(*_):
+            return {
+                "centers": initial_centers.copy(),
+                "bspline_ctrl": initial_ctrl_pts.copy(),
+            }
+
+        wrap = lambda fn: _wrap_bspline_term(fn, angles_jnp)
+        terms = [
+            ObjectiveTerm("target_area", wrap(_multi_term_target_area), weight_target_area),
+            ObjectiveTerm("raster_excl", raster_collision_loss_bspline, weight_exclusion),
+            ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
+            ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
+            ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness),
+            ObjectiveTerm("area", wrap(_multi_term_area), weight_area),
+            ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
+        ]
+        svg_configuration = _svg_configuration_bspline
     else:
         def initialize(*_):
             return {
@@ -428,6 +581,17 @@ def optimize_star_domains_raster(
                 "radii": radii_arr[s],
                 "angles": angles,
                 "fourier_coeffs": np.array(optim_vars["fourier_coeffs"][s]),
+            }
+            for s in range(n_sets)
+        ]
+    elif representation == "b-spline":
+        radii_arr = np.array(bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp))
+        results = [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": radii_arr[s],
+                "angles": angles,
+                "bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s]),
             }
             for s in range(n_sets)
         ]
