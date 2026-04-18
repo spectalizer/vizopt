@@ -670,19 +670,30 @@ class StarRepresentation(ABC):
         """
         return {}
 
-    def make_svg_configuration(self):
+    def make_svg_configuration(self, base_svg_fn=None):
         """Return an ``svg_configuration`` function compatible with the animation helper.
 
-        Converts representation-specific vars to radii on each snapshot so the
-        standard polygon renderer can be reused for all representations.
+        Converts representation-specific vars to radii on each snapshot so any
+        base SVG renderer that reads ``optim_vars["radii"]`` can be reused for
+        all representations.
+
+        Args:
+            base_svg_fn: the underlying ``(snapshots, input_params, size) →
+                elements`` function to delegate to after radii conversion.
+                Defaults to :func:`_svg_configuration_star_only` (pure star
+                domains). Pass :func:`_svg_configuration_fixed` or
+                :func:`_svg_configuration_movable` when circles are present.
         """
+        if base_svg_fn is None:
+            base_svg_fn = _svg_configuration_star_only
+
         def svg_configuration(snapshots, input_params, size):
             angles_jnp = jnp.array(input_params["angles"])
             converted = [
                 (i, {**v, "radii": np.array(self.to_radii(v, angles_jnp))})
                 for i, v in snapshots
             ]
-            return _svg_configuration_star_only(converted, input_params, size)
+            return base_svg_fn(converted, input_params, size)
 
         return svg_configuration
 

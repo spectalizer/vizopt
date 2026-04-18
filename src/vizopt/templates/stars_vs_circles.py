@@ -12,7 +12,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
-from ..components.stars import Discrete, StarRepresentation
+from ..components.stars import (
+    Discrete,
+    StarRepresentation,
+    _svg_configuration_fixed,
+    _svg_configuration_movable,
+)
 from ..components.stars import (
     _build_membership,
     _init_centers_and_radii,
@@ -137,7 +142,8 @@ def optimize_multiple_radially_convex_sets(
     ]
 
     problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize, svg_configuration=representation.make_svg_configuration()
+        terms=terms, initialize=initialize,
+        svg_configuration=representation.make_svg_configuration(_svg_configuration_fixed)
     ).instantiate(input_parameters)
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
@@ -284,7 +290,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     ]
 
     problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize, svg_configuration=representation.make_svg_configuration()
+        terms=terms, initialize=initialize,
+        svg_configuration=representation.make_svg_configuration(_svg_configuration_movable)
     ).instantiate(input_parameters)
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
