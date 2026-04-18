@@ -333,6 +333,73 @@ def _loss_curve_svg_lines(
     return lines
 
 
+def chronophotograph(
+    problem: OptimizationProblem,
+    snapshots: list[tuple[int, Any]],
+    n_frames: int = 8,
+    alpha_start: float = 0.15,
+    alpha_end: float = 1.0,
+) -> Any:
+    """Create a static chronophotography composite of the optimization process.
+
+    Renders a selection of evenly-spaced snapshots and overlays them into a
+    single static figure.  Earlier frames are faint ghosts; the latest frame
+    is fully opaque, so the eye reads the trajectory at a glance.
+
+    Args:
+        problem: The optimization problem; must have ``plot_configuration`` set.
+        snapshots: List of ``(iteration, optim_vars)`` tuples as produced by
+            :class:`SnapshotCallback`.
+        n_frames: Number of evenly-spaced frames to overlay.  Clamped to
+            ``len(snapshots)``.
+        alpha_start: Blend weight of the earliest selected frame (0–1).
+        alpha_end: Blend weight of the latest selected frame (0–1).
+
+    Returns:
+        A matplotlib ``Figure`` containing the composite image.
+
+    Raises:
+        ValueError: If ``problem.plot_configuration`` is not set or
+            ``snapshots`` is empty.
+    """
+    from matplotlib import pyplot as plt
+
+    if problem.plot_configuration is None:
+        raise ValueError("problem.plot_configuration must be set to chronophotograph.")
+    if not snapshots:
+        raise ValueError("snapshots is empty.")
+
+    # Pick evenly-spaced indices across the snapshot list
+    n = min(n_frames, len(snapshots))
+    indices = np.linspace(0, len(snapshots) - 1, n, dtype=int)
+    selected = [snapshots[i] for i in indices]
+    alphas = np.linspace(alpha_start, alpha_end, n)
+
+    # Render each frame to an RGBA float array
+    images: list[np.ndarray] = []
+    for _, optim_vars in selected:
+        problem.plot_configuration(optim_vars, problem.input_parameters)
+        fig = plt.gcf()
+        fig.canvas.draw()
+        w, h = fig.canvas.get_width_height()
+        buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).copy()  # type: ignore
+        images.append(buf.reshape(h, w, 4).astype(np.float32) / 255.0)
+        plt.close(fig)
+
+    # Alpha-composite onto a white canvas: earlier frames leave faint traces,
+    # the final frame dominates.  Because all rendered backgrounds are white,
+    # white-on-white stays white and only the coloured marks accumulate.
+    canvas = np.ones_like(images[0])
+    for img, alpha in zip(images, alphas):
+        canvas = (1.0 - alpha) * canvas + alpha * img
+
+    fig_out, ax_out = plt.subplots()
+    ax_out.imshow(canvas)
+    ax_out.axis("off")
+    fig_out.tight_layout(pad=0)
+    return fig_out
+
+
 def smil_animate(
     attr_name: str,
     per_frame_values: list[str],
