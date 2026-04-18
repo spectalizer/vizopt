@@ -1,14 +1,20 @@
-import jax
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from IPython.display import SVG
-from jax import numpy as jnp
+"""Star-domain optimization without underlying circles.
 
-from vizopt.animation import SnapshotCallback, snapshots_to_animated_svg
-from vizopt.base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
-from vizopt.components.stars import (
+Finds star-shaped regions satisfying enclosure/exclusion constraints with
+optional per-set area targets. Each boundary is parametrized as a center + K
+radii at uniformly-spaced angles (or a Fourier/B-spline variant).
+
+General star-domain loss terms and helpers live in
+:mod:`vizopt.components.stars`.
+"""
+
+import jax.numpy as jnp
+import numpy as np
+
+from ..base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from ..components.stars import (
+    Discrete,
+    StarRepresentation,
     _build_membership,
     _init_centers_and_radii,
     _multi_term_area,
@@ -17,8 +23,8 @@ from vizopt.components.stars import (
     _multi_term_perimeter,
     _multi_term_smoothness,
     _svg_configuration_fixed,
-    _svg_configuration_star_only,
 )
+
 
 def _dist_and_angle(diff):
     """Compute distance and angle for an array of 2-D displacement vectors.
@@ -236,7 +242,7 @@ def _radius_from_target_area(target_area, K):
 def optimize_star_domains(
     n_sets,
     initial_centers,
-    k_angles=64,
+    representation: StarRepresentation | None = None,
     target_areas=None,
     initial_radius=1.0,
     weight_target_area=20.0,
@@ -249,8 +255,8 @@ def optimize_star_domains(
     exclusion_offset=0.1,
     enclosure_offset=0.1,
     exclusion_interior_fracs=None,
-    optim_config=None,
-    callback=None,
+    optim_config: OptimConfig | None = None,
+    callback: Callback | None = None,
 ):
     """Optimise pure star domains with no underlying circles.
 
@@ -266,7 +272,9 @@ def optimize_star_domains(
     Args:
         n_sets: number of star domains.
         initial_centers: (n_sets, 2) starting centers for each domain.
-        k_angles: angular resolution of each boundary polygon.
+        representation: star domain parametrization. One of :class:`Discrete`
+            (default), :class:`Fourier`, or :class:`BSpline`. Angular resolution
+            is set via ``representation.k_angles``.
         target_areas: list of n_sets values (float or None). None means no area
             target for that set; its area is then minimised by weight_area.
         initial_radius: fallback starting radius for sets without a target area.
@@ -289,15 +297,19 @@ def optimize_star_domains(
 
     Returns:
         (results, history, problem) where results is a list of n_sets dicts with
-        "center" (2,), "radii" (K,), "angles" (K,).
+        "center" (2,), "radii" (K,), "angles" (K,), plus any
+        representation-specific extras.
     """
-
+    if representation is None:
+        representation = Discrete()
     if exclusion_interior_fracs is None:
         exclusion_interior_fracs = [0.5]
+
+    k_angles = representation.k_angles
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
+    angles_jnp = jnp.array(angles)
     initial_centers = np.asarray(initial_centers, dtype=np.float32)  # (n_sets, 2)
 
-    # Build per-set initial radii from target areas where available
     targets_raw = target_areas if target_areas is not None else [None] * n_sets
     target_arr = np.array(
         [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
@@ -312,12 +324,10 @@ def optimize_star_domains(
         )
         initial_radii[s] = r0
 
-    # Enclosure mask
     enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
     for inner, outer in enclosures or []:
         enclosure_mask[inner, outer] = True
 
-    # Exclusion is disabled for pairs in a containment relationship
     exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
 
     input_parameters = {
@@ -330,35 +340,39 @@ def optimize_star_domains(
         "exclusion_interior_fracs": exclusion_interior_fracs,
     }
 
+    init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
+
     def initialize(_, seed):
-        return {
-            "centers": initial_centers.copy(),
-            "radii": initial_radii.copy(),
-        }
+        return {k: v.copy() for k, v in init_vars.items()}
+
+    def wrap(fn):
+        return representation.wrap(fn, angles_jnp)
 
     terms = [
-        ObjectiveTerm("target_area", _multi_term_target_area, weight_target_area),
-        ObjectiveTerm("star_excl", _multi_term_star_exclusion, weight_exclusion),
-        ObjectiveTerm("star_enclose", _multi_term_star_enclosure, weight_enclosure),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
-        ObjectiveTerm("area", _multi_term_area, weight_area),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
+        ObjectiveTerm("target_area",  wrap(_multi_term_target_area),    weight_target_area),
+        ObjectiveTerm("star_excl",    wrap(_multi_term_star_exclusion), weight_exclusion),
+        ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
+        ObjectiveTerm("min_radius",   wrap(_multi_term_min_radius),     10.0),
+        ObjectiveTerm("smoothness",   wrap(_multi_term_smoothness),     weight_smoothness),
+        ObjectiveTerm("area",         wrap(_multi_term_area),           weight_area),
+        ObjectiveTerm("perimeter",    wrap(_multi_term_perimeter),      weight_perimeter),
     ]
-    _multi_term_star_exclusion(initialize(input_parameters, 0), input_parameters)
+
     problem = OptimizationProblemTemplate(
         terms=terms,
         initialize=initialize,
-        svg_configuration=_svg_configuration_star_only,
+        svg_configuration=representation.make_svg_configuration(),
     ).instantiate(input_parameters)
 
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
+    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
     results = [
         {
             "center": np.array(optim_vars["centers"][s]),
-            "radii": np.array(optim_vars["radii"][s]),
+            "radii": radii_arr[s],
             "angles": angles,
+            **representation.extra_results(s, optim_vars),
         }
         for s in range(n_sets)
     ]
@@ -368,16 +382,16 @@ def optimize_star_domains(
 def optimize_star_vs_star(
     circles,
     sets,
-    k_angles=32,
     weight_area=1.0,
     weight_perimeter=1.0,
     weight_exclusion=10.0,
     weight_enclosure=10.0,
     weight_smoothness=1.0,
     offsets=0.1,
+    representation: StarRepresentation | None = None,
     enclosures=None,
-    optim_config=None,
-    callback=None,
+    optim_config: OptimConfig | None = None,
+    callback: Callback | None = None,
 ):
     """Like optimize_multiple_radially_convex_sets, but with star-vs-star terms.
 
@@ -387,13 +401,15 @@ def optimize_star_vs_star(
     Args:
         circles: (N, 3) array [cx, cy, r].
         sets: list of n_sets index subsets into circles.
-        k_angles: number of angular samples per boundary.
         weight_area, weight_perimeter, weight_smoothness: loss weights.
         weight_exclusion: weight for the star-vs-star exclusion penalty
             (all pairs (s, t) with s ≠ t).
         weight_enclosure: weight for the star-vs-star enclosure penalty.
             Only active when `enclosures` is non-empty.
         offsets: padding added to circle radii in the enclosure term.
+        representation: star domain parametrization. One of :class:`Discrete`
+            (default), :class:`Fourier`, or :class:`BSpline`. Angular resolution
+            is set via ``representation.k_angles``.
         enclosures: list of (inner_idx, outer_idx) pairs. Each pair means
             "the boundary of sets[inner_idx] must lie inside sets[outer_idx]."
             Default None (no enclosure constraint).
@@ -403,12 +419,16 @@ def optimize_star_vs_star(
     Returns:
         (results, history, problem) — same shape as optimize_multiple_radially_convex_sets.
     """
+    if representation is None:
+        representation = Discrete()
+
     circles_array = np.asarray(circles, dtype=np.float32)
     if circles_array.ndim == 1:
         circles_array = circles_array[None, :]
     N = len(circles_array)
     n_sets = len(sets)
-    angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
+    angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(np.float32)
+    angles_jnp = jnp.array(angles)
 
     membership = _build_membership(n_sets, N, sets)
     initial_centers, initial_radii = _init_centers_and_radii(
@@ -418,12 +438,10 @@ def optimize_star_vs_star(
         np.asarray(offsets, dtype=np.float32), (n_sets, N)
     ).copy()
 
-    # Build enclosure mask (n_sets, n_sets): [inner, outer]
     enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
     for inner, outer in enclosures or []:
         enclosure_mask[inner, outer] = True
 
-    # Exclusion is disabled for pairs in a containment relationship
     exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
 
     input_parameters = {
@@ -435,32 +453,39 @@ def optimize_star_vs_star(
         "exclusion_mask": exclusion_mask,
     }
 
+    init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
+
     def initialize(_, seed):
-        return {"centers": initial_centers, "radii": initial_radii}
+        return {k: v.copy() for k, v in init_vars.items()}
+
+    def wrap(fn):
+        return representation.wrap(fn, angles_jnp)
 
     terms = [
-        ObjectiveTerm("enclosure", _multi_term_enclosure, 10.0),
-        ObjectiveTerm("star_excl", _multi_term_star_exclusion, weight_exclusion),
-        ObjectiveTerm("star_enclose", _multi_term_star_enclosure, weight_enclosure),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
-        ObjectiveTerm("area", _multi_term_area, weight_area),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
+        ObjectiveTerm("enclosure",    wrap(_multi_term_enclosure),      10.0),
+        ObjectiveTerm("star_excl",    wrap(_multi_term_star_exclusion), weight_exclusion),
+        ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
+        ObjectiveTerm("min_radius",   wrap(_multi_term_min_radius),     10.0),
+        ObjectiveTerm("smoothness",   wrap(_multi_term_smoothness),     weight_smoothness),
+        ObjectiveTerm("area",         wrap(_multi_term_area),           weight_area),
+        ObjectiveTerm("perimeter",    wrap(_multi_term_perimeter),      weight_perimeter),
     ]
 
     problem = OptimizationProblemTemplate(
         terms=terms,
         initialize=initialize,
-        svg_configuration=_svg_configuration_fixed,
+        svg_configuration=representation.make_svg_configuration(_svg_configuration_fixed),
     ).instantiate(input_parameters)
 
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
+    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
     results = [
         {
             "center": np.array(optim_vars["centers"][s]),
-            "radii": np.array(optim_vars["radii"][s]),
+            "radii": radii_arr[s],
             "angles": angles,
+            **representation.extra_results(s, optim_vars),
         }
         for s in range(n_sets)
     ]
