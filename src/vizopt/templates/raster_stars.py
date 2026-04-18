@@ -1,8 +1,11 @@
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vizopt.base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
 from vizopt.components.stars import (
     _multi_term_area,
     _multi_term_min_radius,
@@ -10,11 +13,9 @@ from vizopt.components.stars import (
     _multi_term_smoothness,
 )
 from vizopt.components.bspline_stars import (
-    _svg_configuration_bspline_star_only,
     _wrap_bspline_term,
     bspline_to_radii,
     raster_collision_loss_bspline,
-    soft_rasterize_star_bspline,
 )
 from vizopt.templates.star_vs_star import (
     _build_exclusion_mask,
@@ -23,6 +24,11 @@ from vizopt.templates.star_vs_star import (
     _radius_from_target_area,
     _svg_configuration_star_only,
 )
+
+
+# ---------------------------------------------------------------------------
+# Pixel grid
+# ---------------------------------------------------------------------------
 
 
 def make_pixel_grid(x_min, x_max, y_min, y_max, resolution):
@@ -51,6 +57,11 @@ def make_pixel_grid(x_min, x_max, y_min, y_max, resolution):
     grid_xy = np.stack([gx, gy], axis=-1).astype(np.float32)  # (H, W, 2)
     pixel_area = float((x_max - x_min) * (y_max - y_min) / (H * W))
     return grid_xy, pixel_area
+
+
+# ---------------------------------------------------------------------------
+# Discrete (piecewise-linear) rasterization and loss
+# ---------------------------------------------------------------------------
 
 
 def soft_rasterize_star(
@@ -136,6 +147,11 @@ def raster_collision_loss(optim_vars, input_params):
     overlap = pixel_area * (masks_flat @ masks_flat.T)  # (S, S)
 
     return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+
+
+# ---------------------------------------------------------------------------
+# Fourier rasterization and loss
+# ---------------------------------------------------------------------------
 
 
 def fourier_to_radii(coeffs, angles):
@@ -238,18 +254,6 @@ def raster_collision_loss_fourier(optim_vars, input_params):
     return jnp.sum(jnp.where(mask, overlap**2, 0.0))
 
 
-def _svg_configuration_fourier(snapshots, input_params, size):
-    """SVG configuration for Fourier star domains; converts fourier_coeffs → radii."""
-    angles = input_params["angles"]
-    angles_jnp = jnp.array(angles)
-    # Inject radii into each snapshot so the existing renderer can be reused
-    converted = [
-        (i, {**v, "radii": np.array(fourier_to_radii(v["fourier_coeffs"], angles_jnp))})
-        for i, v in snapshots
-    ]
-    return _svg_configuration_star_only(converted, input_params, size)
-
-
 def _wrap_fourier_term(fn, angles):
     """Adapt a loss term that reads optim_vars["radii"] to accept fourier_coeffs."""
 
@@ -260,11 +264,178 @@ def _wrap_fourier_term(fn, angles):
     return wrapped
 
 
+# ---------------------------------------------------------------------------
+# Representation classes
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StarRepresentation(ABC):
+    """Base class for star domain boundary representations.
+
+    A representation determines how the boundary of each star domain is
+    parametrised during optimisation — what the optimisation variable looks
+    like, how it maps to radii for analytical loss terms, and how the
+    pixel-grid collision loss is evaluated.
+
+    Attributes:
+        k_angles: Angular resolution — number of uniformly-spaced angles used
+            to sample the boundary for analytical loss terms. For
+            ``Discrete`` this is also the number of optimised radii.
+    """
+
+    k_angles: int = 64
+
+    @abstractmethod
+    def initialize_vars(
+        self,
+        n_sets: int,
+        initial_radii: np.ndarray,
+        initial_centers: np.ndarray,
+    ) -> dict:
+        """Return the initial optimisation-variable dict.
+
+        Args:
+            n_sets: number of star domains.
+            initial_radii: (n_sets, k_angles) initial radius values.
+            initial_centers: (n_sets, 2) initial domain centres.
+        """
+
+    def wrap(self, fn, angles_jnp):
+        """Adapt a loss term expecting ``optim_vars["radii"]`` to this representation.
+
+        The default identity is correct for ``Discrete``, which already stores
+        radii directly. Subclasses override to insert a radii-conversion step.
+        """
+        return fn
+
+    @property
+    @abstractmethod
+    def collision_loss(self):
+        """The raster collision loss function ``(optim_vars, input_params) → scalar``."""
+
+    @abstractmethod
+    def to_radii(self, optim_vars: dict, angles_jnp) -> np.ndarray:
+        """Convert optimisation variables to an (n_sets, K) radii array."""
+
+    def extra_results(self, s: int, optim_vars: dict) -> dict:
+        """Representation-specific extras added to the result dict of set *s*.
+
+        Empty by default (``Discrete`` has no extras).
+        """
+        return {}
+
+    def make_svg_configuration(self):
+        """Return an ``svg_configuration`` function compatible with the animation helper.
+
+        Converts representation-specific vars to radii on each snapshot so the
+        standard polygon renderer can be reused for all representations.
+        """
+        def svg_configuration(snapshots, input_params, size):
+            angles_jnp = jnp.array(input_params["angles"])
+            converted = [
+                (i, {**v, "radii": np.array(self.to_radii(v, angles_jnp))})
+                for i, v in snapshots
+            ]
+            return _svg_configuration_star_only(converted, input_params, size)
+
+        return svg_configuration
+
+
+@dataclass
+class Discrete(StarRepresentation):
+    """One radius per angle, linearly interpolated.
+
+    The optimisation variable is ``radii`` of shape ``(n_sets, k_angles)``.
+    This is the simplest representation and the default.
+    """
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        return {"centers": initial_centers.copy(), "radii": initial_radii.copy()}
+
+    @property
+    def collision_loss(self):
+        return raster_collision_loss
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return optim_vars["radii"]
+
+
+@dataclass
+class Fourier(StarRepresentation):
+    """Fourier series boundary: r(θ) = a₀ + Σ aₖcos(kθ) + bₖsin(kθ).
+
+    The optimisation variable is ``fourier_coeffs`` of shape
+    ``(n_sets, 2 * n_harmonics + 1)``, stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+    Gives C∞-smooth boundaries with compact parametrisation.
+
+    Attributes:
+        n_harmonics: number of Fourier harmonics M.
+    """
+
+    n_harmonics: int = 8
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        coeffs = np.zeros((n_sets, 2 * self.n_harmonics + 1), dtype=np.float32)
+        coeffs[:, 0] = initial_radii[:, 0]  # DC term = mean radius
+        return {"centers": initial_centers.copy(), "fourier_coeffs": coeffs}
+
+    def wrap(self, fn, angles_jnp):
+        return _wrap_fourier_term(fn, angles_jnp)
+
+    @property
+    def collision_loss(self):
+        return raster_collision_loss_fourier
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return fourier_to_radii(optim_vars["fourier_coeffs"], angles_jnp)
+
+    def extra_results(self, s, optim_vars):
+        return {"fourier_coeffs": np.array(optim_vars["fourier_coeffs"][s])}
+
+
+@dataclass
+class BSpline(StarRepresentation):
+    """Uniform periodic cubic B-spline boundary.
+
+    The optimisation variable is ``bspline_ctrl`` of shape
+    ``(n_sets, n_ctrl_pts)``. Gives C²-smooth boundaries with O(1) per-pixel
+    evaluation and no trigonometric operations beyond the initial angle lookup.
+
+    Attributes:
+        n_ctrl_pts: number of B-spline control points.
+    """
+
+    n_ctrl_pts: int = 16
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        ctrl = np.zeros((n_sets, self.n_ctrl_pts), dtype=np.float32)
+        ctrl[:] = initial_radii[:, 0:1]  # broadcast mean radius to all control points
+        return {"centers": initial_centers.copy(), "bspline_ctrl": ctrl}
+
+    def wrap(self, fn, angles_jnp):
+        return _wrap_bspline_term(fn, angles_jnp)
+
+    @property
+    def collision_loss(self):
+        return raster_collision_loss_bspline
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp)
+
+    def extra_results(self, s, optim_vars):
+        return {"bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s])}
+
+
+# ---------------------------------------------------------------------------
+# Optimiser
+# ---------------------------------------------------------------------------
+
 
 def optimize_star_domains_raster(
     n_sets,
     initial_centers,
-    k_angles=64,
+    representation: StarRepresentation = None,
     target_areas=None,
     initial_radius=1.0,
     weight_target_area=20.0,
@@ -279,9 +450,6 @@ def optimize_star_domains_raster(
     grid_resolution=128,
     grid_margin=0.5,
     temperature=0.05,
-    representation="discrete",
-    n_harmonics=8,
-    n_ctrl_pts=16,
     optim_config=None,
     callback=None,
 ):
@@ -299,9 +467,10 @@ def optimize_star_domains_raster(
     Args:
         n_sets: number of star domains.
         initial_centers: (n_sets, 2) starting centers.
-        k_angles: angular resolution of each boundary polygon (discrete mode) or
-            number of angles at which the Fourier series is sampled for analytical
-            loss terms (Fourier mode).
+        representation: a ``StarRepresentation`` instance (``Discrete``,
+            ``Fourier``, or ``BSpline``) that controls the boundary
+            parametrisation and its hyper-parameters. Defaults to
+            ``Discrete(k_angles=64)``.
         target_areas: list of n_sets values (float or None).
         initial_radius: fallback starting radius for sets without a target area.
         weight_target_area: weight for target-area penalty.
@@ -318,29 +487,19 @@ def optimize_star_domains_raster(
         grid_resolution: pixels along the longer axis of the bounding box.
         grid_margin: extra margin (in scene units) around the bounding box.
         temperature: sigmoid sharpness for soft rasterization.
-        representation: boundary parameterisation — ``"discrete"`` (default) stores
-            one radius per angle; ``"fourier"`` stores Fourier coefficients;
-            ``"b-spline"`` stores uniform periodic cubic B-spline control points
-            (C² smooth, O(1) per-pixel evaluation, no trig).
-        n_harmonics: number of Fourier harmonics M when ``representation="fourier"``;
-            optimisation variable shape ``(n_sets, 2M+1)``.
-        n_ctrl_pts: number of B-spline control points when
-            ``representation="b-spline"``; optimisation variable shape
-            ``(n_sets, n_ctrl_pts)``.
-        optim_config: OptimConfig; uses defaults when None.
+        optim_config: optimization config dict; uses defaults when None.
         callback: optional iteration callback.
 
     Returns:
         (results, history, problem) where results is a list of n_sets dicts with
-        keys ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,), and
-        representation-specific extras: ``"fourier_coeffs"`` (2M+1,) or
-        ``"bspline_ctrl"`` (P,).
+        keys ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,), plus any
+        representation-specific extras (e.g. ``"fourier_coeffs"`` or
+        ``"bspline_ctrl"``).
     """
-    if representation not in ("discrete", "fourier", "b-spline"):
-        raise ValueError(
-            f"representation must be 'discrete', 'fourier', or 'b-spline', got {representation!r}"
-        )
+    if representation is None:
+        representation = Discrete()
 
+    k_angles = representation.k_angles
     angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
     angles_jnp = jnp.array(angles)
     initial_centers = np.asarray(initial_centers, dtype=np.float32)
@@ -372,7 +531,6 @@ def optimize_star_domains_raster(
     enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
     for inner, outer in enclosures or []:
         enclosure_mask[inner, outer] = True
-
     exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
 
     input_parameters = {
@@ -387,106 +545,40 @@ def optimize_star_domains_raster(
         "exclusion_offset": float(exclusion_offset),
     }
 
-    if representation == "fourier":
-        n_coeffs = 2 * n_harmonics + 1
-        initial_fourier_coeffs = np.zeros((n_sets, n_coeffs), dtype=np.float32)
-        for s in range(n_sets):
-            initial_fourier_coeffs[s, 0] = initial_radii[s, 0]  # DC = mean radius
+    init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
 
-        def initialize(*_):
-            return {
-                "centers": initial_centers.copy(),
-                "fourier_coeffs": initial_fourier_coeffs.copy(),
-            }
+    def initialize(*_):
+        return {k: v.copy() for k, v in init_vars.items()}
 
-        wrap = lambda fn: _wrap_fourier_term(fn, angles_jnp)
-        terms = [
-            ObjectiveTerm("target_area", wrap(_multi_term_target_area), weight_target_area),
-            ObjectiveTerm("raster_excl", raster_collision_loss_fourier, weight_exclusion),
-            ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
-            ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
-            ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness),
-            ObjectiveTerm("area", wrap(_multi_term_area), weight_area),
-            ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
-        ]
-        svg_configuration = _svg_configuration_fourier
-    elif representation == "b-spline":
-        initial_ctrl_pts = np.zeros((n_sets, n_ctrl_pts), dtype=np.float32)
-        for s in range(n_sets):
-            initial_ctrl_pts[s] = initial_radii[s, 0]
+    def wrap(fn):
+        return representation.wrap(fn, angles_jnp)
 
-        def initialize(*_):
-            return {
-                "centers": initial_centers.copy(),
-                "bspline_ctrl": initial_ctrl_pts.copy(),
-            }
-
-        wrap = lambda fn: _wrap_bspline_term(fn, angles_jnp)
-        terms = [
-            ObjectiveTerm("target_area", wrap(_multi_term_target_area), weight_target_area),
-            ObjectiveTerm("raster_excl", raster_collision_loss_bspline, weight_exclusion),
-            ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
-            ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
-            ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness),
-            ObjectiveTerm("area", wrap(_multi_term_area), weight_area),
-            ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
-        ]
-        svg_configuration = _svg_configuration_bspline_star_only
-    else:
-        def initialize(*_):
-            return {
-                "centers": initial_centers.copy(),
-                "radii": initial_radii.copy(),
-            }
-
-        terms = [
-            ObjectiveTerm("target_area", _multi_term_target_area, weight_target_area),
-            ObjectiveTerm("raster_excl", raster_collision_loss, weight_exclusion),
-            ObjectiveTerm("star_enclose", _multi_term_star_enclosure, weight_enclosure),
-            ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0),
-            ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness),
-            ObjectiveTerm("area", _multi_term_area, weight_area),
-            ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter),
-        ]
-        svg_configuration = _svg_configuration_star_only
+    terms = [
+        ObjectiveTerm("target_area",  wrap(_multi_term_target_area),    weight_target_area),
+        ObjectiveTerm("raster_excl",  representation.collision_loss,    weight_exclusion),
+        ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
+        ObjectiveTerm("min_radius",   wrap(_multi_term_min_radius),     10.0),
+        ObjectiveTerm("smoothness",   wrap(_multi_term_smoothness),     weight_smoothness),
+        ObjectiveTerm("area",         wrap(_multi_term_area),           weight_area),
+        ObjectiveTerm("perimeter",    wrap(_multi_term_perimeter),      weight_perimeter),
+    ]
 
     problem = OptimizationProblemTemplate(
         terms=terms,
         initialize=initialize,
-        svg_configuration=svg_configuration,
+        svg_configuration=representation.make_svg_configuration(),
     ).instantiate(input_parameters)
 
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
-    if representation == "fourier":
-        radii_arr = np.array(fourier_to_radii(optim_vars["fourier_coeffs"], angles_jnp))
-        results = [
-            {
-                "center": np.array(optim_vars["centers"][s]),
-                "radii": radii_arr[s],
-                "angles": angles,
-                "fourier_coeffs": np.array(optim_vars["fourier_coeffs"][s]),
-            }
-            for s in range(n_sets)
-        ]
-    elif representation == "b-spline":
-        radii_arr = np.array(bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp))
-        results = [
-            {
-                "center": np.array(optim_vars["centers"][s]),
-                "radii": radii_arr[s],
-                "angles": angles,
-                "bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s]),
-            }
-            for s in range(n_sets)
-        ]
-    else:
-        results = [
-            {
-                "center": np.array(optim_vars["centers"][s]),
-                "radii": np.array(optim_vars["radii"][s]),
-                "angles": angles,
-            }
-            for s in range(n_sets)
-        ]
+    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
+    results = [
+        {
+            "center": np.array(optim_vars["centers"][s]),
+            "radii": radii_arr[s],
+            "angles": angles,
+            **representation.extra_results(s, optim_vars),
+        }
+        for s in range(n_sets)
+    ]
     return results, history, problem
