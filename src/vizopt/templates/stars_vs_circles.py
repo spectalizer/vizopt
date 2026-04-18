@@ -11,14 +11,10 @@ General star-domain loss terms and helpers live in
 import jax.numpy as jnp
 import numpy as np
 
-from ..base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
+from ..base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
 from ..components.stars import (
     Discrete,
     StarRepresentation,
-    _svg_configuration_fixed,
-    _svg_configuration_movable,
-)
-from ..components.stars import (
     _build_membership,
     _init_centers_and_radii,
     _multi_term_area,
@@ -33,13 +29,14 @@ from ..components.stars import (
     _multi_term_set_attraction,
     _multi_term_smoothness,
     _multi_term_total_bounding_box,
+    _svg_configuration_fixed,
+    _svg_configuration_movable,
 )
 
 
 def optimize_multiple_radially_convex_sets(
     circles,
     sets,
-    k_angles=32,
     weight_area=1.0,
     weight_perimeter=1.0,
     weight_exclusion=10.0,
@@ -61,7 +58,6 @@ def optimize_multiple_radially_convex_sets(
         sets: list of S subsets, each a collection of integer indices into circles.
             A circle may appear in multiple sets; circles absent from a set are
             treated as obstacles for that set's boundary.
-        k_angles: number of angular samples defining each boundary polygon.
         weight_area: weight for the area objective (summed over sets).
         weight_perimeter: weight for the perimeter objective (summed over sets).
         weight_exclusion: weight for the exclusion penalty.
@@ -71,9 +67,8 @@ def optimize_multiple_radially_convex_sets(
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
             Broadcast to (S, N). Default 0.1.
         representation: star domain parametrization. One of :class:`Discrete`
-            (default), :class:`Fourier`, or :class:`BSpline`. The ``k_angles``
-            attribute on the representation is used when provided; the
-            ``k_angles`` function argument is a fallback for ``Discrete``.
+            (default), :class:`Fourier`, or :class:`BSpline`. Angular resolution
+            is set via ``representation.k_angles``.
         term_schedules: optional dict mapping term name to a JAX-compatible
             callable ``(step: Array) -> Array`` that scales the term's weight
             over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
@@ -98,7 +93,7 @@ def optimize_multiple_radially_convex_sets(
         :func:`~vizopt.animation.snapshots_to_animated_svg`).
     """
     if representation is None:
-        representation = Discrete(k_angles=k_angles)
+        representation = Discrete()
 
     circles_array = np.asarray(circles, dtype=np.float32)
     if circles_array.ndim == 1:
@@ -237,7 +232,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         :func:`~vizopt.animation.snapshots_to_animated_svg`).
     """
     if representation is None:
-        representation = Discrete(k_angles=k_angles)
+        representation = Discrete()
 
     circles_array = np.asarray(circles, dtype=np.float32)
     if circles_array.ndim == 1:
