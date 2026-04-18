@@ -161,7 +161,6 @@ def optimize_multiple_radially_convex_sets(
 def optimize_multiple_radially_convex_sets_with_movable_circles(
     circles,
     sets,
-    k_angles=32,
     weight_area=1.0,
     weight_perimeter=1.0,
     weight_exclusion=10.0,
@@ -186,7 +185,6 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         circles: array of shape (N, 3) with columns [cx, cy, r], or a sequence
             of (cx, cy, r) triples.
         sets: list of S subsets, each a collection of integer indices into circles.
-        k_angles: number of angular samples defining each boundary polygon.
         weight_area: weight for the area objective.
         weight_perimeter: weight for the perimeter objective.
         weight_exclusion: weight for the exclusion penalty.
