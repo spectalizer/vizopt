@@ -17,9 +17,8 @@ from vizopt.components.stars import (
     _multi_term_perimeter,
     _multi_term_smoothness,
     _svg_configuration_fixed,
+    _svg_configuration_star_only,
 )
-from vizopt.utils import _SVG_SET_COLORS
-
 
 def _dist_and_angle(diff):
     """Compute distance and angle for an array of 2-D displacement vectors.
@@ -226,60 +225,6 @@ def _build_exclusion_mask(n_sets, enclosures):
                 mask[b, a] = False
 
     return mask
-
-
-def _svg_configuration_star_only(snapshots, input_params, size):
-    """SVG configuration for pure star domains (no underlying circles)."""
-    angles = input_params["angles"]
-    n_sets = snapshots[0][1]["centers"].shape[0]
-
-    # Compute bounding box from all boundary points across all frames
-    all_x, all_y = [], []
-    for _, v in snapshots:
-        centers = np.array(v["centers"])
-        radii = np.array(v["radii"])
-        for s in range(len(centers)):
-            bx = centers[s, 0] + radii[s] * np.cos(angles)
-            by = centers[s, 1] + radii[s] * np.sin(angles)
-            all_x.extend(bx.tolist())
-            all_y.extend(by.tolist())
-
-    x_min, y_min = min(all_x), min(all_y)
-    span = max(max(all_x) - x_min, max(all_y) - y_min)
-    margin = span * 0.05
-    x_min -= margin
-    y_max = y_min + span + 2 * margin
-    span += 2 * margin
-
-    def to_svg(x, y):
-        return (x - x_min) / span * size, (y_max - y) / span * size
-
-    elements = []
-    for s in range(n_sets):
-        color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
-        points_frames = []
-        for _, v in snapshots:
-            cx, cy = float(v["centers"][s, 0]), float(v["centers"][s, 1])
-            s_radii = np.array(v["radii"][s])
-            pts = []
-            for k in range(len(angles)):
-                bx = cx + s_radii[k] * np.cos(angles[k])
-                by = cy + s_radii[k] * np.sin(angles[k])
-                px, py = to_svg(bx, by)
-                pts.append(f"{px:.1f},{py:.1f}")
-            points_frames.append(" ".join(pts))
-        elements.append(
-            {
-                "tag": "polygon",
-                "fill": color,
-                "fill-opacity": "0.12",
-                "stroke": color,
-                "stroke-width": "1.5",
-                "stroke-linejoin": "round",
-                "points": points_frames,
-            }
-        )
-    return elements
 
 
 def _radius_from_target_area(target_area, K):

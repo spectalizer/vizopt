@@ -173,7 +173,7 @@ def raster_collision_loss_bspline(optim_vars, input_params):
 
 def _svg_configuration_bspline_star_only(snapshots, input_params, size):
     """SVG configuration for B-spline star domains (no underlying circles)."""
-    from vizopt.templates.star_vs_star import _svg_configuration_star_only
+    from vizopt.components.stars import _svg_configuration_star_only
 
     angles_jnp = jnp.array(input_params["angles"])
     converted = [

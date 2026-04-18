@@ -6,6 +6,9 @@ uniformly-spaced angles θ_k = 2πk/K.  The boundary point at angle k is:
     p_k = center + radii[k] * [cos(θ_k), sin(θ_k)]
 """
 
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
 import numpy as np
 from jax import numpy as jnp
 
@@ -511,3 +514,249 @@ def _svg_configuration_movable(snapshots, input_params, size):
         })
 
     return elements
+
+
+# ---------------------------------------------------------------------------
+# Fourier helpers
+# ---------------------------------------------------------------------------
+
+
+def fourier_to_radii(coeffs, angles):
+    """Evaluate the Fourier boundary r(θ) at given angles.
+
+    The boundary is parameterised as
+
+        r(θ) = a₀ + Σ_{k=1}^{M} (aₖ cos(kθ) + bₖ sin(kθ))
+
+    with coefficients stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+
+    Args:
+        coeffs: (n_sets, 2M+1) Fourier coefficients.
+        angles: (K,) evaluation angles in radians.
+
+    Returns:
+        (n_sets, K) radius values.
+    """
+    M = (coeffs.shape[-1] - 1) // 2
+    ks = jnp.arange(1, M + 1)             # (M,)
+    theta = ks[:, None] * angles[None, :]  # (M, K)
+    return (
+        coeffs[:, 0:1]
+        + coeffs[:, 1::2] @ jnp.cos(theta)
+        + coeffs[:, 2::2] @ jnp.sin(theta)
+    )
+
+
+def _wrap_fourier_term(fn, angles):
+    """Adapt a loss term that reads optim_vars["radii"] to accept fourier_coeffs."""
+
+    def wrapped(optim_vars, input_params):
+        radii = fourier_to_radii(optim_vars["fourier_coeffs"], angles)
+        return fn({**optim_vars, "radii": radii}, input_params)
+
+    return wrapped
+
+
+# ---------------------------------------------------------------------------
+# SVG configuration for pure star domains
+# ---------------------------------------------------------------------------
+
+
+def _svg_configuration_star_only(snapshots, input_params, size):
+    """SVG configuration for pure star domains (no underlying circles)."""
+    angles = input_params["angles"]
+    n_sets = snapshots[0][1]["centers"].shape[0]
+
+    all_x, all_y = [], []
+    for _, v in snapshots:
+        centers = np.array(v["centers"])
+        radii = np.array(v["radii"])
+        for s in range(len(centers)):
+            bx = centers[s, 0] + radii[s] * np.cos(angles)
+            by = centers[s, 1] + radii[s] * np.sin(angles)
+            all_x.extend(bx.tolist())
+            all_y.extend(by.tolist())
+
+    x_min, y_min = min(all_x), min(all_y)
+    span = max(max(all_x) - x_min, max(all_y) - y_min)
+    margin = span * 0.05
+    x_min -= margin
+    y_max = y_min + span + 2 * margin
+    span += 2 * margin
+
+    def to_svg(x, y):
+        return (x - x_min) / span * size, (y_max - y) / span * size
+
+    elements = []
+    for s in range(n_sets):
+        color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
+        points_frames = []
+        for _, v in snapshots:
+            cx, cy = float(v["centers"][s, 0]), float(v["centers"][s, 1])
+            s_radii = np.array(v["radii"][s])
+            pts = []
+            for k in range(len(angles)):
+                bx = cx + s_radii[k] * np.cos(angles[k])
+                by = cy + s_radii[k] * np.sin(angles[k])
+                px, py = to_svg(bx, by)
+                pts.append(f"{px:.1f},{py:.1f}")
+            points_frames.append(" ".join(pts))
+        elements.append(
+            {
+                "tag": "polygon",
+                "fill": color,
+                "fill-opacity": "0.12",
+                "stroke": color,
+                "stroke-width": "1.5",
+                "stroke-linejoin": "round",
+                "points": points_frames,
+            }
+        )
+    return elements
+
+
+# ---------------------------------------------------------------------------
+# Star domain representation class hierarchy
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StarRepresentation(ABC):
+    """Base class for star domain boundary representations.
+
+    A representation determines how the boundary of each star domain is
+    parametrised during optimisation — what the optimisation variable looks
+    like, how it maps to radii for loss terms, and how results are decoded.
+
+    Attributes:
+        k_angles: Angular resolution — number of uniformly-spaced angles used
+            to sample the boundary for analytical loss terms. For
+            ``Discrete`` this is also the number of optimised radii.
+    """
+
+    k_angles: int = 64
+
+    @abstractmethod
+    def initialize_vars(
+        self,
+        n_sets: int,
+        initial_radii: np.ndarray,
+        initial_centers: np.ndarray,
+    ) -> dict:
+        """Return the initial optimisation-variable dict.
+
+        Args:
+            n_sets: number of star domains.
+            initial_radii: (n_sets, k_angles) initial radius values.
+            initial_centers: (n_sets, 2) initial domain centres.
+        """
+
+    def wrap(self, fn, angles_jnp):
+        """Adapt a loss term expecting ``optim_vars["radii"]`` to this representation.
+
+        The default identity is correct for ``Discrete``, which already stores
+        radii directly. Subclasses override to insert a radii-conversion step.
+        """
+        return fn
+
+    @abstractmethod
+    def to_radii(self, optim_vars: dict, angles_jnp) -> np.ndarray:
+        """Convert optimisation variables to an (n_sets, K) radii array."""
+
+    def extra_results(self, s: int, optim_vars: dict) -> dict:
+        """Representation-specific extras added to the result dict of set *s*.
+
+        Empty by default (``Discrete`` has no extras).
+        """
+        return {}
+
+    def make_svg_configuration(self):
+        """Return an ``svg_configuration`` function compatible with the animation helper.
+
+        Converts representation-specific vars to radii on each snapshot so the
+        standard polygon renderer can be reused for all representations.
+        """
+        def svg_configuration(snapshots, input_params, size):
+            angles_jnp = jnp.array(input_params["angles"])
+            converted = [
+                (i, {**v, "radii": np.array(self.to_radii(v, angles_jnp))})
+                for i, v in snapshots
+            ]
+            return _svg_configuration_star_only(converted, input_params, size)
+
+        return svg_configuration
+
+
+@dataclass
+class Discrete(StarRepresentation):
+    """One radius per angle, linearly interpolated.
+
+    The optimisation variable is ``radii`` of shape ``(n_sets, k_angles)``.
+    This is the simplest representation and the default.
+    """
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        return {"centers": initial_centers.copy(), "radii": initial_radii.copy()}
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return optim_vars["radii"]
+
+
+@dataclass
+class Fourier(StarRepresentation):
+    """Fourier series boundary: r(θ) = a₀ + Σ aₖcos(kθ) + bₖsin(kθ).
+
+    The optimisation variable is ``fourier_coeffs`` of shape
+    ``(n_sets, 2 * n_harmonics + 1)``, stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+    Gives C∞-smooth boundaries with compact parametrisation.
+
+    Attributes:
+        n_harmonics: number of Fourier harmonics M.
+    """
+
+    n_harmonics: int = 8
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        coeffs = np.zeros((n_sets, 2 * self.n_harmonics + 1), dtype=np.float32)
+        coeffs[:, 0] = initial_radii[:, 0]  # DC term = mean radius
+        return {"centers": initial_centers.copy(), "fourier_coeffs": coeffs}
+
+    def wrap(self, fn, angles_jnp):
+        return _wrap_fourier_term(fn, angles_jnp)
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return fourier_to_radii(optim_vars["fourier_coeffs"], angles_jnp)
+
+    def extra_results(self, s, optim_vars):
+        return {"fourier_coeffs": np.array(optim_vars["fourier_coeffs"][s])}
+
+
+@dataclass
+class BSpline(StarRepresentation):
+    """Uniform periodic cubic B-spline boundary.
+
+    The optimisation variable is ``bspline_ctrl`` of shape
+    ``(n_sets, n_ctrl_pts)``. Gives C²-smooth boundaries with O(1) per-pixel
+    evaluation and no trigonometric operations beyond the initial angle lookup.
+
+    Attributes:
+        n_ctrl_pts: number of B-spline control points.
+    """
+
+    n_ctrl_pts: int = 16
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        ctrl = np.zeros((n_sets, self.n_ctrl_pts), dtype=np.float32)
+        ctrl[:] = initial_radii[:, 0:1]  # broadcast mean radius to all control points
+        return {"centers": initial_centers.copy(), "bspline_ctrl": ctrl}
+
+    def wrap(self, fn, angles_jnp):
+        from vizopt.components.bspline_stars import _wrap_bspline_term
+        return _wrap_bspline_term(fn, angles_jnp)
+
+    def to_radii(self, optim_vars, angles_jnp):
+        from vizopt.components.bspline_stars import bspline_to_radii
+        return bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp)
+
+    def extra_results(self, s, optim_vars):
+        return {"bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s])}
