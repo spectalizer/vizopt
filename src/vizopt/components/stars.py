@@ -1,39 +1,24 @@
-"""Radially convex (star-shaped) set optimization.
+"""Reusable JAX loss terms and helpers for star-shaped (radially convex) domains.
 
-A star-shaped region is represented by its center (cx, cy) and K radii
-at uniformly-spaced angles θ_k = 2πk/K. The boundary point at angle k is:
+A star-shaped region is represented by its center (cx, cy) and K radii at
+uniformly-spaced angles θ_k = 2πk/K.  The boundary point at angle k is:
 
     p_k = center + radii[k] * [cos(θ_k), sin(θ_k)]
-
-This module provides:
-  - JAX loss terms for enclosure, area, and perimeter
-  - optimize_enclosing_radially_convex_set(): finds a star-shaped region
-    that encloses a given set of circles while minimizing area and perimeter
 """
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import numpy as np
 from jax import numpy as jnp
 
-from .base import Callback, ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
-from .utils import _SVG_SET_COLORS
-
-# ---------------------------------------------------------------------------
-# ObjectiveTerm compute functions
-#
-# optim_vars keys: "center" (2,), "radii" (K,)
-# input_params keys: "circles" (N, 3): [cx, cy, r], "angles" (K,)
-# ---------------------------------------------------------------------------
-
+from ..utils import _SVG_SET_COLORS
 
 _MIN_RADIUS = 0.1
 
 
 # ---------------------------------------------------------------------------
-# Multi-set objective term compute functions
-#
-# optim_vars keys: "centers" (S, 2), "radii" (S, K)
-# input_params keys: "circles" (N, 3): [cx, cy, r], "angles" (K,),
-#                    "membership" (S, N): True where circle n is in set s
+# Core enclosure / exclusion primitives
 # ---------------------------------------------------------------------------
 
 
@@ -124,6 +109,15 @@ def _exclusion_penalty(centers, radii, circle_xy, circle_r, angles, membership):
     return jnp.sum(violations**2)
 
 
+# ---------------------------------------------------------------------------
+# ObjectiveTerm compute functions — fixed circle positions
+#
+# optim_vars keys: "centers" (S, 2), "radii" (S, K)
+# input_params keys: "circles" (N, 3): [cx, cy, r], "angles" (K,),
+#                    "membership" (S, N), "offsets" (S, N)
+# ---------------------------------------------------------------------------
+
+
 def _multi_term_enclosure(optim_vars, input_params):
     """Enclosure penalty summed over all sets.
 
@@ -200,7 +194,7 @@ def _multi_term_perimeter(optim_vars, input_params):
 
 
 # ---------------------------------------------------------------------------
-# Multi-set terms with movable circle positions
+# ObjectiveTerm compute functions — movable circle positions
 #
 # optim_vars keys: "centers" (S, 2), "radii" (S, K), "circle_positions" (N, 2)
 # input_params keys: "circle_radii" (N,), "angles" (K,),
@@ -300,7 +294,7 @@ def _multi_term_circle_collision(optim_vars, input_params):
 
 
 # ---------------------------------------------------------------------------
-# Shared initialization helpers
+# Initialization helpers
 # ---------------------------------------------------------------------------
 
 
@@ -366,7 +360,6 @@ def _init_centers_and_radii(
 # ---------------------------------------------------------------------------
 # SVG animation helpers
 # ---------------------------------------------------------------------------
-
 
 
 def _compute_svg_transform(snapshots, circles_array, has_movable_circles, size):
@@ -524,260 +517,257 @@ def _svg_configuration_movable(snapshots, input_params, size):
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Fourier helpers
 # ---------------------------------------------------------------------------
 
 
-def optimize_multiple_radially_convex_sets(
-    circles,
-    sets,
-    k_angles=32,
-    weight_area=1.0,
-    weight_perimeter=1.0,
-    weight_exclusion=10.0,
-    weight_smoothness=1.0,
-    offsets=0.1,
-    term_schedules=None,
-    optim_config: OptimConfig | None = None,
-    callback: Callback | None = None,
-):
-    """Find star-shaped regions enclosing each set of circles without overlapping others.
+def fourier_to_radii(coeffs, angles):
+    """Evaluate the Fourier boundary r(θ) at given angles.
 
-    Each set gets its own star-shaped boundary that encloses its member circles
-    and does not collide with circles belonging to other sets.
+    The boundary is parameterised as
+
+        r(θ) = a₀ + Σ_{k=1}^{M} (aₖ cos(kθ) + bₖ sin(kθ))
+
+    with coefficients stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
 
     Args:
-        circles: array of shape (N, 3) with columns [cx, cy, r], or a sequence
-            of (cx, cy, r) triples.
-        sets: list of S subsets, each a collection of integer indices into circles.
-            A circle may appear in multiple sets; circles absent from a set are
-            treated as obstacles for that set's boundary.
-        k_angles: number of angular samples defining each boundary polygon.
-        weight_area: weight for the area objective (summed over sets).
-        weight_perimeter: weight for the perimeter objective (summed over sets).
-        weight_exclusion: weight for the exclusion penalty.
-        weight_smoothness: weight for the smoothness penalty (squared radius
-            differences between adjacent angles). Default 1.0.
-        offsets: padding added to each circle's radius in the enclosure term,
-            per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
-            Broadcast to (S, N). Default 0.1.
-        term_schedules: optional dict mapping term name to a JAX-compatible
-            callable ``(step: Array) -> Array`` that scales the term's weight
-            over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
-            "smoothness", "area", "perimeter". The effective weight at step t is
-            ``base_weight * schedule(t)``. Schedules must use JAX ops so they
-            can be traced through without recompilation.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`OptimConfig` defaults when ``None``.
-        callback: Optional callback called after each iteration with
-            ``(iteration, loss, optim_vars, grads)``. Pass a
-            :class:`~vizopt.animation.SnapshotCallback` to capture frames for
-            :func:`~vizopt.animation.snapshots_to_animated_svg`.
+        coeffs: (n_sets, 2M+1) Fourier coefficients.
+        angles: (K,) evaluation angles in radians.
 
     Returns:
-        Tuple of (results, history, problem) where results is a list of S dicts,
-        each with:
-            "center": array of shape (2,), the center of the star-shaped region
-            "radii": array of shape (K,), boundary radii at each angle
-            "angles": array of shape (K,), uniformly spaced in [0, 2π)
-        history is the list of per-iteration loss dicts, and problem is the
-        :class:`~vizopt.base.OptimizationProblem` instance (needed for
-        :func:`~vizopt.animation.snapshots_to_animated_svg`).
+        (n_sets, K) radius values.
     """
-    circles_array = np.asarray(circles, dtype=np.float32)
-    if circles_array.ndim == 1:
-        circles_array = circles_array[None, :]
-    N = len(circles_array)
-    S = len(sets)
-    angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
-
-    membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(
-        circles_array, sets, angles
-    )
-    offsets_array = np.broadcast_to(
-        np.asarray(offsets, dtype=np.float32), (S, N)
-    ).copy()
-
-    input_parameters = {
-        "circles": circles_array,
-        "angles": angles,
-        "membership": membership,
-        "offsets": offsets_array,
-    }
-
-    def initialize(_, seed):
-        return {
-            "centers": initial_centers,
-            "radii": initial_radii,
-        }
-
-    schedules = term_schedules or {}
-    terms = [
-        ObjectiveTerm("enclosure", _multi_term_enclosure, 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", _multi_term_exclusion, weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter, schedules.get("perimeter")),
-    ]
-
-    problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize, svg_configuration=_svg_configuration_fixed
-    ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
-
+    M = (coeffs.shape[-1] - 1) // 2
+    ks = jnp.arange(1, M + 1)             # (M,)
+    theta = ks[:, None] * angles[None, :]  # (M, K)
     return (
-        [
-            {
-                "center": np.array(optim_vars["centers"][s]),
-                "radii": np.array(optim_vars["radii"][s]),
-                "angles": angles,
-            }
-            for s in range(S)
-        ],
-        history,
-        problem,
+        coeffs[:, 0:1]
+        + coeffs[:, 1::2] @ jnp.cos(theta)
+        + coeffs[:, 2::2] @ jnp.sin(theta)
     )
 
 
-def optimize_multiple_radially_convex_sets_with_movable_circles(
-    circles,
-    sets,
-    k_angles=32,
-    weight_area=1.0,
-    weight_perimeter=1.0,
-    weight_exclusion=10.0,
-    weight_smoothness=1.0,
-    weight_position_anchor=1.0,
-    weight_circle_collision=10.0,
-    weight_bounding_box=0.0,
-    weight_set_attraction=0.0,
-    circle_collision_alpha=0.0,
-    offsets=0.1,
-    term_schedules=None,
-    optim_config: OptimConfig | None = None,
-    callback: Callback | None = None,
-):
-    """Like optimize_multiple_radially_convex_sets, but circle positions are also optimized.
+def _wrap_fourier_term(fn, angles):
+    """Adapt a loss term that reads optim_vars["radii"] to accept fourier_coeffs."""
 
-    Circle positions (cx, cy) become optimization variables. Their radii remain
-    fixed. A position anchor term penalizes deviation from the initial positions.
+    def wrapped(optim_vars, input_params):
+        radii = fourier_to_radii(optim_vars["fourier_coeffs"], angles)
+        return fn({**optim_vars, "radii": radii}, input_params)
 
-    Args:
-        circles: array of shape (N, 3) with columns [cx, cy, r], or a sequence
-            of (cx, cy, r) triples.
-        sets: list of S subsets, each a collection of integer indices into circles.
-        k_angles: number of angular samples defining each boundary polygon.
-        weight_area: weight for the area objective.
-        weight_perimeter: weight for the perimeter objective.
-        weight_exclusion: weight for the exclusion penalty.
-        weight_smoothness: weight for the smoothness penalty.
-        weight_position_anchor: weight for penalizing circle positions deviating
-            from their initial positions. Higher values keep circles closer to
-            their starting positions.
-        weight_circle_collision: weight for penalizing overlapping circles.
-        weight_bounding_box: weight for minimizing total width + total height of
-            all set boundaries. Default 0.0 (disabled).
-        weight_set_attraction: weight for pulling each circle toward the center
-            of every set it belongs to (and pulling set centers toward their
-            member circles). Default 0.0 (disabled).
-        circle_collision_alpha: coefficient for the linear term in the circle
-            collision penalty: ``overlap² + alpha * overlap``. The linear term
-            gives a constant non-zero gradient for any overlap, preventing tiny
-            violations from persisting. Default 0.0 (pure quadratic).
-        offsets: padding added to each circle's radius in the enclosure term,
-            per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
-        term_schedules: optional dict mapping term name to a JAX-compatible
-            callable ``(step: Array) -> Array`` that scales the term's weight
-            over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
-            "smoothness", "area", "perimeter", "position_anchor",
-            "circle_collision", "bounding_box", "set_attraction". The effective
-            weight at step t
-            is ``base_weight * schedule(t)``. Schedules must use JAX ops so
-            they can be traced through without recompilation.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`OptimConfig` defaults when ``None``.
-        callback: Optional callback called after each iteration with
-            ``(iteration, loss, optim_vars, grads)``. Pass a
-            :class:`~vizopt.animation.SnapshotCallback` to capture frames for
-            :func:`~vizopt.animation.snapshots_to_animated_svg`.
+    return wrapped
 
-    Returns:
-        Tuple of (results, circles_out, history, problem) where results is a
-        list of S dicts each with "center", "radii", "angles"; circles_out is
-        an array of shape (N, 3) with optimized [cx, cy, r]; history is the
-        list of per-iteration loss dicts; and problem is the
-        :class:`~vizopt.base.OptimizationProblem` instance (needed for
-        :func:`~vizopt.animation.snapshots_to_animated_svg`).
+
+# ---------------------------------------------------------------------------
+# SVG configuration for pure star domains
+# ---------------------------------------------------------------------------
+
+
+def _svg_configuration_star_only(snapshots, input_params, size):
+    """SVG configuration for pure star domains (no underlying circles)."""
+    angles = input_params["angles"]
+    n_sets = snapshots[0][1]["centers"].shape[0]
+
+    all_x, all_y = [], []
+    for _, v in snapshots:
+        centers = np.array(v["centers"])
+        radii = np.array(v["radii"])
+        for s in range(len(centers)):
+            bx = centers[s, 0] + radii[s] * np.cos(angles)
+            by = centers[s, 1] + radii[s] * np.sin(angles)
+            all_x.extend(bx.tolist())
+            all_y.extend(by.tolist())
+
+    x_min, y_min = min(all_x), min(all_y)
+    span = max(max(all_x) - x_min, max(all_y) - y_min)
+    margin = span * 0.05
+    x_min -= margin
+    y_max = y_min + span + 2 * margin
+    span += 2 * margin
+
+    def to_svg(x, y):
+        return (x - x_min) / span * size, (y_max - y) / span * size
+
+    elements = []
+    for s in range(n_sets):
+        color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
+        points_frames = []
+        for _, v in snapshots:
+            cx, cy = float(v["centers"][s, 0]), float(v["centers"][s, 1])
+            s_radii = np.array(v["radii"][s])
+            pts = []
+            for k in range(len(angles)):
+                bx = cx + s_radii[k] * np.cos(angles[k])
+                by = cy + s_radii[k] * np.sin(angles[k])
+                px, py = to_svg(bx, by)
+                pts.append(f"{px:.1f},{py:.1f}")
+            points_frames.append(" ".join(pts))
+        elements.append(
+            {
+                "tag": "polygon",
+                "fill": color,
+                "fill-opacity": "0.12",
+                "stroke": color,
+                "stroke-width": "1.5",
+                "stroke-linejoin": "round",
+                "points": points_frames,
+            }
+        )
+    return elements
+
+
+# ---------------------------------------------------------------------------
+# Star domain representation class hierarchy
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StarRepresentation(ABC):
+    """Base class for star domain boundary representations.
+
+    A representation determines how the boundary of each star domain is
+    parametrised during optimisation — what the optimisation variable looks
+    like, how it maps to radii for loss terms, and how results are decoded.
+
+    Attributes:
+        k_angles: Angular resolution — number of uniformly-spaced angles used
+            to sample the boundary for analytical loss terms. For
+            ``Discrete`` this is also the number of optimised radii.
     """
-    circles_array = np.asarray(circles, dtype=np.float32)
-    if circles_array.ndim == 1:
-        circles_array = circles_array[None, :]
-    N = len(circles_array)
-    S = len(sets)
-    angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
 
-    initial_circle_positions = circles_array[:, :2].copy()  # (N, 2)
-    circle_radii = circles_array[:, 2].copy()  # (N,)
+    k_angles: int = 64
 
-    membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(
-        circles_array, sets, angles
-    )
-    offsets_array = np.broadcast_to(
-        np.asarray(offsets, dtype=np.float32), (S, N)
-    ).copy()
+    @abstractmethod
+    def initialize_vars(
+        self,
+        n_sets: int,
+        initial_radii: np.ndarray,
+        initial_centers: np.ndarray,
+    ) -> dict:
+        """Return the initial optimisation-variable dict.
 
-    input_parameters = {
-        "circle_radii": circle_radii,
-        "initial_circle_positions": initial_circle_positions,
-        "angles": angles,
-        "membership": membership,
-        "offsets": offsets_array,
-        "circle_collision_alpha": np.float32(circle_collision_alpha),
-    }
+        Args:
+            n_sets: number of star domains.
+            initial_radii: (n_sets, k_angles) initial radius values.
+            initial_centers: (n_sets, 2) initial domain centres.
+        """
 
-    def initialize(_, seed):
-        return {
-            "centers": initial_centers,
-            "radii": initial_radii,
-            "circle_positions": initial_circle_positions.copy(),
-        }
+    def wrap(self, fn, angles_jnp):
+        """Adapt a loss term expecting ``optim_vars["radii"]`` to this representation.
 
-    schedules = term_schedules or {}
-    terms = [
-        ObjectiveTerm("enclosure", _multi_term_enclosure_movable, 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", _multi_term_exclusion_movable, weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter, schedules.get("perimeter")),
-        ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor, schedules.get("position_anchor")),
-        ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision, schedules.get("circle_collision")),
-        ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box, schedules.get("bounding_box")),
-        ObjectiveTerm("set_attraction", _multi_term_set_attraction, weight_set_attraction, schedules.get("set_attraction")),
-    ]
+        The default identity is correct for ``Discrete``, which already stores
+        radii directly. Subclasses override to insert a radii-conversion step.
+        """
+        return fn
 
-    problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize, svg_configuration=_svg_configuration_movable
-    ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    @abstractmethod
+    def to_radii(self, optim_vars: dict, angles_jnp) -> np.ndarray:
+        """Convert optimisation variables to an (n_sets, K) radii array."""
 
-    circles_out = np.concatenate(
-        [np.array(optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
-    )
+    def extra_results(self, s: int, optim_vars: dict) -> dict:
+        """Representation-specific extras added to the result dict of set *s*.
 
-    return (
-        [
-            {
-                "center": np.array(optim_vars["centers"][s]),
-                "radii": np.array(optim_vars["radii"][s]),
-                "angles": angles,
-            }
-            for s in range(S)
-        ],
-        circles_out,
-        history,
-        problem,
-    )
+        Empty by default (``Discrete`` has no extras).
+        """
+        return {}
+
+    def make_svg_configuration(self, base_svg_fn=None):
+        """Return an ``svg_configuration`` function compatible with the animation helper.
+
+        Converts representation-specific vars to radii on each snapshot so any
+        base SVG renderer that reads ``optim_vars["radii"]`` can be reused for
+        all representations.
+
+        Args:
+            base_svg_fn: the underlying ``(snapshots, input_params, size) →
+                elements`` function to delegate to after radii conversion.
+                Defaults to :func:`_svg_configuration_star_only` (pure star
+                domains). Pass :func:`_svg_configuration_fixed` or
+                :func:`_svg_configuration_movable` when circles are present.
+        """
+        if base_svg_fn is None:
+            base_svg_fn = _svg_configuration_star_only
+
+        def svg_configuration(snapshots, input_params, size):
+            angles_jnp = jnp.array(input_params["angles"])
+            converted = [
+                (i, {**v, "radii": np.array(self.to_radii(v, angles_jnp))})
+                for i, v in snapshots
+            ]
+            return base_svg_fn(converted, input_params, size)
+
+        return svg_configuration
+
+
+@dataclass
+class Discrete(StarRepresentation):
+    """One radius per angle, linearly interpolated.
+
+    The optimisation variable is ``radii`` of shape ``(n_sets, k_angles)``.
+    This is the simplest representation and the default.
+    """
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        return {"centers": initial_centers.copy(), "radii": initial_radii.copy()}
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return optim_vars["radii"]
+
+
+@dataclass
+class Fourier(StarRepresentation):
+    """Fourier series boundary: r(θ) = a₀ + Σ aₖcos(kθ) + bₖsin(kθ).
+
+    The optimisation variable is ``fourier_coeffs`` of shape
+    ``(n_sets, 2 * n_harmonics + 1)``, stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+    Gives C∞-smooth boundaries with compact parametrisation.
+
+    Attributes:
+        n_harmonics: number of Fourier harmonics M.
+    """
+
+    n_harmonics: int = 8
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        coeffs = np.zeros((n_sets, 2 * self.n_harmonics + 1), dtype=np.float32)
+        coeffs[:, 0] = initial_radii[:, 0]  # DC term = mean radius
+        return {"centers": initial_centers.copy(), "fourier_coeffs": coeffs}
+
+    def wrap(self, fn, angles_jnp):
+        return _wrap_fourier_term(fn, angles_jnp)
+
+    def to_radii(self, optim_vars, angles_jnp):
+        return fourier_to_radii(optim_vars["fourier_coeffs"], angles_jnp)
+
+    def extra_results(self, s, optim_vars):
+        return {"fourier_coeffs": np.array(optim_vars["fourier_coeffs"][s])}
+
+
+@dataclass
+class BSpline(StarRepresentation):
+    """Uniform periodic cubic B-spline boundary.
+
+    The optimisation variable is ``bspline_ctrl`` of shape
+    ``(n_sets, n_ctrl_pts)``. Gives C²-smooth boundaries with O(1) per-pixel
+    evaluation and no trigonometric operations beyond the initial angle lookup.
+
+    Attributes:
+        n_ctrl_pts: number of B-spline control points.
+    """
+
+    n_ctrl_pts: int = 16
+
+    def initialize_vars(self, n_sets, initial_radii, initial_centers):
+        ctrl = np.zeros((n_sets, self.n_ctrl_pts), dtype=np.float32)
+        ctrl[:] = initial_radii[:, 0:1]  # broadcast mean radius to all control points
+        return {"centers": initial_centers.copy(), "bspline_ctrl": ctrl}
+
+    def wrap(self, fn, angles_jnp):
+        from vizopt.components.bspline_stars import _wrap_bspline_term
+        return _wrap_bspline_term(fn, angles_jnp)
+
+    def to_radii(self, optim_vars, angles_jnp):
+        from vizopt.components.bspline_stars import bspline_to_radii
+        return bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp)
+
+    def extra_results(self, s, optim_vars):
+        return {"bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s])}

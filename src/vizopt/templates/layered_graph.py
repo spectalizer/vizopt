@@ -6,7 +6,7 @@ from jax import numpy as jnp
 from matplotlib import pyplot as plt
 
 from ..base import ObjectiveTerm, OptimizationProblemTemplate
-from ..components import should_be_positive_activation
+from ..components.common import should_be_positive_activation
 
 # ---------------------------------------------------------------------------
 # Preprocessing

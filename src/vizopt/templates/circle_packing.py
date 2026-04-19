@@ -9,7 +9,7 @@ from ..base import (
     OptimizationProblem,
     OptimizationProblemTemplate,
 )
-from ..components import (
+from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
 )
