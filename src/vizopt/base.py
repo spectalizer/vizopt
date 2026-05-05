@@ -135,7 +135,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
 
         Args:
             input_parameters: Fixed data for this problem instance.
-            x: Optional mapping of term name to multiplier.
+            weight_overrides: Optional mapping of term name to multiplier.
                 Overrides the default multiplier for the named terms.
                 Unknown names raise ``KeyError``.
 

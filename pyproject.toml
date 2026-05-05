@@ -30,7 +30,7 @@ dev = [
     "pandas-stubs>=3.0.0.260204",
     "pytest>=9.0.2",
     "types-networkx>=3.6.1.20260210",
-    "zensical>=0.0.24",
+    "zensical>=0.0.40",
 ]
 
 [[tool.mypy.overrides]]

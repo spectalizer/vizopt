@@ -30,13 +30,13 @@ Optimization progress visualization.
 
 Reusable JAX loss components.
 
-::: vizopt.components.multiple_bbox_intersections
+::: vizopt.components.common.multiple_bbox_intersections
 
-::: vizopt.components.calculate_total_width_penalty_for_circular_layout
+::: vizopt.components.common.calculate_total_width_penalty_for_circular_layout
 
-::: vizopt.components.calculate_total_width_penalty_ignoring_radii
+::: vizopt.components.common.calculate_total_width_penalty_ignoring_radii
 
-::: vizopt.components.should_be_positive_activation
+::: vizopt.components.common.should_be_positive_activation
 
 ---
 
