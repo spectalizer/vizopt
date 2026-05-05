@@ -2,50 +2,38 @@
 
 ## vizopt.base
 
-Core abstractions for the optimization framework.
-
-::: vizopt.base.ObjectiveTerm
-
-::: vizopt.base.build_objective
-
-::: vizopt.base.OptimizationProblemTemplate
-
-::: vizopt.base.OptimizationProblem
+::: vizopt.base
+    options:
+      members: true
+      filters:
+        - "!^_"
 
 ---
 
 ## vizopt.animation
 
-Optimization progress visualization.
-
-::: vizopt.animation.SnapshotCallback
-
-::: vizopt.animation.animate
-
-::: vizopt.animation.snapshots_to_animated_svg
+::: vizopt.animation
+    options:
+      members: true
+      filters:
+        - "!^_"
 
 ---
 
-## vizopt.components
+## vizopt.components.common
 
-Reusable JAX loss components.
-
-::: vizopt.components.common.multiple_bbox_intersections
-
-::: vizopt.components.common.calculate_total_width_penalty_for_circular_layout
-
-::: vizopt.components.common.calculate_total_width_penalty_ignoring_radii
-
-::: vizopt.components.common.should_be_positive_activation
+::: vizopt.components.common
+    options:
+      members: true
+      filters:
+        - "!^_"
 
 ---
 
 ## vizopt.schedules
 
-Loss term weight scheduling.
-
-::: vizopt.schedules.warmup
-
-::: vizopt.schedules.cooldown
-
-::: vizopt.schedules.make_term_schedules
+::: vizopt.schedules
+    options:
+      members: true
+      filters:
+        - "!^_"

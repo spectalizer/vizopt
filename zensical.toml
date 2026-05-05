@@ -324,6 +324,7 @@ paths = ["src"]
 
 [project.plugins.mkdocstrings.config.handlers.python.options]
 docstring_style = "google"
+heading_level = 3
 inherited_members = false
 show_source = false
 
