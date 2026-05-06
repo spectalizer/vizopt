@@ -35,20 +35,21 @@ from ..components.stars import (
 )
 
 
-def _leaf_circles_from_graph(G: nx.DiGraph):
-    names = [n for n in G.nodes if G.out_degree(n) == 0]
+def _leaf_circles_from_graph(inclusion_graph: nx.DiGraph):
+    names = [n for n in inclusion_graph.nodes if inclusion_graph.out_degree(n) == 0]
     circles = np.array(
-        [[*G.nodes[n]["center"], G.nodes[n]["r"]] for n in names], dtype=np.float32
+        [[*inclusion_graph.nodes[n]["center"], inclusion_graph.nodes[n]["r"]] for n in names],
+        dtype=np.float32,
     )
     name_to_idx = {name: i for i, name in enumerate(names)}
     return names, circles, name_to_idx
 
 
-def _sets_from_graph(G: nx.DiGraph, leaf_names, name_to_idx):
+def _sets_from_graph(inclusion_graph: nx.DiGraph, leaf_names, name_to_idx):
     leaf_set = set(leaf_names)
-    set_names = [n for n in nx.topological_sort(G) if G.out_degree(n) > 0]
+    set_names = [n for n in nx.topological_sort(inclusion_graph) if inclusion_graph.out_degree(n) > 0]
     sets_idx = [
-        sorted(name_to_idx[n] for n in nx.descendants(G, sname) if n in leaf_set)
+        sorted(name_to_idx[n] for n in nx.descendants(inclusion_graph, sname) if n in leaf_set)
         for sname in set_names
     ]
     return set_names, sets_idx
@@ -330,7 +331,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
 
 
 def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
-    G: nx.DiGraph,
+    inclusion_graph: nx.DiGraph,
     weight_area=1.0,
     weight_perimeter=1.0,
     weight_exclusion=10.0,
@@ -352,8 +353,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
     sets. A leaf belongs to a set if it is a descendant of that set.
 
     Args:
-        G: DiGraph with parent→child edges (edge (u, v) means v ⊂ u). Leaf nodes
-            must carry ``center`` ([x, y]) and ``r`` (float) attributes.
+        inclusion_graph: DiGraph with parent→child edges (edge (u, v) means v ⊂ u).
+            Leaf nodes must carry ``center`` ([x, y]) and ``r`` (float) attributes.
         weight_area: weight for the area objective.
         weight_perimeter: weight for the perimeter objective.
         weight_exclusion: weight for the exclusion penalty.
@@ -380,8 +381,8 @@ def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
         is the list of per-iteration loss dicts; and problem is the
         :class:`~vizopt.base.OptimizationProblem` instance.
     """
-    leaf_names, circles, name_to_idx = _leaf_circles_from_graph(G)
-    set_names, sets = _sets_from_graph(G, leaf_names, name_to_idx)
+    leaf_names, circles, name_to_idx = _leaf_circles_from_graph(inclusion_graph)
+    set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
 
     results_list, circles_out_arr, history, problem = (
         optimize_multiple_radially_convex_sets_with_movable_circles(
