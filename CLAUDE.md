@@ -119,6 +119,15 @@ uv run zensical build
 - Docs source lives in `docs/`; `docs/api.md` uses `::: vizopt.module.Symbol` directives — do not write API docs by hand there
 - All public functions and classes must have Google-style docstrings so mkdocstrings can render them
 
+## Graph Conventions
+
+When a NetworkX `DiGraph` encodes a set hierarchy or containment relationship, the project-wide convention is:
+
+- **Edge direction: parent → child** — an edge `(u, v)` means `v` is a member of (contained in) `u`.
+- **Leaves** (`out_degree == 0`): terminal elements with no children.
+- **Internal nodes** (`out_degree > 0`): composite sets or containers.
+- **Membership**: a leaf belongs to a set if it is reachable from the set via `nx.descendants`.
+
 ## Style guide
 
 - Google-style docstrings

@@ -9,6 +9,7 @@ General star-domain loss terms and helpers live in
 """
 
 import jax.numpy as jnp
+import networkx as nx
 import numpy as np
 
 from ..base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
@@ -32,6 +33,25 @@ from ..components.stars import (
     _svg_configuration_fixed,
     _svg_configuration_movable,
 )
+
+
+def _leaf_circles_from_graph(G: nx.DiGraph):
+    names = [n for n in G.nodes if G.out_degree(n) == 0]
+    circles = np.array(
+        [[*G.nodes[n]["center"], G.nodes[n]["r"]] for n in names], dtype=np.float32
+    )
+    name_to_idx = {name: i for i, name in enumerate(names)}
+    return names, circles, name_to_idx
+
+
+def _sets_from_graph(G: nx.DiGraph, leaf_names, name_to_idx):
+    leaf_set = set(leaf_names)
+    set_names = [n for n in nx.topological_sort(G) if G.out_degree(n) > 0]
+    sets_idx = [
+        sorted(name_to_idx[n] for n in nx.descendants(G, sname) if n in leaf_set)
+        for sname in set_names
+    ]
+    return set_names, sets_idx
 
 
 def optimize_multiple_radially_convex_sets(
@@ -307,3 +327,83 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         history,
         problem,
     )
+
+
+def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
+    G: nx.DiGraph,
+    weight_area=1.0,
+    weight_perimeter=1.0,
+    weight_exclusion=10.0,
+    weight_smoothness=1.0,
+    weight_position_anchor=1.0,
+    weight_circle_collision=10.0,
+    weight_bounding_box=0.0,
+    weight_set_attraction=0.0,
+    circle_collision_alpha=0.0,
+    offsets=0.1,
+    representation: StarRepresentation | None = None,
+    term_schedules=None,
+    optim_config: OptimConfig | None = None,
+    callback: Callback | None = None,
+):
+    """Like optimize_multiple_radially_convex_sets_with_movable_circles, but takes a DiGraph.
+
+    Leaf nodes (out-degree 0) become circles; internal nodes (out-degree > 0) become
+    sets. A leaf belongs to a set if it is a descendant of that set.
+
+    Args:
+        G: DiGraph with parent→child edges (edge (u, v) means v ⊂ u). Leaf nodes
+            must carry ``center`` ([x, y]) and ``r`` (float) attributes.
+        weight_area: weight for the area objective.
+        weight_perimeter: weight for the perimeter objective.
+        weight_exclusion: weight for the exclusion penalty.
+        weight_smoothness: weight for the smoothness penalty.
+        weight_position_anchor: weight for penalizing circle positions deviating
+            from their initial positions.
+        weight_circle_collision: weight for penalizing overlapping circles.
+        weight_bounding_box: weight for minimizing total width + total height of
+            all set boundaries. Default 0.0 (disabled).
+        weight_set_attraction: weight for pulling each circle toward the center
+            of every set it belongs to. Default 0.0 (disabled).
+        circle_collision_alpha: coefficient for the linear term in the circle
+            collision penalty. Default 0.0 (pure quadratic).
+        offsets: padding added to each circle's radius in the enclosure term.
+        representation: star domain parametrization.
+        term_schedules: optional dict mapping term name to a schedule callable.
+        optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults when ``None``.
+        callback: Optional callback called after each iteration.
+
+    Returns:
+        Tuple of (results, circles_out, history, problem) where results maps
+        set node name → dict with "center", "radii", "angles"; circles_out maps
+        leaf node name → array of shape (3,) with optimized [cx, cy, r]; history
+        is the list of per-iteration loss dicts; and problem is the
+        :class:`~vizopt.base.OptimizationProblem` instance.
+    """
+    leaf_names, circles, name_to_idx = _leaf_circles_from_graph(G)
+    set_names, sets = _sets_from_graph(G, leaf_names, name_to_idx)
+
+    results_list, circles_out_arr, history, problem = (
+        optimize_multiple_radially_convex_sets_with_movable_circles(
+            circles=circles,
+            sets=sets,
+            weight_area=weight_area,
+            weight_perimeter=weight_perimeter,
+            weight_exclusion=weight_exclusion,
+            weight_smoothness=weight_smoothness,
+            weight_position_anchor=weight_position_anchor,
+            weight_circle_collision=weight_circle_collision,
+            weight_bounding_box=weight_bounding_box,
+            weight_set_attraction=weight_set_attraction,
+            circle_collision_alpha=circle_collision_alpha,
+            offsets=offsets,
+            representation=representation,
+            term_schedules=term_schedules,
+            optim_config=optim_config,
+            callback=callback,
+        )
+    )
+
+    named_results = {set_names[s]: results_list[s] for s in range(len(set_names))}
+    named_circles_out = {leaf_names[i]: circles_out_arr[i] for i in range(len(leaf_names))}
+    return named_results, named_circles_out, history, problem

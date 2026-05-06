@@ -8,7 +8,7 @@ def graph_to_optimizer_inputs(G):
     Args:
         G: A ``networkx.DiGraph`` whose nodes carry ``target_area`` (float or
             None), ``center`` ([x, y]), and ``color`` (hex string) attributes,
-            and whose edges point from child to parent (child ⊂ parent).
+            and whose edges point from parent to child (parent ⊃ child).
 
     Returns:
         Tuple of ``(set_names, idx, enclosures, target_areas, initial_centers)``
@@ -23,31 +23,29 @@ def graph_to_optimizer_inputs(G):
 
 
 def get_leaf_circles(G):
-    """Extract non-enclosing nodes (in-degree 0) as circles.
-
-    Circle radius is derived as ``sqrt(target_area / π)``, the radius of a disc
-    with the given area.
+    """Extract leaf nodes (out-degree 0) as circles.
 
     Args:
-        G: A DiGraph from ``make_british_islands_graph``.
+        G: A DiGraph with parent→child edges. Leaf nodes must carry ``center``
+            ([x, y]) and ``r`` (float) attributes.
 
     Returns:
         Tuple of ``(names, circles, name_to_idx)`` where ``circles`` is a list
         of ``(cx, cy, r)`` tuples and ``name_to_idx`` maps name to integer index.
     """
-    names = [n for n in G.nodes if G.in_degree(n) == 0]
-    circles = [(*G.nodes[n]["center"], np.sqrt(G.nodes[n]["target_area"] / np.pi)) for n in names]
+    names = [n for n in G.nodes if G.out_degree(n) == 0]
+    circles = [(*G.nodes[n]["center"], G.nodes[n]["r"]) for n in names]
     name_to_idx = {name: i for i, name in enumerate(names)}
     return names, circles, name_to_idx
 
 
 def get_enclosing_sets(G, leaf_names):
-    """Return enclosing (in-degree > 0) nodes and their leaf memberships.
+    """Return enclosing (out-degree > 0) nodes and their leaf memberships.
 
-    Set names are returned in topological order (innermost first).
+    Set names are returned in topological order (outermost first).
 
     Args:
-        G: The DiGraph.
+        G: A DiGraph with parent→child edges.
         leaf_names: Ordered list of leaf territory names (from ``get_leaf_circles``).
 
     Returns:
@@ -55,11 +53,11 @@ def get_enclosing_sets(G, leaf_names):
         of enclosing node names and ``sets_idx`` is a list of lists of indices into
         ``leaf_names``.
     """
-    set_names = [n for n in nx.topological_sort(G) if G.in_degree(n) > 0]
+    set_names = [n for n in nx.topological_sort(G) if G.out_degree(n) > 0]
     leaf_set = set(leaf_names)
     name_to_idx = {name: i for i, name in enumerate(leaf_names)}
     sets_idx = [
-        sorted(name_to_idx[n] for n in nx.ancestors(G, sname) if n in leaf_set)
+        sorted(name_to_idx[n] for n in nx.descendants(G, sname) if n in leaf_set)
         for sname in set_names
     ]
     return set_names, sets_idx
@@ -71,6 +69,7 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
     Nodes carry ``target_area``, ``center``, and ``color`` attributes for use
     with ``graph_to_optimizer_inputs`` and ``get_leaf_circles``. Aggregate set
     nodes have ``target_area=None``; leaf territory nodes have a numeric value.
+    Leaf nodes also carry an ``r`` attribute (``sqrt(target_area / π)``).
 
     Args:
         include_ireland_island: When True, adds "Ireland island" as the union
@@ -96,24 +95,30 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
     G.add_node("Jersey",              target_area=0.04, center=[ 3.0, -3.5], color="#e8a838")
     G.add_node("Guernsey",            target_area=0.03, center=[ 1.2, -3.8], color="#2e9bba")
 
-    # Edges: child → parent  (child ⊂ parent)
-    G.add_edge("England",             "Great Britain")
-    G.add_edge("Scotland",            "Great Britain")
-    G.add_edge("Wales",               "Great Britain")
-    G.add_edge("Great Britain",       "United Kingdom")
-    G.add_edge("Northern Ireland",    "United Kingdom")
-    G.add_edge("United Kingdom",      "British Islands")
-    G.add_edge("Crown Dependencies",  "British Islands")
-    G.add_edge("Isle of Man",         "Crown Dependencies")
-    G.add_edge("Jersey",              "Crown Dependencies")
-    G.add_edge("Guernsey",            "Crown Dependencies")
+    # Edges: parent → child  (parent ⊃ child)
+    G.add_edge("Great Britain",       "England")
+    G.add_edge("Great Britain",       "Scotland")
+    G.add_edge("Great Britain",       "Wales")
+    G.add_edge("United Kingdom",      "Great Britain")
+    G.add_edge("United Kingdom",      "Northern Ireland")
+    G.add_edge("British Islands",     "United Kingdom")
+    G.add_edge("British Islands",     "Crown Dependencies")
+    G.add_edge("Crown Dependencies",  "Isle of Man")
+    G.add_edge("Crown Dependencies",  "Jersey")
+    G.add_edge("Crown Dependencies",  "Guernsey")
 
     if include_ireland_island:
-        G.add_edge("Northern Ireland",    "Ireland island")
-        G.add_edge("Republic of Ireland", "Ireland island")
-        G.add_edge("Ireland island",      "British Islands")
+        G.add_edge("Ireland island",      "Northern Ireland")
+        G.add_edge("Ireland island",      "Republic of Ireland")
+        G.add_edge("British Islands",     "Ireland island")
     else:
         G.remove_node("Ireland island")
-        G.add_edge("Republic of Ireland", "British Islands")
+        G.add_edge("British Islands",     "Republic of Ireland")
+
+    # Add r to leaf nodes for use with stars_vs_circles.from_graph API
+    for n in G.nodes:
+        area = G.nodes[n].get("target_area")
+        if area is not None:
+            G.nodes[n]["r"] = float(np.sqrt(area / np.pi))
 
     return G

@@ -123,38 +123,36 @@ def test_graph_has_expected_nodes():
 
 
 def test_graph_leaf_nodes_have_target_area():
-    import networkx as nx
     G = make_british_islands_graph()
     for n in G.nodes:
-        if G.in_degree(n) == 0:
+        if G.out_degree(n) == 0:
             assert G.nodes[n]["target_area"] is not None
             assert G.nodes[n]["target_area"] > 0
 
 
 def test_graph_enclosing_nodes_have_none_target_area():
-    import networkx as nx
     G = make_british_islands_graph()
     for n in G.nodes:
-        if G.in_degree(n) > 0:
+        if G.out_degree(n) > 0:
             assert G.nodes[n]["target_area"] is None
 
 
 def test_graph_england_in_great_britain():
     G = make_british_islands_graph()
-    assert G.has_edge("England", "Great Britain")
+    assert G.has_edge("Great Britain", "England")
 
 
 def test_graph_without_ireland_island():
     G = make_british_islands_graph(include_ireland_island=False)
     assert "Ireland island" not in G.nodes
-    assert G.has_edge("Republic of Ireland", "British Islands")
+    assert G.has_edge("British Islands", "Republic of Ireland")
 
 
 def test_graph_with_ireland_island():
     G = make_british_islands_graph(include_ireland_island=True)
     assert "Ireland island" in G.nodes
-    assert G.has_edge("Republic of Ireland", "Ireland island")
-    assert G.has_edge("Northern Ireland", "Ireland island")
+    assert G.has_edge("Ireland island", "Republic of Ireland")
+    assert G.has_edge("Ireland island", "Northern Ireland")
 
 
 # ---------------------------------------------------------------------------
@@ -162,12 +160,11 @@ def test_graph_with_ireland_island():
 # ---------------------------------------------------------------------------
 
 
-def test_get_leaf_circles_all_in_degree_zero():
-    import networkx as nx
+def test_get_leaf_circles_all_out_degree_zero():
     G = make_british_islands_graph()
     names, circles, name_to_idx = get_leaf_circles(G)
     for name in names:
-        assert G.in_degree(name) == 0
+        assert G.out_degree(name) == 0
 
 
 def test_get_leaf_circles_radius_from_area():
@@ -192,12 +189,11 @@ def test_get_leaf_circles_index_map():
 
 
 def test_get_enclosing_sets_all_have_children():
-    import networkx as nx
     G = make_british_islands_graph()
     leaf_names, _, _ = get_leaf_circles(G)
     set_names, sets_idx = get_enclosing_sets(G, leaf_names)
     for name in set_names:
-        assert G.in_degree(name) > 0
+        assert G.out_degree(name) > 0
 
 
 def test_get_enclosing_sets_indices_in_range():

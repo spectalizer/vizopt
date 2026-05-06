@@ -37,7 +37,7 @@ positions = circle_packing.optimize_circle_packing(
 - Multi-objective optimization (edge lengths, compactness, collision avoidance, inclusion constraints)
 - Efficient JAX-based gradient descent with JIT compilation
 - Handles arbitrary hierarchical inclusion relationships
-- NetworkX integration
+- NetworkX integration with a consistent DiGraph convention: **parent → child edges** (`(u, v)` means `v ⊂ u`)
 
 ## Examples
 
