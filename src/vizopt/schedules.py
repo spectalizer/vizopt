@@ -5,6 +5,8 @@ a term's effective weight over the course of optimization. They must use JAX
 ops (e.g. ``jnp.clip``) so they can be traced through without recompilation.
 """
 
+from dataclasses import dataclass, field
+
 from jax import numpy as jnp
 
 
@@ -48,27 +50,63 @@ def cooldown(peak_frac: float, ramp_frac: float, n_iters: int):
     return fn
 
 
-def make_term_schedules(params: dict, n_iters: int) -> dict:
-    """Build a ``term_schedules`` dict from a flat parameter dict.
+@dataclass
+class TermSchedules:
+    """Per-term weight schedules with warmup/cooldown categorization.
+
+    Attributes:
+        schedules: Dict mapping term name to a JAX-compatible schedule callable,
+            ready to pass as ``term_schedules`` to any optimizer.
+        quality_terms: Term names whose schedules end at 1 (warmup). Use these
+            when computing a quality score from the final loss history.
+        relaxation_terms: Term names whose schedules end at 0 (cooldown). These
+            are expected to fade out and should be excluded from quality scoring.
+    """
+
+    schedules: dict = field(default_factory=dict)
+    quality_terms: set = field(default_factory=set)
+    relaxation_terms: set = field(default_factory=set)
+
+
+def make_term_schedules(params: dict, n_iters: int) -> TermSchedules:
+    """Build a :class:`TermSchedules` from a flat parameter dict.
+
+    Term names and schedule types are inferred from param key suffixes:
+
+    - ``{term}_delay`` + ``{term}_ramp`` → :func:`warmup` for ``term``
+    - ``{term}_peak``  + ``{term}_ramp`` → :func:`cooldown` for ``term``
 
     Args:
-        params: Dict with fractional schedule parameters:
-            ``collision_delay``, ``collision_ramp``,
-            ``exclusion_delay``, ``exclusion_ramp``,
-            ``area_delay``, ``area_ramp``,
-            ``perimeter_delay``, ``perimeter_ramp``,
-            ``attraction_peak``, ``attraction_ramp``.
-            All values are fractions of ``n_iters``.
+        params: Flat dict whose keys follow the naming convention above.
+            All values are fractions of ``n_iters`` in ``[0, 1]``.
         n_iters: Total number of optimization iterations. Schedules scale
             automatically — the same params work for any run length.
 
     Returns:
-        Dict mapping term name to a JAX-compatible schedule callable.
+        :class:`TermSchedules` with ``schedules``, ``quality_terms``, and
+        ``relaxation_terms`` populated from ``params``.
     """
-    return {
-        "circle_collision": warmup(params["collision_delay"], params["collision_ramp"], n_iters),
-        "exclusion":        warmup(params["exclusion_delay"], params["exclusion_ramp"], n_iters),
-        "area":             warmup(params["area_delay"],      params["area_ramp"],      n_iters),
-        "perimeter":        warmup(params["perimeter_delay"], params["perimeter_ramp"], n_iters),
-        "set_attraction":   cooldown(params["attraction_peak"], params["attraction_ramp"], n_iters),
-    }
+    schedules: dict = {}
+    quality_terms: set = set()
+    relaxation_terms: set = set()
+
+    for key, val in params.items():
+        if key.endswith("_delay"):
+            term = key[:-6]
+            ramp = params.get(f"{term}_ramp")
+            if ramp is not None:
+                schedules[term] = warmup(val, ramp, n_iters)
+                quality_terms.add(term)
+        elif key.endswith("_peak"):
+            term = key[:-5]
+            ramp = params.get(f"{term}_ramp")
+            if ramp is not None:
+                schedules[term] = cooldown(val, ramp, n_iters)
+                relaxation_terms.add(term)
+        elif not key.endswith("_ramp"):
+            raise ValueError(
+                f"Unrecognised schedule param {key!r}. "
+                "Keys must end with '_delay', '_peak', or '_ramp'."
+            )
+
+    return TermSchedules(schedules=schedules, quality_terms=quality_terms, relaxation_terms=relaxation_terms)
