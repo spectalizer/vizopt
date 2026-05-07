@@ -163,7 +163,10 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
                 for t in terms
             ]
         return OptimizationProblem(
-            input_parameters, terms, self.initialize, self.plot_configuration,
+            input_parameters,
+            terms,
+            self.initialize,
+            self.plot_configuration,
             self.svg_configuration,
         )
 
@@ -211,16 +214,24 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
         Returns:
             Tuple of (optimized variables, history). History is a list of
-            dicts with keys ``"iteration"``, ``"total"``, and one key per
-            term name containing the weighted term value at that iteration.
-            When using multiple restarts, history corresponds to the best run.
+            dicts with keys ``"iteration"``, ``"total"``, one key per term
+            name with the schedule-weighted value, and one key per term name
+            suffixed ``_unscheduled`` with the end-weighted value (schedule
+            evaluated at the final step). When using multiple restarts, history corresponds
+            to the best run.
         """
         from . import jaxopt  # lazy import to avoid circular dependency
 
         config = optim_config or OptimConfig()
+        has_schedules = any(t.schedule is not None for t in self.terms)
+        final_step = jnp.int32(config.n_iters - 1)
 
-        if callback is None:
-            callback = jaxopt.default_print_callback
+        # When schedules are active and no user callback is provided, tracking_callback
+        # handles printing (showing both scheduled and unscheduled totals). Otherwise
+        # fall back to the standard print callback.
+        user_callback = callback
+        if user_callback is None and not has_schedules:
+            user_callback = jaxopt.default_print_callback
 
         fun = build_objective(self.terms, self.input_parameters)
 
@@ -230,24 +241,48 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
         for restart in range(config.n_restarts):
             history: list[dict] = []
+            _last_unscheduled = [0.0]  # updated every track_every steps
 
             def tracking_callback(
-                i_iter: int, loss_value: Array, optim_vars: OptimVars, grads: Any,
+                i_iter: int,
+                loss_value: Array,
+                optim_vars: OptimVars,
+                grads: Any,
                 _history: list[dict] = history,
+                _last_unscheduled: list[float] = _last_unscheduled,
             ) -> None:
-                if i_iter % track_every == 0:
+                if (i_iter % track_every == 0) or i_iter == config.n_iters - 1:
                     record: dict = {"iteration": i_iter, "total": float(loss_value)}
                     step = jnp.int32(i_iter)
+                    unscheduled_total = 0.0
                     for term in self.terms:
-                        sched = float(term.schedule(step)) if term.schedule is not None else 1.0
-                        record[term.name] = float(
-                            term.compute(optim_vars, self.input_parameters)
-                            * term.multiplier
-                            * sched
+                        raw = float(term.compute(optim_vars, self.input_parameters))
+                        sched = (
+                            float(term.schedule(step))
+                            if term.schedule is not None
+                            else 1.0
                         )
+                        end_sched = (
+                            float(term.schedule(final_step))
+                            if term.schedule is not None
+                            else 1.0
+                        )
+                        record[term.name] = raw * term.multiplier * sched
+                        record[f"{term.name}_unscheduled"] = raw * term.multiplier * end_sched
+                        unscheduled_total += raw * term.multiplier * end_sched
+                    _last_unscheduled[0] = unscheduled_total
                     _history.append(record)
-                if callback is not None:
-                    callback(i_iter, loss_value, optim_vars, grads)
+                if user_callback is not None:
+                    user_callback(i_iter, loss_value, optim_vars, grads)
+                elif (
+                    has_schedules
+                    and (i_iter % 100 == 0)
+                    or i_iter == config.n_iters - 1
+                ):
+                    print(
+                        f"Iteration {i_iter}: loss = {float(loss_value):.6f}"
+                        f"  unscheduled loss = {_last_unscheduled[0]:.6f}"
+                    )
 
             optim_vars = self.initialize(self.input_parameters, config.seed + restart)
             optim_vars_result, final_loss = jaxopt.optimize_gradient_descent(
