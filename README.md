@@ -12,6 +12,12 @@ Read the documentation [https://spectalizer.github.io/vizopt/](https://spectaliz
 pip install vizopt
 ```
 
+To use Optuna-based schedule search (e.g. the `star_curriculum` notebook):
+
+```bash
+uv sync --group hyperoptim
+```
+
 ## Quick Start
 
 ```python
