@@ -58,12 +58,20 @@ class ObjectiveTerm:
 def build_objective(
     terms: list[ObjectiveTerm],
     input_parameters: Any,
+    var_scales: dict | None = None,
 ) -> Callable[[OptimVars, Array], Array]:
     """Build a composite objective function from a list of terms.
 
     Args:
         terms: Objective terms to sum, each weighted by its multiplier.
         input_parameters: Fixed data passed to each term's compute function.
+        var_scales: Optional per-variable scale factors. When provided, each
+            ``optim_vars[k]`` is multiplied by ``var_scales[k]`` before being
+            passed to any term's ``compute`` function, so the optimizer works
+            in a normalised space while loss terms always receive physical
+            values. Values may be scalars or arrays (broadcast over the
+            variable's shape). Keys absent from ``var_scales`` are left
+            unscaled.
 
     Returns:
         A callable ``fun(optim_vars, step) -> scalar`` suitable for gradient
@@ -74,6 +82,8 @@ def build_objective(
     active_terms = [t for t in terms if t.multiplier != 0.0]
 
     def fun_to_minimize(optim_vars: OptimVars, step: Array) -> Array:
+        if var_scales is not None:
+            optim_vars = {k: v * var_scales.get(k, 1.0) for k, v in optim_vars.items()}
         return sum(
             (
                 term.compute(optim_vars, input_parameters)
@@ -125,6 +135,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
         self,
         input_parameters: InputParams,
         weight_overrides: dict[str, float] | None = None,
+        var_scales: dict | None = None,
     ) -> "OptimizationProblem[InputParams, OptimVars]":
         """Create a runnable problem instance from concrete input parameters.
 
@@ -138,6 +149,9 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
             weight_overrides: Optional mapping of term name to multiplier.
                 Overrides the default multiplier for the named terms.
                 Unknown names raise ``KeyError``.
+            var_scales: Optional per-variable scale factors used to normalise
+                ``optim_vars`` during optimisation. See :func:`build_objective`
+                for details. Values may be scalars or arrays.
 
         Returns:
             An :class:`OptimizationProblem` ready to optimize.
@@ -168,6 +182,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
             self.initialize,
             self.plot_configuration,
             self.svg_configuration,
+            var_scales,
         )
 
 
@@ -185,6 +200,8 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         svg_configuration: Optional callable to produce SVG element specs for
             animation. Signature:
             ``svg_configuration(snapshots, input_parameters, size) -> list[dict]``.
+        var_scales: Optional per-variable scale factors. See
+            :func:`build_objective` for details.
     """
 
     input_parameters: InputParams
@@ -192,6 +209,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     initialize: Callable[[InputParams, int], OptimVars]
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
+    var_scales: dict | None = None
 
     def optimize(
         self,
@@ -233,7 +251,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         if user_callback is None and not has_schedules:
             user_callback = jaxopt.default_print_callback
 
-        fun = build_objective(self.terms, self.input_parameters)
+        fun = build_objective(self.terms, self.input_parameters, self.var_scales)
 
         best_vars: OptimVars | None = None
         best_history: list[dict] = []
@@ -251,12 +269,19 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 _history: list[dict] = history,
                 _last_unscheduled: list[float] = _last_unscheduled,
             ) -> None:
+                if self.var_scales is not None:
+                    physical_vars = {
+                        k: v * self.var_scales.get(k, 1.0)
+                        for k, v in optim_vars.items()
+                    }
+                else:
+                    physical_vars = optim_vars
                 if (i_iter % track_every == 0) or i_iter == config.n_iters - 1:
                     record: dict = {"iteration": i_iter, "total": float(loss_value)}
                     step = jnp.int32(i_iter)
                     unscheduled_total = 0.0
                     for term in self.terms:
-                        raw = float(term.compute(optim_vars, self.input_parameters))
+                        raw = float(term.compute(physical_vars, self.input_parameters))
                         sched = (
                             float(term.schedule(step))
                             if term.schedule is not None
@@ -268,12 +293,14 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                             else 1.0
                         )
                         record[term.name] = raw * term.multiplier * sched
-                        record[f"{term.name}_unscheduled"] = raw * term.multiplier * end_sched
+                        record[f"{term.name}_unscheduled"] = (
+                            raw * term.multiplier * end_sched
+                        )
                         unscheduled_total += raw * term.multiplier * end_sched
                     _last_unscheduled[0] = unscheduled_total
                     _history.append(record)
                 if user_callback is not None:
-                    user_callback(i_iter, loss_value, optim_vars, grads)
+                    user_callback(i_iter, loss_value, physical_vars, grads)
                 elif (
                     has_schedules
                     and (i_iter % 100 == 0)
@@ -285,6 +312,10 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                     )
 
             optim_vars = self.initialize(self.input_parameters, config.seed + restart)
+            if self.var_scales is not None:
+                optim_vars = {
+                    k: v / self.var_scales.get(k, 1.0) for k, v in optim_vars.items()
+                }
             optim_vars_result, final_loss = jaxopt.optimize_gradient_descent(
                 optim_vars,
                 fun,
@@ -292,6 +323,11 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 learning_rate=config.learning_rate,
                 callback=tracking_callback,
             )
+            if self.var_scales is not None:
+                optim_vars_result = {
+                    k: v * self.var_scales.get(k, 1.0)
+                    for k, v in optim_vars_result.items()
+                }
             if final_loss < best_loss:
                 best_loss = final_loss
                 best_vars = optim_vars_result

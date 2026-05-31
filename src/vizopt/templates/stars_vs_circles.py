@@ -38,7 +38,10 @@ from ..components.stars import (
 def _leaf_circles_from_graph(inclusion_graph: nx.DiGraph):
     names = [n for n in inclusion_graph.nodes if inclusion_graph.out_degree(n) == 0]
     circles = np.array(
-        [[*inclusion_graph.nodes[n]["center"], inclusion_graph.nodes[n]["r"]] for n in names],
+        [
+            [*inclusion_graph.nodes[n]["center"], inclusion_graph.nodes[n]["r"]]
+            for n in names
+        ],
         dtype=np.float32,
     )
     name_to_idx = {name: i for i, name in enumerate(names)}
@@ -47,9 +50,17 @@ def _leaf_circles_from_graph(inclusion_graph: nx.DiGraph):
 
 def _sets_from_graph(inclusion_graph: nx.DiGraph, leaf_names, name_to_idx):
     leaf_set = set(leaf_names)
-    set_names = [n for n in nx.topological_sort(inclusion_graph) if inclusion_graph.out_degree(n) > 0]
+    set_names = [
+        n
+        for n in nx.topological_sort(inclusion_graph)
+        if inclusion_graph.out_degree(n) > 0
+    ]
     sets_idx = [
-        sorted(name_to_idx[n] for n in nx.descendants(inclusion_graph, sname) if n in leaf_set)
+        sorted(
+            name_to_idx[n]
+            for n in nx.descendants(inclusion_graph, sname)
+            if n in leaf_set
+        )
         for sname in set_names
     ]
     return set_names, sets_idx
@@ -121,7 +132,9 @@ def optimize_multiple_radially_convex_sets(
         circles_array = circles_array[None, :]
     N = len(circles_array)
     S = len(sets)
-    angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(np.float32)
+    angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(
+        np.float32
+    )
     angles_jnp = jnp.array(angles)
 
     membership = _build_membership(S, N, sets)
@@ -141,6 +154,18 @@ def optimize_multiple_radially_convex_sets(
 
     init_vars = representation.initialize_vars(S, initial_radii, initial_centers)
 
+    pos_scale_x = max(
+        float(np.std(circles_array[:, 0])), float(circles_array[:, 2].mean())
+    )
+    pos_scale_y = max(
+        float(np.std(circles_array[:, 1])), float(circles_array[:, 2].mean())
+    )
+    rad_scale = float(initial_radii.mean())
+    var_scales = {"centers": np.array([pos_scale_x, pos_scale_y], dtype=np.float32)}
+    for key in init_vars:
+        if key != "centers":
+            var_scales[key] = np.float32(rad_scale)
+
     def initialize(_, seed):
         return {k: v.copy() for k, v in init_vars.items()}
 
@@ -149,18 +174,45 @@ def optimize_multiple_radially_convex_sets(
 
     schedules = term_schedules or {}
     terms = [
-        ObjectiveTerm("enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", wrap(_multi_term_exclusion), weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("area", wrap(_multi_term_area), weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter, schedules.get("perimeter")),
+        ObjectiveTerm(
+            "enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")
+        ),
+        ObjectiveTerm(
+            "exclusion",
+            wrap(_multi_term_exclusion),
+            weight_exclusion,
+            schedules.get("exclusion"),
+        ),
+        ObjectiveTerm(
+            "min_radius",
+            wrap(_multi_term_min_radius),
+            10.0,
+            schedules.get("min_radius"),
+        ),
+        ObjectiveTerm(
+            "smoothness",
+            wrap(_multi_term_smoothness),
+            weight_smoothness,
+            schedules.get("smoothness"),
+        ),
+        ObjectiveTerm(
+            "area", wrap(_multi_term_area), weight_area, schedules.get("area")
+        ),
+        ObjectiveTerm(
+            "perimeter",
+            wrap(_multi_term_perimeter),
+            weight_perimeter,
+            schedules.get("perimeter"),
+        ),
     ]
 
     problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize,
-        svg_configuration=representation.make_svg_configuration(_svg_configuration_fixed)
-    ).instantiate(input_parameters)
+        terms=terms,
+        initialize=initialize,
+        svg_configuration=representation.make_svg_configuration(
+            _svg_configuration_fixed
+        ),
+    ).instantiate(input_parameters, var_scales=var_scales)
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
     radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
@@ -258,7 +310,9 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
         circles_array = circles_array[None, :]
     N = len(circles_array)
     S = len(sets)
-    angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(np.float32)
+    angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(
+        np.float32
+    )
     angles_jnp = jnp.array(angles)
 
     initial_circle_positions = circles_array[:, :2].copy()  # (N, 2)
@@ -283,30 +337,92 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
 
     init_vars = representation.initialize_vars(S, initial_radii, initial_centers)
 
+    pos_scale_x = max(float(np.std(circles_array[:, 0])), float(circle_radii.mean()))
+    pos_scale_y = max(float(np.std(circles_array[:, 1])), float(circle_radii.mean()))
+    rad_scale = float(initial_radii.mean())
+    pos_scale_arr = np.array([pos_scale_x, pos_scale_y], dtype=np.float32)
+    var_scales = {"centers": pos_scale_arr, "circle_positions": pos_scale_arr}
+    for key in init_vars:
+        if key != "centers":
+            var_scales[key] = np.float32(rad_scale)
+
     def initialize(_, seed):
-        return {**{k: v.copy() for k, v in init_vars.items()}, "circle_positions": initial_circle_positions.copy()}
+        return {
+            **{k: v.copy() for k, v in init_vars.items()},
+            "circle_positions": initial_circle_positions.copy(),
+        }
 
     def wrap(fn):
         return representation.wrap(fn, angles_jnp)
 
     schedules = term_schedules or {}
     terms = [
-        ObjectiveTerm("enclosure", wrap(_multi_term_enclosure_movable), 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", wrap(_multi_term_exclusion_movable), weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("area", wrap(_multi_term_area), weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter, schedules.get("perimeter")),
-        ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor, schedules.get("position_anchor")),
-        ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision, schedules.get("circle_collision")),
-        ObjectiveTerm("bounding_box", wrap(_multi_term_total_bounding_box), weight_bounding_box, schedules.get("bounding_box")),
-        ObjectiveTerm("set_attraction", _multi_term_set_attraction, weight_set_attraction, schedules.get("set_attraction")),
+        ObjectiveTerm(
+            "enclosure",
+            wrap(_multi_term_enclosure_movable),
+            10.0,
+            schedules.get("enclosure"),
+        ),
+        ObjectiveTerm(
+            "exclusion",
+            wrap(_multi_term_exclusion_movable),
+            weight_exclusion,
+            schedules.get("exclusion"),
+        ),
+        ObjectiveTerm(
+            "min_radius",
+            wrap(_multi_term_min_radius),
+            10.0,
+            schedules.get("min_radius"),
+        ),
+        ObjectiveTerm(
+            "smoothness",
+            wrap(_multi_term_smoothness),
+            weight_smoothness,
+            schedules.get("smoothness"),
+        ),
+        ObjectiveTerm(
+            "area", wrap(_multi_term_area), weight_area, schedules.get("area")
+        ),
+        ObjectiveTerm(
+            "perimeter",
+            wrap(_multi_term_perimeter),
+            weight_perimeter,
+            schedules.get("perimeter"),
+        ),
+        ObjectiveTerm(
+            "position_anchor",
+            _multi_term_position_anchor,
+            weight_position_anchor,
+            schedules.get("position_anchor"),
+        ),
+        ObjectiveTerm(
+            "circle_collision",
+            _multi_term_circle_collision,
+            weight_circle_collision,
+            schedules.get("circle_collision"),
+        ),
+        ObjectiveTerm(
+            "bounding_box",
+            wrap(_multi_term_total_bounding_box),
+            weight_bounding_box,
+            schedules.get("bounding_box"),
+        ),
+        ObjectiveTerm(
+            "set_attraction",
+            _multi_term_set_attraction,
+            weight_set_attraction,
+            schedules.get("set_attraction"),
+        ),
     ]
 
     problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize,
-        svg_configuration=representation.make_svg_configuration(_svg_configuration_movable)
-    ).instantiate(input_parameters)
+        terms=terms,
+        initialize=initialize,
+        svg_configuration=representation.make_svg_configuration(
+            _svg_configuration_movable
+        ),
+    ).instantiate(input_parameters, var_scales=var_scales)
     optim_vars, history = problem.optimize(optim_config, callback=callback)
 
     circles_out = np.concatenate(
@@ -406,5 +522,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
     )
 
     named_results = {set_names[s]: results_list[s] for s in range(len(set_names))}
-    named_circles_out = {leaf_names[i]: circles_out_arr[i] for i in range(len(leaf_names))}
+    named_circles_out = {
+        leaf_names[i]: circles_out_arr[i] for i in range(len(leaf_names))
+    }
     return named_results, named_circles_out, history, problem
