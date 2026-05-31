@@ -79,6 +79,21 @@ Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to lo
 - **JIT compilation**: The composite loss function built by `build_objective()` is JIT-compiled via `jaxopt.optimize_gradient_descent()`
 - **Parameter dictionaries**: `optim_vars` are plain dicts (e.g., `{"rectangle_positions": ...}`)
 
+#### Variable Normalization
+
+High-level functions can pass a `var_scales` dict to `OptimizationProblemTemplate.instantiate()` to normalize optimization variables. The optimizer then works in a scaled space while all loss terms and callbacks always receive physical-space values.
+
+**Mechanism** (all in `base.py`):
+- `build_objective()` wraps the loss: `physical_vars[k] = optim_vars[k] * var_scales[k]` before calling any term
+- `optimize()` divides initial variables by their scales before the optimizer loop, and multiplies the result back afterward
+- The `tracking_callback` un-normalizes before computing per-term history and before forwarding to the user callback — so `SnapshotCallback` and the `optim_vars_panel` always see physical values
+
+**Convention**: scale values may be scalars or arrays. Arrays allow per-axis scaling (e.g. `[scale_x, scale_y]` for 2D position variables, which broadcast over `(N, 2)` arrays). Keys absent from `var_scales` are left unscaled.
+
+**In `stars_vs_circles.py`**: scales are computed from the input circles and applied per variable group:
+- `"centers"` and `"circle_positions"`: `[max(std_x, mean_r), max(std_y, mean_r)]` — the `max` guards against the degenerate single-circle case
+- radii-like variables (`"radii"`, `"fourier_coeffs"`, `"bspline_ctrl"`): `mean(initial_radii)` — detected by iterating `init_vars.keys()` and treating every non-`"centers"` key as radii-scale, so all three representations are handled without naming them explicitly
+
 #### Radially Convex Sets (radially_convex.py)
 
 `radially_convex.py` implements circle-set boundary optimization on top of the general framework:
