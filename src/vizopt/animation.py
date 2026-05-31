@@ -109,6 +109,7 @@ def snapshots_to_animated_svg(
     history: list[dict] | None = None,
     loss_curve_height: int = 120,
     log_scale: bool = False,
+    optim_vars_panel_height: int = 0,
 ) -> str:
     """Create an animated SVG from optimization snapshots.
 
@@ -131,6 +132,13 @@ def snapshots_to_animated_svg(
         loss_curve_height: Height in pixels of the loss curve panel, used only
             when ``history`` is provided.
         log_scale: If ``True``, the loss axis uses a log10 scale.
+        optim_vars_panel_height: Height in pixels of the spaghetti-plot panel
+            for optimization variables.  When greater than zero, a panel is
+            appended below the animation (and below the loss curve, if shown)
+            with one polyline per scalar optimization variable, so you can see
+            all variable trajectories across iterations at a glance.  An
+            animated vertical marker tracks the current frame, matching the
+            style of the loss curve panel.
 
     Returns:
         An SVG string. Save with ``Path("out.svg").write_text(svg)`` or
@@ -151,7 +159,11 @@ def snapshots_to_animated_svg(
     n_frames = len(snapshots)
     total_dur = n_frames / fps
 
-    total_height = size + (loss_curve_height if history else 0)
+    total_height = (
+        size
+        + (loss_curve_height if history else 0)
+        + (optim_vars_panel_height if optim_vars_panel_height > 0 else 0)
+    )
 
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{total_height}">',
@@ -190,6 +202,18 @@ def snapshots_to_animated_svg(
             total_dur,
             calc_mode,
             log_scale,
+        )
+
+    if optim_vars_panel_height > 0:
+        panel_y = size + (loss_curve_height if history else 0)
+        lines += _optim_vars_spaghetti_svg_lines(
+            snapshots,
+            panel_y,
+            size,
+            optim_vars_panel_height,
+            n_frames,
+            total_dur,
+            calc_mode,
         )
 
     lines.append("</svg>")
@@ -329,6 +353,108 @@ def _loss_curve_svg_lines(
             f'    {smil_animate("display", display_values, n_frames, total_dur, "discrete")}',
             "  </text>",
         ]
+
+    return lines
+
+
+def _optim_vars_spaghetti_svg_lines(
+    snapshots: list[tuple[int, Any]],
+    panel_y: int,
+    size: int,
+    panel_height: int,
+    n_frames: int,
+    total_dur: float,
+    calc_mode: str,
+) -> list[str]:
+    """Build SVG lines for a spaghetti-plot panel of optimization variables.
+
+    Each scalar component of ``optim_vars`` becomes one polyline traced across
+    all snapshot iterations.  Variables that share the same pytree leaf are
+    drawn in the same colour.  An animated vertical marker tracks the current
+    animation frame, consistent with the loss curve panel.
+
+    Args:
+        snapshots: List of ``(iteration, optim_vars)`` tuples.
+        panel_y: Y-offset of this panel inside the SVG.
+        size: Width of the SVG (same as the animation width).
+        panel_height: Height of this panel in pixels.
+        n_frames: Number of animation frames.
+        total_dur: Total animation duration in seconds.
+        calc_mode: SMIL ``calcMode`` (``"linear"`` or ``"discrete"``).
+
+    Returns:
+        A list of SVG element strings to append before the closing ``</svg>``.
+    """
+    pad_left = 40
+    pad_right = 12
+    pad_top = 12
+    pad_bottom = 24
+
+    snap_iters = [it for it, _ in snapshots]
+    min_iter, max_iter = min(snap_iters), max(snap_iters)
+    iter_range = max_iter - min_iter or 1
+
+    # Flatten each snapshot's optim_vars into (n_scalars,) vectors
+    all_leaves_per_frame = [jax.tree.leaves(ovars) for _, ovars in snapshots]
+    first_leaves = all_leaves_per_frame[0]
+    leaf_sizes = [int(np.asarray(l).size) for l in first_leaves]
+    n_scalars = sum(leaf_sizes)
+
+    series = np.zeros((n_scalars, len(snapshots)))
+    for fi, leaves in enumerate(all_leaves_per_frame):
+        series[:, fi] = np.concatenate([np.asarray(l).ravel() for l in leaves])
+
+    # Y-axis range with 5 % padding
+    raw_min, raw_max = float(series.min()), float(series.max())
+    margin = (raw_max - raw_min) * 0.05 or 0.05
+    min_val, max_val = raw_min - margin, raw_max + margin
+    val_range = max_val - min_val
+
+    plot_w = size - pad_left - pad_right
+    plot_h = panel_height - pad_top - pad_bottom
+
+    def to_x(it: float) -> float:
+        return pad_left + (it - min_iter) / iter_range * plot_w
+
+    def to_y(val: float) -> float:
+        t = (val - min_val) / val_range
+        return panel_y + pad_top + (1.0 - t) * plot_h
+
+    marker_xs = [f"{to_x(it):.1f}" for it in snap_iters]
+
+    # One colour per pytree leaf; cycle through a small palette
+    palette = ["#4477cc", "#cc7744", "#44aa77", "#cc4477", "#7744aa", "#aacc44"]
+
+    lines = [
+        "  <!-- optim vars spaghetti panel -->",
+        f'  <rect x="0" y="{panel_y}" width="{size}" height="{panel_height}" fill="#f8f8f8"/>',
+        f'  <line x1="{pad_left}" y1="{panel_y + pad_top}" x2="{pad_left}" y2="{panel_y + pad_top + plot_h}" stroke="#888" stroke-width="1"/>',
+        f'  <line x1="{pad_left}" y1="{panel_y + pad_top + plot_h}" x2="{pad_left + plot_w}" y2="{panel_y + pad_top + plot_h}" stroke="#888" stroke-width="1"/>',
+        f'  <text x="{pad_left - 4}" y="{panel_y + pad_top + 4}" text-anchor="end" font-size="9" fill="#555">{raw_max:.3g}</text>',
+        f'  <text x="{pad_left - 4}" y="{panel_y + pad_top + plot_h}" text-anchor="end" font-size="9" fill="#555">{raw_min:.3g}</text>',
+        f'  <text x="{pad_left + plot_w // 2}" y="{panel_y + panel_height - 4}" text-anchor="middle" font-size="9" fill="#555">iteration</text>',
+    ]
+
+    scalar_idx = 0
+    for leaf_idx, leaf_size in enumerate(leaf_sizes):
+        color = palette[leaf_idx % len(palette)]
+        for _ in range(leaf_size):
+            pts = " ".join(
+                f"{to_x(snap_iters[fi]):.1f},{to_y(series[scalar_idx, fi]):.1f}"
+                for fi in range(len(snapshots))
+            )
+            lines.append(
+                f'  <polyline points="{pts}" fill="none" stroke="{color}"'
+                f' stroke-width="0.8" opacity="0.35" stroke-linejoin="round"/>'
+            )
+            scalar_idx += 1
+
+    lines += [
+        f'  <line y1="{panel_y + pad_top}" y2="{panel_y + pad_top + plot_h}" stroke="gray" stroke-width="1.5" stroke-dasharray="3,2">',
+        f'    {smil_animate("x1", marker_xs, n_frames, total_dur, calc_mode)}',
+        f'    {smil_animate("x2", marker_xs, n_frames, total_dur, calc_mode)}',
+        "  </line>",
+    ]
 
     return lines
 
