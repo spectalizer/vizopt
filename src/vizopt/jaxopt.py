@@ -13,14 +13,16 @@ from .base import Callback, OptimVars, default_print_callback
 def optimize_gradient_descent(
     params: OptimVars,
     fun_to_minimize: Callable[[OptimVars, Array], Array],
-    learning_rate: float = 0.001,
+    learning_rate: float = 0.002,
+    b1: float = 0.95,
+    b2: float = 0.95,
     n_iters: int = 1000,
     callback: Callback | None = None,
 ) -> tuple[OptimVars, float]:
     """Minimize a function by gradient descent"""
     if callback is None:
         callback = default_print_callback
-    optimizer = optax.adam(learning_rate=learning_rate)
+    optimizer = optax.adam(learning_rate=learning_rate, b1=b1, b2=b2)
     opt_state = optimizer.init(params)
 
     @jax.jit

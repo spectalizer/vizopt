@@ -20,6 +20,8 @@ class OptimConfig:
     Attributes:
         n_iters: Number of optimization iterations.
         learning_rate: Step size for the Adam optimizer.
+        b1: Adam exponential decay rate for the first moment. Default 0.9.
+        b2: Adam exponential decay rate for the second moment. Default 0.999.
         n_restarts: Number of random restarts. The run with the lowest final
             loss is returned. Default 1 (single run).
         seed: Base random seed passed to ``initialize``. Restart ``i``
@@ -28,6 +30,8 @@ class OptimConfig:
 
     n_iters: int = 1000
     learning_rate: float = 0.001
+    b1: float = 0.9
+    b2: float = 0.999
     n_restarts: int = 1
     seed: int = 0
 
@@ -321,6 +325,8 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 fun,
                 n_iters=config.n_iters,
                 learning_rate=config.learning_rate,
+                b1=config.b1,
+                b2=config.b2,
                 callback=tracking_callback,
             )
             if self.var_scales is not None:
