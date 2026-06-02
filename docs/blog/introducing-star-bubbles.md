@@ -1,4 +1,8 @@
+# Introducing Stars-and-Bubbles Euler diagrams
 
+Smoother better visualization of overlapping sets using mathematical optimization.
+
+TODO Add a nice animation somewhere near the beginning of the article.
 
 ## What are Euler diagrams?
 
@@ -37,34 +41,72 @@ This is precisely the condition studied in the art gallery problem, which asks h
 
 Star-shaped regions admit a compact parameterization: fix a center, then specify one radius per direction. Sample K angles uniformly in [0, 2π), and the boundary becomes a vector of K radii — a fixed-size, continuous representation that gradient descent can move through freely. Circles are the special case where all K radii are equal; every other shape in the family is reachable by letting them differ.
 
-Setting up a simple version
+That's the key. Because the boundary is a smooth function of its K radii, every desideratum we care about — enclosure, compactness, non-overlap — can be written as a differentiable loss term and the whole thing handed to an optimizer. (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
 
-Playing with objective terms
-Collision, inclusion, total drawing area, bubble area, perimeter, convexity, smoothness, distance to anchor, attraction and repulsion
 
-Playing with parameterization
+
+## Setting up the optimization
+
+The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and, in the general case, the positions of the circles themselves. The total loss is a weighted sum of terms in three groups.
+
+**Hard constraints.** 
+
+* *Enclosure* checks that every member circle is inside its boundary: for each ray angle, it computes the minimum radius that would just graze the circle at that angle, and penalizes any shortfall.
+
+* *Exclusion* is the mirror image: for each non-member circle, it penalizes any radius that reaches into it. Both carry high weights.
+
+* *Circle collision* prevents circles from overlapping each other as they move.
+
+TODO: illustrate calculation of enclosure/exclusion and mention this can be done more efficiently with circle vs star than with star vs star
+
+**Aesthetic objectives.** pushing toward compact shapes.
+
+* *Area* penalizes fat blobs
+
+* *Perimeter* penalizes elongated or wiggly outlines. 
+
+(Their interplay is easiest to see with circles held fixed: try turning the area weight up and watch the boundaries shrink to hug their members, or turn the perimeter weight up and watch them round off. In the movable variant these interact with the anchor term, and the balance between them is one of the more satisfying knobs to tune.)
+
+**Regularization.**
+
+* *Min-radius* keeps boundaries from collapsing to a point.
+
+* *Smoothness* penalizes squared differences between adjacent radii, discouraging jagged outlines.
+
+* *Position anchor* penalizes circles for drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
+
+
+
+All terms are implemented in JAX — automatically differentiable, JIT-compiled. We run Adam for a few thousand iterations, typically converging in seconds, gradients flowing through every term simultaneously.
+
+Advanced topic 1: Representation
 (Splines, Fourier, simple)
 
-Playing with optimization
+Advanced topic 2: Curriculum learning
 (Curriculum etc.)
 
-### Examples
+
+### Example gallery
 EU orgs
 Academic disciplines
 Natural languages
 Programming languages
 Consonants
 
+TODO How can you do it at home? Using the `vizopt` package
 
 ### Conclusions
 
 
 I have often advocated for the use of mathematical optimization in data visualization, but this is probably the best use case for it I have ever encountered.
-This is expensive but it is worth it
+This is expensive but it is worth it.
+
+TODO Wax lyrical about the foam.
+
 
 ### Related work
 
-Max Fürbringer's tree of birds
+Max Fürbringer's beautiful and inspiring tree of birds
 
 ---
 
