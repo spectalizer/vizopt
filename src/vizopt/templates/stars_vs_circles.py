@@ -13,6 +13,7 @@ import networkx as nx
 import numpy as np
 
 from ..base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from ..schedules import TermSchedules
 from ..components.stars import (
     Discrete,
     StarRepresentation,
@@ -172,7 +173,7 @@ def optimize_multiple_radially_convex_sets(
     def wrap(fn):
         return representation.wrap(fn, angles_jnp)
 
-    schedules = term_schedules or {}
+    schedules = (term_schedules.schedules if isinstance(term_schedules, TermSchedules) else term_schedules) or {}
     terms = [
         ObjectiveTerm(
             "enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")
@@ -355,7 +356,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     def wrap(fn):
         return representation.wrap(fn, angles_jnp)
 
-    schedules = term_schedules or {}
+    schedules = (term_schedules.schedules if isinstance(term_schedules, TermSchedules) else term_schedules) or {}
     terms = [
         ObjectiveTerm(
             "enclosure",
