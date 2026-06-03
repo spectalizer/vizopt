@@ -10,7 +10,7 @@ circle_fill = "#dee2e6"
 circle_edge = "#212529"
 center_col = "#e63946"
 ray_col = "#457b9d"
-shadow_col = "#f4a261"
+shadow_col = "#adb5bd"
 enc_col = "#2a9d8f"
 exc_col = "#e76f51"
 dim_col = "#868e96"
@@ -102,7 +102,7 @@ def draw_panel(ax, title, theta_deg, tang, perp, r, boundary_r):
         "-",
         color=shadow_col,
         lw=5,
-        alpha=0.7,
+        alpha=0.9,
         zorder=4,
         solid_capstyle="round",
     )
@@ -149,44 +149,51 @@ def draw_panel(ax, title, theta_deg, tang, perp, r, boundary_r):
     fs = 9.0
     ax.text(0, -0.32, "center", ha="center", fontsize=fs, color=center_col)
 
-    # Double-headed arrow spanning origin → foot, offset below the ray
-    tang_offset = -0.32 * ray_perp
-    ax.annotate("", xy=foot + tang_offset, xytext=tang_offset,
-                arrowprops={"arrowstyle": "<->", "color": lbl_col, "lw": 1.0})
-    tang_mid = 0.5 * tang * ray_dir + tang_offset - 0.12 * ray_perp
-    ax.text(*tang_mid, "tang", ha="center", va="top", fontsize=fs, color=lbl_col)
+    # r(θ) — engineering dimension line offset above the ray, with witness lines
+    rdim = 0.38 * ray_perp
+    rdim_ext = 0.47 * ray_perp
+    for pt in [np.zeros(2), bp]:
+        ax.plot([pt[0], pt[0] + rdim_ext[0]], [pt[1], pt[1] + rdim_ext[1]],
+                "-", color=ray_col, lw=0.7, alpha=0.4, zorder=4)
+    ax.annotate("", xy=bp + rdim, xytext=rdim,
+                arrowprops={"arrowstyle": "<->", "color": ray_col, "lw": 1.2,
+                            "shrinkA": 0, "shrinkB": 0})
+    rtheta_mid = 0.5 * boundary_r * ray_dir + rdim + 0.15 * ray_perp
+    ax.text(*rtheta_mid, "r(θ)", ha="center", va="bottom", fontsize=fs + 0.5,
+            color=ray_col, style="italic")
+
+    # tang — dimension line offset below the ray, with witness line at foot
+    tdim = -0.32 * ray_perp
+    tdim_ext = -0.41 * ray_perp
+    ax.plot([foot[0], foot[0] + tdim_ext[0]], [foot[1], foot[1] + tdim_ext[1]],
+            "-", color=dim_col, lw=0.7, alpha=0.4, zorder=4)
+    ax.annotate("", xy=foot + tdim, xytext=tdim,
+                arrowprops={"arrowstyle": "<->", "color": dim_col, "lw": 1.0,
+                            "shrinkA": 0, "shrinkB": 0})
+    tang_mid = 0.5 * tang * ray_dir + tdim - 0.14 * ray_perp
+    ax.text(*tang_mid, "tang", ha="center", va="top", fontsize=fs, color=dim_col)
 
     perp_mid = 0.5 * (circle_center + foot) + 0.18 * ray_dir
-    ax.text(*perp_mid, "perp", ha="left", fontsize=fs, color=lbl_col)
+    ax.text(*perp_mid, "perp", ha="left", fontsize=fs, color=dim_col)
 
     ax.annotate(
-        "far edge\n(enclosure threshold)",
+        "far edge",
         xy=far_pt,
-        xytext=far_pt + np.array([0.5, -0.55]),
-        fontsize=fs - 0.5,
+        xytext=far_pt + np.array([0.5, -0.45]),
+        fontsize=fs,
         color=enc_col,
         ha="left",
-        arrowprops={"arrowstyle": "->", "color": enc_col, "lw": 0.8},
+        arrowprops={"arrowstyle": "->", "color": enc_col, "lw": 0.9},
     )
 
     ax.annotate(
-        "near edge\n(exclusion threshold)",
+        "near edge",
         xy=near_pt,
-        xytext=near_pt + np.array([-0.05, -0.75]),
-        fontsize=fs - 0.5,
+        xytext=near_pt + np.array([-0.05, -0.6]),
+        fontsize=fs,
         color=exc_col,
         ha="center",
-        arrowprops={"arrowstyle": "->", "color": exc_col, "lw": 0.8},
-    )
-
-    ax.annotate(
-        "boundary\nradius r_θ",
-        xy=bp,
-        xytext=bp + np.array([0.05, 0.65]),
-        fontsize=fs - 0.5,
-        color=ray_col,
-        ha="center",
-        arrowprops={"arrowstyle": "->", "color": ray_col, "lw": 0.8},
+        arrowprops={"arrowstyle": "->", "color": exc_col, "lw": 0.9},
     )
 
     ax.set_title(title, fontsize=10, pad=10)
@@ -198,7 +205,7 @@ def draw_panel(ax, title, theta_deg, tang, perp, r, boundary_r):
 
 draw_panel(
     axes[0],
-    "(a) Enclosure satisfied: r_θ ≥ far edge",
+    "(a) Enclosure satisfied: r(θ) ≥ far edge",
     theta_deg=16,
     tang=2.5,
     perp=0.45,
@@ -208,7 +215,7 @@ draw_panel(
 
 draw_panel(
     axes[1],
-    "(b) Exclusion satisfied: r_θ ≤ near edge",
+    "(b) Exclusion satisfied: r(θ) ≤ near edge",
     theta_deg=28,
     tang=2.5,
     perp=0.45,
