@@ -57,7 +57,13 @@ The optimizer jointly adjusts two things: the shape of each boundary (its center
 
 * *Circle collision* prevents circles from overlapping each other as they move.
 
-TODO: illustrate calculation of enclosure/exclusion and mention this can be done more efficiently with circle vs star than with star vs star
+*How does the check work?* For each angle θ, project the vector from the set center to the circle center onto the ray: the along-ray component is *tang* and the perpendicular offset is *perp*. The circle's shadow along that ray spans from *tang* − √(r² − perp²) (near edge) to *tang* + √(r² − perp²) (far edge). Enclosure requires the boundary radius to reach the far edge; exclusion requires it to stop before the near edge. Violations are penalized quadratically.
+
+For exclusion this is equivalent to checking that the boundary point lies outside the circle (distance d ≥ r) — a boundary point outside the circle is exactly one that falls short of the near edge. For enclosure the threshold is the far edge, not the circle center, so the analogous check d ≤ r would be wrong: a boundary point can be inside the circle while only reaching the near side.
+
+![Enclosure and exclusion: the circle's shadow along the ray and the two critical radii.](img/enclosure_geometry.svg)
+
+This works cheaply because the moving elements are circles. A star-vs-star intersection — needed if boundaries could also be arbitrary shapes — has no closed form: it requires comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is a deliberate design choice.
 
 **Aesthetic objectives.** pushing toward compact shapes.
 
