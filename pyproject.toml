@@ -21,6 +21,10 @@ dependencies = [
 hyperoptim = [
     "optuna>=4.0.0",
 ]
+milp = [
+    "pulp>=3.3.0",
+    "highspy>=1.13.0",
+]
 dev = [
     "black>=26.1.0",
     "ipykernel>=7.1.0",
