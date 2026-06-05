@@ -63,6 +63,49 @@ def get_enclosing_sets(G, leaf_names):
     return set_names, sets_idx
 
 
+def make_multiples_of_primes_graph(
+    primes=(2, 3, 5), max_n=11, r=0.4, layout_r=4.0
+) -> nx.DiGraph:
+    """Build a set-hierarchy graph for multiples of primes among 1..max_n.
+
+    Each unique element that belongs to at least one prime's multiples becomes
+    a leaf node. Each prime becomes an internal set node whose children are its
+    multiples. Leaf circles are placed on a ring for a symmetric starting layout.
+
+    Args:
+        primes: Primes to use as sets.
+        max_n: Upper bound (inclusive) of the integer range to consider.
+        r: Circle radius assigned to every leaf node.
+        layout_r: Radius of the ring used to spread initial positions.
+
+    Returns:
+        A ``networkx.DiGraph`` with parent→child edges, ready for
+        ``optimize_multiple_radially_convex_sets_with_movable_circles_from_graph``.
+        Leaf nodes carry ``center`` and ``r`` attributes; set nodes carry only
+        their name.
+    """
+    multiple_dict = {p: [k for k in range(1, max_n + 1) if k % p == 0] for p in primes}
+    elements = sorted(set(n for ms in multiple_dict.values() for n in ms))
+
+    n_elements = len(elements)
+    pos_angles = np.linspace(0, 2 * np.pi, n_elements, endpoint=False)
+
+    G = nx.DiGraph()
+    for i, elem in enumerate(elements):
+        G.add_node(
+            elem,
+            center=[float(layout_r * np.cos(pos_angles[i])),
+                    float(layout_r * np.sin(pos_angles[i]))],
+            r=r,
+        )
+    for p in primes:
+        G.add_node(f"multiples_of_{p}")
+        for m in multiple_dict[p]:
+            G.add_edge(f"multiples_of_{p}", m)
+
+    return G
+
+
 def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGraph:
     """Build the British Isles set-hierarchy as a DiGraph.
 
