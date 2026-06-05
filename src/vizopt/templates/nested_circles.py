@@ -1,3 +1,5 @@
+from collections import deque
+
 import jax
 import networkx as nx
 import numpy as np
@@ -100,6 +102,162 @@ def treemap_node_positions(
             variable_radii[node] = float(np.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2) / 2)
 
     return pos, variable_radii
+
+
+def _greedy_place_circle(r, placed_circles, n_angles=36):
+    """Find a non-overlapping position for a new circle near the current centroid.
+
+    Tries positions tangent to each already-placed circle at ``n_angles``
+    evenly-spaced angles, picks the overlap-free candidate closest to the
+    centroid of all placed circle centres. Falls back to placing just outside
+    the cluster along the +x direction if no tangent position is overlap-free.
+
+    Args:
+        r: Radius of the circle to place.
+        placed_circles: List of ``(center_xy, radius)`` for already-placed circles.
+        n_angles: Number of candidate angles to sample per placed circle.
+
+    Returns:
+        ``(x, y)`` position for the new circle.
+    """
+    if not placed_circles:
+        return (0.0, 0.0)
+
+    centers = np.array([c for c, _ in placed_circles])
+    radii = np.array([rv for _, rv in placed_circles])
+    centroid = centers.mean(axis=0)
+    angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=False)
+    best_pos = None
+    best_dist = float("inf")
+
+    for (cx, cy), ri in placed_circles:
+        for a in angles:
+            px = cx + (ri + r) * np.cos(a)
+            py = cy + (ri + r) * np.sin(a)
+            dists = np.sqrt((centers[:, 0] - px) ** 2 + (centers[:, 1] - py) ** 2)
+            if np.all(dists >= radii + r - 1e-9):
+                d = float(np.sqrt((px - centroid[0]) ** 2 + (py - centroid[1]) ** 2))
+                if d < best_dist:
+                    best_dist = d
+                    best_pos = (float(px), float(py))
+
+    if best_pos is not None:
+        return best_pos
+
+    enc_r = float(np.max(np.sqrt(np.sum((centers - centroid) ** 2, axis=1)) + radii))
+    return (float(centroid[0]) + enc_r + r, float(centroid[1]))
+
+
+def greedy_bottomup_node_positions(
+    inclusion_graph: nx.DiGraph,
+    canvas_size: float = 1.0,
+    margin_factor: float = 0.1,
+    n_angles: int = 36,
+) -> tuple[dict, dict]:
+    """Greedy bottom-up packing initialization for a circle Euler diagram.
+
+    Places nodes one at a time without any top-down pass:
+
+    - **Leaf nodes**: placed greedily at the overlap-free position closest to
+      the centroid of all currently placed circles. Leaves are initially queued
+      in decreasing-radius order so large circles pack first.
+    - **Non-leaf nodes**: enqueued at the *front* (taking priority over remaining
+      leaves) as soon as all direct children are placed. Position = unweighted
+      centroid of children; radius = enclosing circle of children + margin.
+      Added to the placement list so subsequent leaves avoid the enclosing circle.
+
+    For DAG nodes with multiple parents, each parent independently computes its
+    enclosing circle from the shared child's already-fixed position.
+
+    Args:
+        inclusion_graph: DiGraph with parent->child edges (edge (u, v) means
+            v is in u). Leaf nodes (out-degree 0) must have a ``"size"`` attribute.
+        canvas_size: Side length of the square canvas for the final layout.
+        margin_factor: Relative extra margin added to each non-leaf radius.
+        n_angles: Number of candidate angles to try per placed circle when
+            placing a new leaf.
+
+    Returns:
+        Tuple ``(pos, variable_radii)`` where:
+
+        - ``pos``: dict mapping every node name -> ``(x, y)`` center
+        - ``variable_radii``: dict mapping non-leaf node name -> initial radius
+          estimate
+    """
+    node_pos: dict = {}
+    node_r: dict = {}
+    placed: set = set()
+    placed_list: list = []  # list of (np.ndarray center, float radius)
+
+    for node in inclusion_graph.nodes:
+        if inclusion_graph.out_degree(node) == 0:
+            node_r[node] = float(inclusion_graph.nodes[node].get("size", 1.0))
+
+    children_placed_count = {n: 0 for n in inclusion_graph.nodes}
+    n_children = {n: inclusion_graph.out_degree(n) for n in inclusion_graph.nodes}
+
+    leaves_sorted = sorted(
+        [n for n in inclusion_graph.nodes if inclusion_graph.out_degree(n) == 0],
+        key=lambda n: -node_r[n],
+    )
+    queue: deque = deque(leaves_sorted)
+
+    while queue:
+        node = queue.popleft()
+        if node in placed:
+            continue
+
+        if inclusion_graph.out_degree(node) == 0:
+            pos = _greedy_place_circle(node_r[node], placed_list, n_angles)
+            node_pos[node] = pos
+            placed_list.append((np.array(pos), node_r[node]))
+        else:
+            children = list(inclusion_graph.successors(node))
+            child_centers = np.array([node_pos[c] for c in children])
+            child_radii_arr = np.array([node_r[c] for c in children])
+            centroid = child_centers.mean(axis=0)
+            enc_r = float(
+                np.max(
+                    np.sqrt(np.sum((child_centers - centroid) ** 2, axis=1))
+                    + child_radii_arr
+                )
+            ) * (1.0 + margin_factor)
+            node_r[node] = enc_r
+            node_pos[node] = (float(centroid[0]), float(centroid[1]))
+            placed_list.append((centroid, enc_r))
+
+        placed.add(node)
+        for parent in inclusion_graph.predecessors(node):
+            children_placed_count[parent] += 1
+            if children_placed_count[parent] == n_children[parent]:
+                queue.appendleft(parent)  # process non-leaf before remaining leaves
+
+    # Scale and centre on canvas
+    all_nodes = list(inclusion_graph.nodes)
+    all_xy = np.array([node_pos[n] for n in all_nodes])
+    all_r_arr = np.array([node_r[n] for n in all_nodes])
+    x_min = float(np.min(all_xy[:, 0] - all_r_arr))
+    x_max = float(np.max(all_xy[:, 0] + all_r_arr))
+    y_min = float(np.min(all_xy[:, 1] - all_r_arr))
+    y_max = float(np.max(all_xy[:, 1] + all_r_arr))
+
+    span = max(x_max - x_min, y_max - y_min, 1e-9)
+    scale = float(canvas_size) / span
+    mid_x = (x_min + x_max) / 2
+    mid_y = (y_min + y_max) / 2
+
+    pos_out: dict = {}
+    variable_radii: dict = {}
+    for node in inclusion_graph.nodes:
+        gx, gy = node_pos[node]
+        pos_out[node] = (
+            (gx - mid_x) * scale + canvas_size / 2,
+            (gy - mid_y) * scale + canvas_size / 2,
+        )
+        if inclusion_graph.out_degree(node) > 0:
+            variable_radii[node] = node_r[node] * scale
+
+    return pos_out, variable_radii
 
 
 # ---------------------------------------------------------------------------

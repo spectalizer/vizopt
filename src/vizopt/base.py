@@ -334,7 +334,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                     k: v * self.var_scales.get(k, 1.0)
                     for k, v in optim_vars_result.items()
                 }
-            if final_loss < best_loss:
+            if best_vars is None or final_loss < best_loss:
                 best_loss = final_loss
                 best_vars = optim_vars_result
                 best_history = history
