@@ -10,6 +10,7 @@ from ..components.common import (
     calculate_total_width_penalty_ignoring_radii,
     should_be_positive_activation,
 )
+from ..treemap import squarify_layout
 
 
 def get_random_node_positions(graph, scale=1.0):
@@ -26,6 +27,79 @@ def get_random_node_positions(graph, scale=1.0):
     for node in graph.nodes:
         pos[node] = (scale * np.random.rand(), scale * np.random.rand())
     return pos
+
+
+
+def treemap_node_positions(
+    inclusion_graph: nx.DiGraph,
+    canvas_size: float = 1.0,
+) -> tuple[dict, dict]:
+    """Treemap-based initial positions for a circle Euler diagram.
+
+    Uses a squarified treemap to place nodes so that containment is encoded
+    constructively: each node's rectangle is nested inside its parent's
+    rectangle. Gradient descent then only needs to tune margins and overlap
+    boundaries rather than discover the topology.
+
+    Each non-leaf node's initial radius is estimated as the circumradius of
+    its treemap rectangle, which is large enough to enclose the rectangle
+    (and therefore all children placed inside it).
+
+    For DAG cases where one node has two incomparable parents, the first
+    parent encountered in topological order determines the node's position.
+
+    Args:
+        inclusion_graph: DiGraph with parent→child edges (edge (u, v) means
+            v ⊂ u). Leaf nodes (out-degree 0) must have a ``"size"`` attribute.
+        canvas_size: Side length of the square canvas for the top-level layout.
+
+    Returns:
+        Tuple ``(pos, variable_radii)`` where:
+
+        - ``pos``: dict mapping every node name → ``(x, y)`` center
+        - ``variable_radii``: dict mapping non-leaf node name → initial radius
+          estimate (circumradius of the treemap rectangle)
+    """
+    # Bottom-up weight: each node's weight = sum of its leaf descendants' sizes.
+    weights: dict = {}
+    for node in reversed(list(nx.topological_sort(inclusion_graph))):
+        if inclusion_graph.out_degree(node) == 0:
+            weights[node] = float(inclusion_graph.nodes[node].get("size", 1.0))
+        else:
+            child_sum = sum(weights[c] for c in inclusion_graph.successors(node))
+            weights[node] = child_sum if child_sum > 0 else 1.0
+
+    roots = [n for n in inclusion_graph.nodes if inclusion_graph.in_degree(n) == 0]
+    node_rects: dict = {}
+
+    def _layout_children(parent_rect, children):
+        if not children:
+            return
+        rects = squarify_layout([(c, weights[c]) for c in children], parent_rect)
+        for child, child_rect in rects.items():
+            if child not in node_rects:  # first-seen wins for DAG nodes
+                node_rects[child] = child_rect
+            _layout_children(child_rect, list(inclusion_graph.successors(child)))
+
+    canvas_rect = (0.0, 0.0, float(canvas_size), float(canvas_size))
+    if len(roots) == 1:
+        node_rects[roots[0]] = canvas_rect
+        _layout_children(canvas_rect, list(inclusion_graph.successors(roots[0])))
+    else:
+        root_rects = squarify_layout([(r, weights[r]) for r in roots], canvas_rect)
+        for root, rect in root_rects.items():
+            node_rects[root] = rect
+            _layout_children(rect, list(inclusion_graph.successors(root)))
+
+    pos: dict = {}
+    variable_radii: dict = {}
+    for node in inclusion_graph.nodes:
+        x0, y0, x1, y1 = node_rects.get(node, canvas_rect)
+        pos[node] = ((x0 + x1) / 2, (y0 + y1) / 2)
+        if inclusion_graph.out_degree(node) > 0:
+            variable_radii[node] = float(np.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2) / 2)
+
+    return pos, variable_radii
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +138,14 @@ def _calculate_edge_lengths(node_xys, edge_indices):
 def _compute_collision_pairs(all_node_names, inclusion_tree):
     """Pre-compute which node pairs should be checked for collisions.
 
-    Excludes pairs where one node is an ancestor/descendant of the other in
-    the inclusion tree, since one is geometrically contained inside the other.
+    Excludes two categories of pairs:
+
+    - **Ancestor/descendant pairs**: one node is geometrically contained inside
+      the other, so they are expected to overlap.
+    - **Partial-overlap pairs**: both nodes share at least one common leaf
+      descendant but neither contains the other. These pairs must be allowed to
+      intersect so that their shared element(s) can satisfy both enclosure
+      constraints simultaneously.
 
     Args:
         all_node_names: Ordered list of all node names.
@@ -74,7 +154,10 @@ def _compute_collision_pairs(all_node_names, inclusion_tree):
     Returns:
         Integer array of shape (n_pairs, 2) with index pairs to check.
     """
-    descendants = {
+    leaf_set = {
+        n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) == 0
+    }
+    all_descendants = {
         node: (
             nx.descendants(inclusion_tree, node)
             if node in inclusion_tree.nodes
@@ -82,11 +165,17 @@ def _compute_collision_pairs(all_node_names, inclusion_tree):
         )
         for node in all_node_names
     }
+    leaf_descendants = {
+        node: all_descendants[node] & leaf_set for node in all_node_names
+    }
     collision_pairs = []
     for i, node_a in enumerate(all_node_names):
         for j, node_b in enumerate(all_node_names[:i]):
-            if node_b not in descendants[node_a] and node_a not in descendants[node_b]:
-                collision_pairs.append([i, j])
+            if node_b in all_descendants[node_a] or node_a in all_descendants[node_b]:
+                continue
+            if not leaf_descendants[node_a].isdisjoint(leaf_descendants[node_b]):
+                continue
+            collision_pairs.append([i, j])
 
     return (
         np.array(collision_pairs, dtype=np.int32)
