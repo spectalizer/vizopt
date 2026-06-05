@@ -4,7 +4,16 @@ Smoother better visualization of overlapping sets using mathematical optimizatio
 
 TODO Add a nice animation somewhere near the beginning of the article.
 
+
+
 ## What are Euler diagrams?
+
+### Example gallery
+EU orgs
+Academic disciplines
+Natural languages
+Programming languages
+Consonants
 
 The mind naturally groups things.
 Bears are mammals. Mammals are animals. Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestral animals.
@@ -17,15 +26,24 @@ Euler diagrams are the visual representation of these *containment* and *interse
 No. Venn diagrams represent every possible set intersection, including empty intersections.
 
 The actual definition: *closed shapes...*
+Venn diagrams represent sets as closed shapes, whereby the shape representing a subset of a given set is contained within the shape representing the superset.
 
+## Searching for Better Primitives
 (the search for the right primitives/parameterization)
 
-## Euler diagrams with circles
+Now *closed shape* is a wonderfully general description, applying to circles and rectangles as well as more complex polygonal and curved regions of the plane, but this generality is not really helpful when it comes to defining an algorithm that should draw actual Euler diagrams.
 
-The canonical representation uses circles. But circles are rigid.
+We want to look for a nice *family* of shapes.
 
+### Euler diagrams with circles
 
-There is another problem: circles waste space. Consider the simplest case — two equally-sized circles of radius r, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius 2r. Its area is 4πr², while the two inner circles together cover only 2πr²: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds — each layer inflates the container, but the added space is dead area that carries no information. A tight boundary would hug the contents and waste nothing. Rectangles pack more efficiently and power treemaps well — but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles)).
+A typical instantiation of Euler diagrams uses circles, but circles are rather rigid, and they waste space.
+
+Consider the simplest case — two equally-sized circles of radius r, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius 2r. Its area is 4πr², while the two inner circles together cover only 2πr²: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds — each layer inflates the container, but the added space is dead area that carries no information. A tight boundary would hug the contents and waste nothing. 
+
+### Rectangles
+
+Rectangles pack more efficiently and power treemaps well — but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles)).
 
 ![Three levels of binary nesting: leaf circles cover only 12.5% of the enclosing area.](img/circle_nesting.svg)
 
@@ -41,13 +59,15 @@ This is precisely the condition studied in the art gallery problem, which asks h
 
 Star-shaped regions admit a compact parameterization: fix a center, then specify one radius per direction. Sample K angles uniformly in [0, 2π), and the boundary becomes a vector of K radii — a fixed-size, continuous representation that gradient descent can move through freely. Circles are the special case where all K radii are equal; every other shape in the family is reachable by letting them differ.
 
-That's the key. Because the boundary is a smooth function of its K radii, every desideratum we care about — enclosure, compactness, non-overlap — can be written as a differentiable loss term and the whole thing handed to an optimizer. (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
+## Smooth optimization of smooth shapes
 
+... Because the boundary is a smooth function of its K radii, every desideratum we care about — enclosure, compactness, non-overlap — can be written as a differentiable loss term and the whole thing handed to an optimizer. (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
 
+So here is the idea: let us represent set elements with circles and sets as *star-shaped* radially convex sets and find the best possible arrangement of these circles and radially convex sets accordingl.
 
-## Setting up the optimization
+Setting up the optimization...
 
-The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and, in the general case, the positions of the circles themselves. The total loss is a weighted sum of terms in three groups.
+The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and the positions of the circles themselves. The total loss is a weighted sum of terms in three groups.
 
 **Hard constraints.** 
 
@@ -63,7 +83,7 @@ For exclusion this is equivalent to checking that the boundary point lies outsid
 
 ![Enclosure and exclusion: the circle's shadow along the ray and the two critical radii.](img/enclosure_geometry.svg)
 
-This works cheaply because the moving elements are circles. A star-vs-star intersection — needed if boundaries could also be arbitrary shapes — has no closed form: it requires comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is a deliberate design choice.
+This works cheaply because the moving elements are circles. A star-vs-star intersection — needed if boundaries could also be arbitrary shapes — has no closed form: it requires comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is thus justified by runtime efficiency. Besides, it visually differentiates elements from sets.
 
 **Aesthetic objectives.** pushing toward compact shapes.
 
@@ -82,8 +102,8 @@ This works cheaply because the moving elements are circles. A star-vs-star inter
 * *Position anchor* penalizes circles for drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
 
 
-
-All terms are implemented in JAX — automatically differentiable, JIT-compiled. We run Adam for a few thousand iterations, typically converging in seconds, gradients flowing through every term simultaneously.
+Implementation:
+All terms are implemented in JAX, allowing for automatic differentiation and JIT-compilation. We run a gradient-based optimizer (e.g. Adam) for a few thousand iterations.
 
 Advanced topic 1: Representation
 (Splines, Fourier, simple)
@@ -92,12 +112,7 @@ Advanced topic 2: Curriculum learning
 (Curriculum etc.)
 
 
-### Example gallery
-EU orgs
-Academic disciplines
-Natural languages
-Programming languages
-Consonants
+
 
 TODO How can you do it at home? Using the `vizopt` package
 
