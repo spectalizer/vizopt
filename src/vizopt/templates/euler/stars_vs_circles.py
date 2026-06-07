@@ -8,13 +8,14 @@ General star-domain loss terms and helpers live in
 :mod:`vizopt.components.stars`.
 """
 
+from typing import Sequence
+
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 
-from ..base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
-from ..schedules import TermSchedules
-from ..components.stars import (
+from ...base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from ...components.stars import (
     Discrete,
     StarRepresentation,
     _build_membership,
@@ -34,6 +35,7 @@ from ..components.stars import (
     _svg_configuration_fixed,
     _svg_configuration_movable,
 )
+from ...schedules import TermSchedules
 
 
 def _leaf_circles_from_graph(inclusion_graph: nx.DiGraph):
@@ -173,7 +175,11 @@ def optimize_multiple_radially_convex_sets(
     def wrap(fn):
         return representation.wrap(fn, angles_jnp)
 
-    schedules = (term_schedules.schedules if isinstance(term_schedules, TermSchedules) else term_schedules) or {}
+    schedules = (
+        term_schedules.schedules
+        if isinstance(term_schedules, TermSchedules)
+        else term_schedules
+    ) or {}
     terms = [
         ObjectiveTerm(
             "enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")
@@ -244,7 +250,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
     circle_collision_alpha=0.0,
-    offsets=0.1,
+    offsets: float | np.ndarray = 0.1,
     representation: StarRepresentation | None = None,
     term_schedules=None,
     optim_config: OptimConfig | None = None,
@@ -356,7 +362,11 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     def wrap(fn):
         return representation.wrap(fn, angles_jnp)
 
-    schedules = (term_schedules.schedules if isinstance(term_schedules, TermSchedules) else term_schedules) or {}
+    schedules = (
+        term_schedules.schedules
+        if isinstance(term_schedules, TermSchedules)
+        else term_schedules
+    ) or {}
     terms = [
         ObjectiveTerm(
             "enclosure",
