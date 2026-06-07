@@ -21,9 +21,7 @@ from ...components.stars import (
     _init_centers_and_radii,
     _multi_term_area,
     _multi_term_circle_collision,
-    _multi_term_enclosure,
     _multi_term_enclosure_movable,
-    _multi_term_exclusion,
     _multi_term_exclusion_movable,
     _multi_term_min_radius,
     _multi_term_perimeter,
@@ -31,7 +29,6 @@ from ...components.stars import (
     _multi_term_set_attraction,
     _multi_term_smoothness,
     _multi_term_total_bounding_box,
-    _svg_configuration_fixed,
     _svg_configuration_movable,
 )
 from ...schedules import TermSchedules
@@ -66,175 +63,6 @@ def _sets_from_graph(inclusion_graph: nx.DiGraph, leaf_names, name_to_idx):
         for sname in set_names
     ]
     return set_names, sets_idx
-
-
-def optimize_multiple_radially_convex_sets(
-    circles,
-    sets,
-    weight_area=1.0,
-    weight_perimeter=1.0,
-    weight_exclusion=10.0,
-    weight_smoothness=1.0,
-    offsets=0.1,
-    representation: StarRepresentation | None = None,
-    term_schedules=None,
-    optim_config: OptimConfig | None = None,
-    callback: Callback | None = None,
-):
-    """Find star-shaped regions enclosing each set of circles without overlapping others.
-
-    Each set gets its own star-shaped boundary that encloses its member circles
-    and does not collide with circles belonging to other sets.
-
-    Args:
-        circles: array of shape (N, 3) with columns [cx, cy, r], or a sequence
-            of (cx, cy, r) triples.
-        sets: list of S subsets, each a collection of integer indices into circles.
-            A circle may appear in multiple sets; circles absent from a set are
-            treated as obstacles for that set's boundary.
-        weight_area: weight for the area objective (summed over sets).
-        weight_perimeter: weight for the perimeter objective (summed over sets).
-        weight_exclusion: weight for the exclusion penalty.
-        weight_smoothness: weight for the smoothness penalty (squared radius
-            differences between adjacent angles). Default 1.0.
-        offsets: padding added to each circle's radius in the enclosure term,
-            per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
-            Broadcast to (S, N). Default 0.1.
-        representation: star domain parametrization. One of :class:`Discrete`
-            (default), :class:`Fourier`, or :class:`BSpline`. Angular resolution
-            is set via ``representation.k_angles``.
-        term_schedules: optional dict mapping term name to a JAX-compatible
-            callable ``(step: Array) -> Array`` that scales the term's weight
-            over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
-            "smoothness", "area", "perimeter". The effective weight at step t is
-            ``base_weight * schedule(t)``. Schedules must use JAX ops so they
-            can be traced through without recompilation.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`OptimConfig` defaults when ``None``.
-        callback: Optional callback called after each iteration with
-            ``(iteration, loss, optim_vars, grads)``. Pass a
-            :class:`~vizopt.animation.SnapshotCallback` to capture frames for
-            :func:`~vizopt.animation.snapshots_to_animated_svg`.
-
-    Returns:
-        Tuple of (results, history, problem) where results is a list of S dicts,
-        each with:
-            "center": array of shape (2,), the center of the star-shaped region
-            "radii": array of shape (K,), boundary radii at each angle
-            "angles": array of shape (K,), uniformly spaced in [0, 2π)
-        history is the list of per-iteration loss dicts, and problem is the
-        :class:`~vizopt.base.OptimizationProblem` instance (needed for
-        :func:`~vizopt.animation.snapshots_to_animated_svg`).
-    """
-    if representation is None:
-        representation = Discrete()
-
-    circles_array = np.asarray(circles, dtype=np.float32)
-    if circles_array.ndim == 1:
-        circles_array = circles_array[None, :]
-    N = len(circles_array)
-    S = len(sets)
-    angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(
-        np.float32
-    )
-    angles_jnp = jnp.array(angles)
-
-    membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(
-        circles_array, sets, angles
-    )
-    offsets_array = np.broadcast_to(
-        np.asarray(offsets, dtype=np.float32), (S, N)
-    ).copy()
-
-    input_parameters = {
-        "circles": circles_array,
-        "angles": angles,
-        "membership": membership,
-        "offsets": offsets_array,
-    }
-
-    init_vars = representation.initialize_vars(S, initial_radii, initial_centers)
-
-    pos_scale_x = max(
-        float(np.std(circles_array[:, 0])), float(circles_array[:, 2].mean())
-    )
-    pos_scale_y = max(
-        float(np.std(circles_array[:, 1])), float(circles_array[:, 2].mean())
-    )
-    rad_scale = float(initial_radii.mean())
-    var_scales = {"centers": np.array([pos_scale_x, pos_scale_y], dtype=np.float32)}
-    for key in init_vars:
-        if key != "centers":
-            var_scales[key] = np.float32(rad_scale)
-
-    def initialize(_, seed):
-        return {k: v.copy() for k, v in init_vars.items()}
-
-    def wrap(fn):
-        return representation.wrap(fn, angles_jnp)
-
-    schedules = (
-        term_schedules.schedules
-        if isinstance(term_schedules, TermSchedules)
-        else term_schedules
-    ) or {}
-    terms = [
-        ObjectiveTerm(
-            "enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")
-        ),
-        ObjectiveTerm(
-            "exclusion",
-            wrap(_multi_term_exclusion),
-            weight_exclusion,
-            schedules.get("exclusion"),
-        ),
-        ObjectiveTerm(
-            "min_radius",
-            wrap(_multi_term_min_radius),
-            10.0,
-            schedules.get("min_radius"),
-        ),
-        ObjectiveTerm(
-            "smoothness",
-            wrap(_multi_term_smoothness),
-            weight_smoothness,
-            schedules.get("smoothness"),
-        ),
-        ObjectiveTerm(
-            "area", wrap(_multi_term_area), weight_area, schedules.get("area")
-        ),
-        ObjectiveTerm(
-            "perimeter",
-            wrap(_multi_term_perimeter),
-            weight_perimeter,
-            schedules.get("perimeter"),
-        ),
-    ]
-
-    problem = OptimizationProblemTemplate(
-        terms=terms,
-        initialize=initialize,
-        svg_configuration=representation.make_svg_configuration(
-            _svg_configuration_fixed
-        ),
-    ).instantiate(input_parameters, var_scales=var_scales)
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
-
-    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
-    return (
-        [
-            {
-                "center": np.array(optim_vars["centers"][s]),
-                "radii": radii_arr[s],
-                "angles": angles,
-                **representation.extra_results(s, optim_vars),
-            }
-            for s in range(S)
-        ],
-        history,
-        problem,
-    )
 
 
 def optimize_multiple_radially_convex_sets_with_movable_circles(

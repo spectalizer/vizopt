@@ -11,7 +11,7 @@ from vizopt.examples.sets import (
     graph_to_optimizer_inputs,
     make_british_islands_graph,
 )
-from vizopt.templates.euler.stars_vs_circles import optimize_multiple_radially_convex_sets
+from vizopt.templates.euler.stars_vs_circles import optimize_multiple_radially_convex_sets_with_movable_circles
 
 _FAST = OptimConfig(n_iters=5, learning_rate=1e-2)
 _NO_PRINT = lambda *_: None
@@ -26,7 +26,7 @@ def _two_circle_problem(representation=None):
     """Minimal two-circle, two-set problem for smoke-testing optimizers."""
     circles = np.array([[0.0, 0.0, 0.5], [2.0, 0.0, 0.5]], dtype=np.float32)
     sets = [[0], [1]]
-    return optimize_multiple_radially_convex_sets(
+    return optimize_multiple_radially_convex_sets_with_movable_circles(
         circles=circles,
         sets=sets,
         representation=representation,
@@ -36,23 +36,23 @@ def _two_circle_problem(representation=None):
 
 
 # ---------------------------------------------------------------------------
-# optimize_multiple_radially_convex_sets — result structure
+# optimize_multiple_radially_convex_sets_with_movable_circles — result structure
 # ---------------------------------------------------------------------------
 
 
-def test_optimize_returns_three_tuple():
-    results, history, problem = _two_circle_problem()
+def test_optimize_returns_four_tuple():
+    results, circles_out, history, problem = _two_circle_problem()
     assert isinstance(results, list)
     assert isinstance(history, list)
 
 
 def test_optimize_result_length():
-    results, _, _ = _two_circle_problem()
+    results, _, _, _ = _two_circle_problem()
     assert len(results) == 2
 
 
 def test_optimize_result_keys():
-    results, _, _ = _two_circle_problem()
+    results, _, _, _ = _two_circle_problem()
     for r in results:
         assert "center" in r
         assert "radii" in r
@@ -60,7 +60,7 @@ def test_optimize_result_keys():
 
 
 def test_optimize_result_shapes():
-    results, _, _ = _two_circle_problem(Discrete(k_angles=16))
+    results, _, _, _ = _two_circle_problem(Discrete(k_angles=16))
     for r in results:
         assert r["center"].shape == (2,)
         assert r["radii"].shape == (16,)
@@ -68,13 +68,13 @@ def test_optimize_result_shapes():
 
 
 def test_optimize_radii_positive():
-    results, _, _ = _two_circle_problem()
+    results, _, _, _ = _two_circle_problem()
     for r in results:
         assert np.all(r["radii"] > 0)
 
 
 def test_optimize_history_has_term_keys():
-    _, history, _ = _two_circle_problem()
+    _, _, history, _ = _two_circle_problem()
     assert len(history) > 0
     for record in history:
         assert "iteration" in record
@@ -87,7 +87,7 @@ def test_optimize_history_has_term_keys():
 
 
 def test_optimize_fourier_representation():
-    results, _, _ = _two_circle_problem(Fourier(k_angles=16, n_harmonics=4))
+    results, _, _, _ = _two_circle_problem(Fourier(k_angles=16, n_harmonics=4))
     for r in results:
         assert "fourier_coeffs" in r
         assert r["fourier_coeffs"].shape == (2 * 4 + 1,)
@@ -95,7 +95,7 @@ def test_optimize_fourier_representation():
 
 
 def test_optimize_bspline_representation():
-    results, _, _ = _two_circle_problem(BSpline(k_angles=16, n_ctrl_pts=8))
+    results, _, _, _ = _two_circle_problem(BSpline(k_angles=16, n_ctrl_pts=8))
     for r in results:
         assert "bspline_ctrl" in r
         assert r["bspline_ctrl"].shape == (8,)
@@ -103,7 +103,7 @@ def test_optimize_bspline_representation():
 
 
 def test_optimize_discrete_no_extra_results():
-    results, _, _ = _two_circle_problem(Discrete(k_angles=16))
+    results, _, _, _ = _two_circle_problem(Discrete(k_angles=16))
     for r in results:
         assert "fourier_coeffs" not in r
         assert "bspline_ctrl" not in r
