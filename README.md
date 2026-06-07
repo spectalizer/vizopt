@@ -56,6 +56,22 @@ MIT
 
 ## For developers
 
+### Quality assurance
+
+Tests run automatically on every push and pull request via GitHub Actions:
+
+```bash
+uv run pytest
+```
+
+Type-check all notebooks locally (not in CI):
+
+```bash
+uv run python scripts/convert_all_notebooks.py
+```
+
+This converts each notebook to a temporary `.py` file, runs `pyright` across all of them, then deletes the generated files. Pass `--no-cleanup` to keep them for inspection.
+
 ### Documentation
 
 Using Zensical.
