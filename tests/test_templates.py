@@ -11,7 +11,7 @@ from vizopt.examples.sets import (
     graph_to_optimizer_inputs,
     make_british_islands_graph,
 )
-from vizopt.templates.stars_vs_circles import optimize_multiple_radially_convex_sets
+from vizopt.templates.euler.stars_vs_circles import optimize_multiple_radially_convex_sets
 
 _FAST = OptimConfig(n_iters=5, learning_rate=1e-2)
 _NO_PRINT = lambda *_: None
