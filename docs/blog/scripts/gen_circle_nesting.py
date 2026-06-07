@@ -1,7 +1,6 @@
 """Generate the nested-circles space-waste illustration for the blog post."""
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 DEPTH = 3
 ROOT_R = 2 ** DEPTH  # = 8, leaf radius = 1
