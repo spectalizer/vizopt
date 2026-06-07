@@ -8,7 +8,6 @@ General star-domain loss terms and helpers live in
 :mod:`vizopt.components.stars`.
 """
 
-from typing import Sequence
 
 import jax.numpy as jnp
 import networkx as nx

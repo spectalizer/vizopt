@@ -18,7 +18,6 @@ seed custom optimizers.
 
 from collections import deque
 
-import jax
 import networkx as nx
 import numpy as np
 from jax import numpy as jnp
@@ -27,7 +26,6 @@ from ..base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
 from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
-    calculate_total_width_penalty_ignoring_radii,
     should_be_positive_activation,
 )
 from ..treemap import squarify_layout
