@@ -32,7 +32,9 @@ dev = [
     "nbconvert>=7.0.0",
     "nbformat>=5.0.0",
     "pandas-stubs>=3.0.0.260204",
+    "pyright>=1.1.410",
     "pytest>=9.0.2",
+    "ruff>=0.15.16",
     "types-networkx>=3.6.1.20260210",
     "zensical>=0.0.40",
 ]
@@ -44,3 +46,6 @@ ignore_missing_imports = true
 [build-system]
 requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.pyright]
+reportPrivateImportUsage = "none"
