@@ -8,7 +8,6 @@ General star-domain loss terms and helpers live in
 :mod:`vizopt.components.stars`.
 """
 
-
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -65,7 +64,7 @@ def _sets_from_graph(inclusion_graph: nx.DiGraph, leaf_names, name_to_idx):
     return set_names, sets_idx
 
 
-def optimize_multiple_radially_convex_sets_with_movable_circles(
+def optimize_radially_convex_sets_and_circles(
     circles,
     sets,
     weight_area=1.0,
@@ -284,7 +283,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles(
     )
 
 
-def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
+def optimize_radially_convex_sets_and_circles_from_graph(
     inclusion_graph: nx.DiGraph,
     weight_area=1.0,
     weight_perimeter=1.0,
@@ -301,7 +300,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
     optim_config: OptimConfig | None = None,
     callback: Callback | None = None,
 ):
-    """Like optimize_multiple_radially_convex_sets_with_movable_circles, but takes a DiGraph.
+    """Like optimize_radially_convex_sets_and_circles, but takes a DiGraph.
 
     Leaf nodes (out-degree 0) become circles; internal nodes (out-degree > 0) become
     sets. A leaf belongs to a set if it is a descendant of that set.
@@ -339,7 +338,7 @@ def optimize_multiple_radially_convex_sets_with_movable_circles_from_graph(
     set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
 
     results_list, circles_out_arr, history, problem = (
-        optimize_multiple_radially_convex_sets_with_movable_circles(
+        optimize_radially_convex_sets_and_circles(
             circles=circles,
             sets=sets,
             weight_area=weight_area,

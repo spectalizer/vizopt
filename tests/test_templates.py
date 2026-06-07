@@ -11,7 +11,9 @@ from vizopt.examples.sets import (
     graph_to_optimizer_inputs,
     make_british_islands_graph,
 )
-from vizopt.templates.euler.stars_vs_circles import optimize_multiple_radially_convex_sets_with_movable_circles
+from vizopt.templates.euler.stars_vs_circles import (
+    optimize_radially_convex_sets_and_circles,
+)
 
 _FAST = OptimConfig(n_iters=5, learning_rate=1e-2)
 _NO_PRINT = lambda *_: None
@@ -26,7 +28,7 @@ def _two_circle_problem(representation=None):
     """Minimal two-circle, two-set problem for smoke-testing optimizers."""
     circles = np.array([[0.0, 0.0, 0.5], [2.0, 0.0, 0.5]], dtype=np.float32)
     sets = [[0], [1]]
-    return optimize_multiple_radially_convex_sets_with_movable_circles(
+    return optimize_radially_convex_sets_and_circles(
         circles=circles,
         sets=sets,
         representation=representation,
