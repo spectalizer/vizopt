@@ -1,3 +1,21 @@
+"""Optimization templates for circle-based Euler diagrams with inclusion constraints.
+
+Provides two high-level optimizers for laying out graphs where some nodes are
+visually enclosed by others (e.g. set membership diagrams, containment hierarchies):
+
+- :func:`optimize_circular_layout_with_enclosed_nodes`: pure inclusion tree, no edges.
+- :func:`optimize_circular_layout_with_enclosed_and_linked_nodes`: inclusion tree plus
+  an ordinary graph whose edges should be drawn short.
+
+Both functions return ``(pos, radii)`` dicts suitable for direct use with matplotlib
+or NetworkX drawing routines. Leaf node radii are fixed (from ``"size"`` attributes);
+non-leaf / enclosing node radii are optimization variables.
+
+Initialization helpers (:func:`treemap_node_positions`,
+:func:`greedy_bottomup_node_positions`) are also public and can be used standalone to
+seed custom optimizers.
+"""
+
 from collections import deque
 
 import jax
@@ -5,7 +23,7 @@ import networkx as nx
 import numpy as np
 from jax import numpy as jnp
 
-from ..base import ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
+from ..base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
 from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
@@ -29,7 +47,6 @@ def get_random_node_positions(graph, scale=1.0):
     for node in graph.nodes:
         pos[node] = (scale * np.random.rand(), scale * np.random.rand())
     return pos
-
 
 
 def treemap_node_positions(
@@ -312,9 +329,7 @@ def _compute_collision_pairs(all_node_names, inclusion_tree):
     Returns:
         Integer array of shape (n_pairs, 2) with index pairs to check.
     """
-    leaf_set = {
-        n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) == 0
-    }
+    leaf_set = {n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) == 0}
     all_descendants = {
         node: (
             nx.descendants(inclusion_tree, node)
