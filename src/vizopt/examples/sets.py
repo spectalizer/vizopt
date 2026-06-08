@@ -113,7 +113,10 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
 
     - Bears: Mammals, Terrestrial Animals
     - Whales: Mammals, Marine Animals
-    - Snakes: Terrestrial Animals
+    - Dolphins: Mammals, Marine Animals
+    - Snakes: Reptiles, Terrestrial Animals
+    - Lizards: Reptiles, Terrestrial Animals
+    - Sea Turtles: Reptiles, Marine Animals
     - Sharks: Marine Animals, Marine Fish
 
     All sets are subsets of Animals. Marine Fish is a subset of Marine Animals.
@@ -127,25 +130,37 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
     """
     G: nx.DiGraph = nx.DiGraph()
 
-    G.add_node("Bears",  center=[ 2.0,  1.0], r=r)
-    G.add_node("Whales", center=[-2.0,  1.0], r=r)
-    G.add_node("Snakes", center=[ 2.0, -1.0], r=r)
-    G.add_node("Sharks", center=[-2.0, -1.0], r=r)
+    G.add_node("Bears",      center=[ 2.0,  1.5], r=r)
+    G.add_node("Whales",     center=[-2.0,  1.5], r=r)
+    G.add_node("Dolphins",   center=[-3.0,  0.5], r=r)
+    G.add_node("Snakes",     center=[ 2.0, -1.0], r=r)
+    G.add_node("Lizards",    center=[ 3.0, -1.5], r=r)
+    G.add_node("Sea Turtles",center=[-1.0, -2.0], r=r)
+    G.add_node("Sharks",     center=[-2.5, -1.5], r=r)
 
     G.add_node("Mammals")
+    G.add_node("Reptiles")
     G.add_node("Terrestrial Animals")
     G.add_node("Marine Animals")
     G.add_node("Marine Fish")
     G.add_node("Animals")
 
     G.add_edge("Animals", "Mammals")
+    G.add_edge("Animals", "Reptiles")
     G.add_edge("Animals", "Terrestrial Animals")
     G.add_edge("Animals", "Marine Animals")
     G.add_edge("Mammals", "Bears")
     G.add_edge("Mammals", "Whales")
+    G.add_edge("Mammals", "Dolphins")
+    G.add_edge("Reptiles", "Snakes")
+    G.add_edge("Reptiles", "Lizards")
+    G.add_edge("Reptiles", "Sea Turtles")
     G.add_edge("Terrestrial Animals", "Bears")
     G.add_edge("Terrestrial Animals", "Snakes")
+    G.add_edge("Terrestrial Animals", "Lizards")
     G.add_edge("Marine Animals", "Whales")
+    G.add_edge("Marine Animals", "Dolphins")
+    G.add_edge("Marine Animals", "Sea Turtles")
     G.add_edge("Marine Animals", "Marine Fish")
     G.add_edge("Marine Fish", "Sharks")
 
