@@ -64,6 +64,60 @@ def _sets_from_graph(inclusion_graph: nx.DiGraph, leaf_names, name_to_idx):
     return set_names, sets_idx
 
 
+def offsets_from_graph(
+    inclusion_graph: nx.DiGraph,
+    set_names: list[str],
+    leaf_names: list[str],
+    offset_step: float = 0.15,
+    sub_step: float = 0.04,
+    min_offset: float = 0.05,
+) -> np.ndarray:
+    """Compute per-set boundary offsets from a set-hierarchy graph.
+
+    Assigns larger offsets to shallower (outer) sets so that nested set
+    boundaries are drawn at visibly different sizes. Within the same depth
+    level, larger sets (more leaf members) receive a slightly larger offset.
+    All offsets are at least ``min_offset``.
+
+    The safety invariant ``(max_same_depth_count - 1) * sub_step < offset_step``
+    ensures no same-depth set ever overshoots its parent's offset.
+
+    Args:
+        inclusion_graph: DiGraph with parent→child edges.
+        set_names: Ordered list of internal node names, in the same order
+            used by the optimizer (topological, as from ``_sets_from_graph``).
+        leaf_names: List of leaf node names (out-degree 0).
+        offset_step: Offset increment per depth level.
+        sub_step: Additional offset per size-rank within the same depth level.
+        min_offset: Floor applied to every set's offset.
+
+    Returns:
+        Array of shape ``(S, 1)`` with one offset per set, ready to broadcast
+        to ``(S, N)`` inside the optimizer.
+    """
+    roots = [n for n in inclusion_graph.nodes if inclusion_graph.in_degree(n) == 0]
+    depth = {}
+    for root in roots:
+        for node, d in nx.single_source_shortest_path_length(inclusion_graph, root).items():
+            if node not in depth or d < depth[node]:
+                depth[node] = d
+
+    max_set_depth = max(depth[s] for s in set_names)
+    leaf_set = set(leaf_names)
+    n_leaves = {
+        s: sum(1 for n in nx.descendants(inclusion_graph, s) if n in leaf_set)
+        for s in set_names
+    }
+
+    offset_dict: dict[str, float] = {}
+    for d in set(depth[s] for s in set_names):
+        group = sorted([s for s in set_names if depth[s] == d], key=lambda s: n_leaves[s])
+        for rank, s in enumerate(group):
+            offset_dict[s] = (max_set_depth - d) * offset_step + rank * sub_step + min_offset
+
+    return np.array([offset_dict[s] for s in set_names], dtype=np.float32)[:, None]
+
+
 def optimize_radially_convex_sets_and_circles(
     circles,
     sets,
@@ -294,7 +348,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
     circle_collision_alpha=0.0,
-    offsets=0.1,
+    offsets=None,
     representation: StarRepresentation | None = None,
     term_schedules=None,
     optim_config: OptimConfig | None = None,
@@ -321,7 +375,11 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             of every set it belongs to. Default 0.0 (disabled).
         circle_collision_alpha: coefficient for the linear term in the circle
             collision penalty. Default 0.0 (pure quadratic).
-        offsets: padding added to each circle's radius in the enclosure term.
+        offsets: padding added to each circle's radius in the enclosure term,
+            per ``(set, circle)`` pair. Scalar, shape ``(N,)``, or shape ``(S, N)``.
+            When ``None`` (default), computed automatically from the graph hierarchy
+            via :func:`offsets_from_graph`: outer sets get larger offsets so that
+            nested set boundaries are visually distinguishable.
         representation: star domain parametrization.
         term_schedules: optional dict mapping term name to a schedule callable.
         optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults when ``None``.
@@ -336,6 +394,9 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     """
     leaf_names, circles, name_to_idx = _leaf_circles_from_graph(inclusion_graph)
     set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
+
+    if offsets is None:
+        offsets = offsets_from_graph(inclusion_graph, set_names, leaf_names)
 
     results_list, circles_out_arr, history, problem = (
         optimize_radially_convex_sets_and_circles(
