@@ -71,8 +71,9 @@ def offsets_from_graph(
     offset_step: float = 0.15,
     sub_step: float = 0.04,
     min_offset: float = 0.05,
+    exclusion_offset: float | None = None,
 ) -> np.ndarray:
-    """Compute per-set boundary offsets from a set-hierarchy graph.
+    """Compute per-(set, circle) boundary offsets from a set-hierarchy graph.
 
     Assigns larger offsets to shallower (outer) sets so that nested set
     boundaries are drawn at visibly different sizes. Within the same depth
@@ -82,6 +83,11 @@ def offsets_from_graph(
     The safety invariant ``(max_same_depth_count - 1) * sub_step < offset_step``
     ensures no same-depth set ever overshoots its parent's offset.
 
+    Non-member circles get ``exclusion_offset`` instead of the depth-based value,
+    which controls how far each boundary stays from circles it must exclude.
+    Increasing it creates visible spacing between sibling set boundaries where
+    their circles are adjacent. Defaults to ``offset_step``.
+
     Args:
         inclusion_graph: DiGraph with parent→child edges.
         set_names: Ordered list of internal node names, in the same order
@@ -90,10 +96,11 @@ def offsets_from_graph(
         offset_step: Offset increment per depth level.
         sub_step: Additional offset per size-rank within the same depth level.
         min_offset: Floor applied to every set's offset.
+        exclusion_offset: Offset applied to non-member circles. Defaults to
+            ``offset_step`` when ``None``.
 
     Returns:
-        Array of shape ``(S, 1)`` with one offset per set, ready to broadcast
-        to ``(S, N)`` inside the optimizer.
+        Array of shape ``(S, N)`` with one offset per (set, circle) pair.
     """
     roots = [n for n in inclusion_graph.nodes if inclusion_graph.in_degree(n) == 0]
     depth = {}
@@ -121,7 +128,16 @@ def offsets_from_graph(
                 (max_set_depth - d) * offset_step + rank * sub_step + min_offset
             )
 
-    return np.array([offset_dict[s] for s in set_names], dtype=np.float32)[:, None]
+    if exclusion_offset is None:
+        exclusion_offset = offset_step * (max_set_depth + 1)
+
+    leaf_idx = {name: i for i, name in enumerate(leaf_names)}
+    result = np.empty((len(set_names), len(leaf_names)), dtype=np.float32)
+    for si, s in enumerate(set_names):
+        members = {n for n in nx.descendants(inclusion_graph, s) if n in leaf_set}
+        for leaf, ni in leaf_idx.items():
+            result[si, ni] = offset_dict[s] if leaf in members else exclusion_offset
+    return result
 
 
 def optimize_radially_convex_sets_and_circles(
