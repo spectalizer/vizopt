@@ -98,7 +98,9 @@ def offsets_from_graph(
     roots = [n for n in inclusion_graph.nodes if inclusion_graph.in_degree(n) == 0]
     depth = {}
     for root in roots:
-        for node, d in nx.single_source_shortest_path_length(inclusion_graph, root).items():
+        for node, d in nx.single_source_shortest_path_length(
+            inclusion_graph, root
+        ).items():
             if node not in depth or d < depth[node]:
                 depth[node] = d
 
@@ -111,9 +113,13 @@ def offsets_from_graph(
 
     offset_dict: dict[str, float] = {}
     for d in set(depth[s] for s in set_names):
-        group = sorted([s for s in set_names if depth[s] == d], key=lambda s: n_leaves[s])
+        group = sorted(
+            [s for s in set_names if depth[s] == d], key=lambda s: n_leaves[s]
+        )
         for rank, s in enumerate(group):
-            offset_dict[s] = (max_set_depth - d) * offset_step + rank * sub_step + min_offset
+            offset_dict[s] = (
+                (max_set_depth - d) * offset_step + rank * sub_step + min_offset
+            )
 
     return np.array([offset_dict[s] for s in set_names], dtype=np.float32)[:, None]
 
@@ -347,7 +353,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     weight_circle_collision=10.0,
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
-    circle_collision_alpha=0.0,
+    circle_collision_alpha=1.0,
     offsets=None,
     representation: StarRepresentation | None = None,
     term_schedules=None,
