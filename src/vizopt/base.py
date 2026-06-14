@@ -32,6 +32,7 @@ class OptimConfig:
     learning_rate: float = 0.001
     b1: float = 0.9
     b2: float = 0.999
+    decay_lr_to: float = 0.1
     n_restarts: int = 1
     seed: int = 0
 
@@ -327,6 +328,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 learning_rate=config.learning_rate,
                 b1=config.b1,
                 b2=config.b2,
+                decay_lr_to=config.decay_lr_to,
                 callback=tracking_callback,
             )
             if self.var_scales is not None:
