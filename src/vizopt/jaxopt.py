@@ -18,11 +18,29 @@ def optimize_gradient_descent(
     b2: float = 0.95,
     n_iters: int = 1000,
     callback: Callback | None = None,
+    decay_lr_to: float = 0.0,
 ) -> tuple[OptimVars, float]:
-    """Minimize a function by gradient descent"""
+    """Minimize a function by gradient descent.
+
+    Args:
+        params: Initial optimization variables.
+        fun_to_minimize: Scalar-valued function to minimize.
+        learning_rate: Peak learning rate.
+        b1: Adam beta1.
+        b2: Adam beta2.
+        n_iters: Number of optimization steps.
+        callback: Called each iteration with (i_iter, loss, params, grads).
+        decay_lr_to: Final learning rate as a fraction of `learning_rate`.
+            0.0 means full cosine decay to zero; 1.0 means constant rate.
+    """
     if callback is None:
         callback = default_print_callback
-    optimizer = optax.adam(learning_rate=learning_rate, b1=b1, b2=b2)
+    schedule = optax.cosine_decay_schedule(
+        init_value=learning_rate,
+        decay_steps=n_iters,
+        alpha=decay_lr_to,
+    )
+    optimizer = optax.chain(optax.scale_by_adam(b1=b1, b2=b2), optax.scale_by_learning_rate(schedule))
     opt_state = optimizer.init(params)
 
     @jax.jit
