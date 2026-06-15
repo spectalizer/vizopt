@@ -22,11 +22,14 @@ Be it in linguistics or biology, you will find sets, sets containing other sets,
 
 Euler diagrams are the visual representation of these *containment* and *intersection* relations.
 
-*Are we talking about Venn diagrams?*
-No. Venn diagrams represent every possible set intersection, including empty intersections.
+*Interesting fact 1: Euler diagrams are not Venn diagrams*
+No, we are not talking about Venn diagrams here. Venn diagrams represent every possible set intersection, including empty intersections.
 
 The actual definition: *closed shapes...*
 Venn diagrams represent sets as closed shapes, whereby the shape representing a subset of a given set is contained within the shape representing the superset.
+
+
+*Interesting fact 3: Euler diagrams are a superset of treemaps*
 
 ## Searching for Better Primitives
 (the search for the right primitives/parameterization)
@@ -47,6 +50,7 @@ Rectangles pack more efficiently and power treemaps well — but they cannot rep
 
 ![Three levels of binary nesting: leaf circles cover only 12.5% of the enclosing area.](img/circle_nesting.svg)
 
+*Interesting fact 3: Some set configurations cannot be represented with a nice Euler diagram*
 
 
 ## Introducing radially convex sets
@@ -116,6 +120,9 @@ Advanced topic 2: Curriculum learning
 
 TODO How can you do it at home? Using the `vizopt` package
 
+*Interesting fact 4: Even where Euler diagrams are possible, there may be a better way to represent overlapping sets*
+(matrix etc.)
+
 ### Conclusions
 
 
@@ -125,11 +132,14 @@ This is expensive but it is worth it.
 TODO Wax lyrical about the foam.
 
 
-### Related work
 
-Max Fürbringer's beautiful and inspiring tree of birds
 
----
+### References and related work
+
+[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s beautiful and inspiring tree of birds in cross section.
+
+*Interesting fact 5: Overlapping sets are the same as hypergraphs*
+
 
 ## Appendix: Rectangles {#appendix-rectangles}
 
@@ -140,3 +150,12 @@ Rectangles are a natural candidate for set boundaries — axis-aligned, easy to 
 **Expressiveness.** There exist set configurations (intersections and containments) that cannot be realized by any arrangement of axis-aligned rectangles. This section demonstrates such a configuration and proves it is impossible to represent exactly.
 
 **Optimization landscape.** Rectangle-based objectives tend to be less smooth than their star-polygon counterparts — intersection area between two rectangles is a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness makes gradient-based optimization harder and convergence less reliable. *To be elaborated.* 
+
+---
+
+## TODOs
+
+- **Animation near the top** — add a compelling animation early in the article to hook the reader before the theory sections.
+- **"How to use it at home" section** — write the practical walkthrough showing how to use the `vizopt` package to reproduce results.
+- **Conclusion prose** — expand the conclusion; wax lyrical about the foam metaphor.
+- **Appendix: Rectangles** — write the impossibility proof and the optimization landscape argument (currently placeholder stubs).
