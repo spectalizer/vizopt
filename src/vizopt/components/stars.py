@@ -421,6 +421,37 @@ def _multi_term_label_label_collision(optim_vars, input_params):
     return jnp.sum(jnp.where(mask, overlap**2, 0.0))
 
 
+def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
+    """Label rectangles must not overlap leaf rectangles.
+
+    For each (set s, rect n) pair, penalises the squared min-axis AABB
+    penetration depth between the label rect at ``label_positions[s]`` and
+    the leaf rect at ``rect_positions[n]``.
+
+    Args:
+        optim_vars: must contain "label_positions" (S, 2),
+            "rect_positions" (N, 2).
+        input_params: must contain "label_rect_hw" (S,), "label_rect_hh" (S,),
+            "rect_hw" (N,), "rect_hh" (N,).
+
+    Returns:
+        Scalar penalty.
+    """
+    label_positions = optim_vars["label_positions"]  # (S, 2)
+    rect_positions = optim_vars["rect_positions"]    # (N, 2)
+    label_hw = input_params["label_rect_hw"]         # (S,)
+    label_hh = input_params["label_rect_hh"]         # (S,)
+    rect_hw = input_params["rect_hw"]                # (N,)
+    rect_hh = input_params["rect_hh"]                # (N,)
+
+    dx = jnp.abs(label_positions[:, None, 0] - rect_positions[None, :, 0])  # (S, N)
+    dy = jnp.abs(label_positions[:, None, 1] - rect_positions[None, :, 1])
+    overlap_x = jnp.maximum(0.0, label_hw[:, None] + rect_hw[None, :] - dx)
+    overlap_y = jnp.maximum(0.0, label_hh[:, None] + rect_hh[None, :] - dy)
+    overlap = jnp.minimum(overlap_x, overlap_y)
+    return jnp.sum(overlap**2)
+
+
 def _multi_term_label_top_attraction(optim_vars, input_params):
     """Pull label positions above their set centers (toward the top of each shape).
 

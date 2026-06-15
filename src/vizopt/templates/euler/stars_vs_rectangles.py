@@ -18,6 +18,10 @@ from ...base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTem
 from ...components.stars import (
     _build_membership,
     _multi_term_area,
+    _multi_term_label_element_exclusion_rect,
+    _multi_term_label_enclosure,
+    _multi_term_label_label_collision,
+    _multi_term_label_top_attraction,
     _multi_term_min_radius,
     _multi_term_perimeter,
     _multi_term_smoothness,
@@ -441,6 +445,11 @@ def optimize_radially_convex_sets_and_rectangles(
     weight_set_attraction=0.0,
     k_angles: int = 64,
     offsets: float | np.ndarray = 0.1,
+    label_rect_size: tuple[float, float] | None = None,
+    weight_label_enclosure: float = 10.0,
+    weight_label_element_exclusion: float = 10.0,
+    weight_label_collision: float = 10.0,
+    weight_label_top: float = 1.0,
     term_schedules=None,
     optim_config: OptimConfig | None = None,
     callback: Callback | None = None,
@@ -472,12 +481,25 @@ def optimize_radially_convex_sets_and_rectangles(
         k_angles: angular resolution (number of uniformly-spaced rays).
         offsets: padding added to each rectangle's half-extents in the enclosure
             and exclusion terms.  Scalar, shape (N,), or shape (S, N).
+        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle to
+            reserve at the top of each set boundary.  When ``None`` (default)
+            no label rectangle is used.  When set, each star boundary is forced
+            to enclose a floating label rect whose position (``label_positions``,
+            one per set) is an optimization variable.
+        weight_label_enclosure: weight for the label enclosure term.  Default 10.0.
+        weight_label_element_exclusion: weight for keeping label rects away from
+            leaf rectangles.  Default 10.0.
+        weight_label_collision: weight for keeping label rects from overlapping
+            each other.  Default 10.0.
+        weight_label_top: weight for the upward-attraction term.  Default 1.0.
         term_schedules: optional dict mapping term name to a JAX-compatible
             callable ``(step: Array) -> Array`` that scales the term's weight.
             Valid keys: ``"enclosure"``, ``"exclusion"``, ``"min_radius"``,
             ``"smoothness"``, ``"convexity"``, ``"area"``, ``"perimeter"``,
             ``"position_anchor"``, ``"rect_collision"``, ``"bounding_box"``,
-            ``"set_attraction"``.
+            ``"set_attraction"``, ``"label_enclosure"``,
+            ``"label_element_exclusion"``, ``"label_collision"``,
+            ``"label_top"``.
         optim_config: optimizer settings.  Uses :class:`OptimConfig` defaults
             when ``None``.
         callback: optional callback called after each iteration with
@@ -486,7 +508,8 @@ def optimize_radially_convex_sets_and_rectangles(
     Returns:
         Tuple of ``(results, rects_out, history, problem)`` where ``results``
         is a list of S dicts each with keys ``"center"``, ``"radii"``,
-        ``"angles"``; ``rects_out`` is an array of shape (N, 4) with optimised
+        ``"angles"``, and (when ``label_rect_size`` is set) ``"label_center"``;
+        ``rects_out`` is an array of shape (N, 4) with optimised
         ``[cx, cy, hw, hh]``; ``history`` is the list of per-iteration loss
         dicts; and ``problem`` is the
         :class:`~vizopt.base.OptimizationProblem` instance.
@@ -511,6 +534,14 @@ def optimize_radially_convex_sets_and_rectangles(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
 
+    has_label = label_rect_size is not None
+    if has_label:
+        label_hw = np.full(S, label_rect_size[0], dtype=np.float32)
+        label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
+        k_top = int(np.argmin(np.abs(angles - np.pi / 2)))
+        initial_label_positions = initial_centers.copy()
+        initial_label_positions[:, 1] += initial_radii[:, k_top] * 0.6
+
     input_parameters = {
         "rect_hw": rect_hw,
         "rect_hh": rect_hh,
@@ -519,6 +550,9 @@ def optimize_radially_convex_sets_and_rectangles(
         "membership": membership,
         "offsets": offsets_array,
     }
+    if has_label:
+        input_parameters["label_rect_hw"] = label_hw
+        input_parameters["label_rect_hh"] = label_hh
 
     mean_size = float(np.mean(np.concatenate([rect_hw, rect_hh])))
     pos_scale_x = max(float(np.std(rects_array[:, 0])), mean_size)
@@ -530,13 +564,18 @@ def optimize_radially_convex_sets_and_rectangles(
         "rect_positions": pos_scale_arr,
         "radii": np.float32(rad_scale),
     }
+    if has_label:
+        var_scales["label_positions"] = pos_scale_arr
 
     def initialize(_, seed):
-        return {
+        d = {
             "centers": initial_centers.copy(),
             "radii": initial_radii.copy(),
             "rect_positions": initial_rect_positions.copy(),
         }
+        if has_label:
+            d["label_positions"] = initial_label_positions.copy()
+        return d
 
     schedules = (
         term_schedules.schedules
@@ -557,6 +596,13 @@ def optimize_radially_convex_sets_and_rectangles(
         ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box, schedules.get("bounding_box")),
         ObjectiveTerm("set_attraction", _term_set_attraction_rect, weight_set_attraction, schedules.get("set_attraction")),
     ]
+    if has_label:
+        terms += [
+            ObjectiveTerm("label_enclosure", _multi_term_label_enclosure, weight_label_enclosure, schedules.get("label_enclosure")),
+            ObjectiveTerm("label_element_exclusion", _multi_term_label_element_exclusion_rect, weight_label_element_exclusion, schedules.get("label_element_exclusion")),
+            ObjectiveTerm("label_collision", _multi_term_label_label_collision, weight_label_collision, schedules.get("label_collision")),
+            ObjectiveTerm("label_top", _multi_term_label_top_attraction, weight_label_top, schedules.get("label_top")),
+        ]
 
     problem = OptimizationProblemTemplate(
         terms=terms,
@@ -576,6 +622,7 @@ def optimize_radially_convex_sets_and_rectangles(
             "center": np.array(optim_vars["centers"][s]),
             "radii": radii_arr[s],
             "angles": angles,
+            **({"label_center": np.array(optim_vars["label_positions"][s])} if has_label else {}),
         }
         for s in range(S)
     ]
@@ -595,6 +642,11 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
     weight_set_attraction=0.0,
     k_angles: int = 64,
     offsets=0.1,
+    label_rect_size: tuple[float, float] | None = None,
+    weight_label_enclosure: float = 10.0,
+    weight_label_element_exclusion: float = 10.0,
+    weight_label_collision: float = 10.0,
+    weight_label_top: float = 1.0,
     term_schedules=None,
     optim_config: OptimConfig | None = None,
     callback: Callback | None = None,
@@ -619,13 +671,20 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         weight_set_attraction: weight for the set-attraction term.
         k_angles: angular resolution.
         offsets: padding per (set, rect) pair.
+        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
+            See :func:`optimize_radially_convex_sets_and_rectangles`.
+        weight_label_enclosure: weight for the label enclosure term.
+        weight_label_element_exclusion: weight for label-rect exclusion.
+        weight_label_collision: weight for label-label collision.
+        weight_label_top: weight for the upward-attraction term.
         term_schedules: optional term schedule dict.
         optim_config: optimizer settings.
         callback: optional per-iteration callback.
 
     Returns:
         Tuple of ``(results, rects_out, history, problem)`` where ``results``
-        maps set node name → dict with ``"center"``, ``"radii"``, ``"angles"``;
+        maps set node name → dict with ``"center"``, ``"radii"``, ``"angles"``,
+        and (when ``label_rect_size`` is set) ``"label_center"``;
         ``rects_out`` maps leaf node name → array of shape (4,) with optimised
         ``[cx, cy, hw, hh]``; ``history`` is the per-iteration loss list; and
         ``problem`` is the :class:`~vizopt.base.OptimizationProblem` instance.
@@ -647,6 +706,11 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         weight_set_attraction=weight_set_attraction,
         k_angles=k_angles,
         offsets=offsets,
+        label_rect_size=label_rect_size,
+        weight_label_enclosure=weight_label_enclosure,
+        weight_label_element_exclusion=weight_label_element_exclusion,
+        weight_label_collision=weight_label_collision,
+        weight_label_top=weight_label_top,
         term_schedules=term_schedules,
         optim_config=optim_config,
         callback=callback,
