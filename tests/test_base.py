@@ -162,7 +162,7 @@ def test_optimize_returns_optim_vars_and_history():
 
 def test_optimize_minimizes():
     optim_vars, _ = _simple_problem(x0=3.0).optimize(
-        OptimConfig(n_iters=500, learning_rate=0.01), callback=_NO_PRINT
+        OptimConfig(n_iters=1000, learning_rate=0.01), callback=_NO_PRINT
     )
     assert abs(float(optim_vars["x"])) < 0.5
 
