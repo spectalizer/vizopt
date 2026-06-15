@@ -22,6 +22,10 @@ from ...components.stars import (
     _multi_term_circle_collision,
     _multi_term_enclosure_movable,
     _multi_term_exclusion_movable,
+    _multi_term_label_element_exclusion,
+    _multi_term_label_enclosure,
+    _multi_term_label_label_collision,
+    _multi_term_label_top_attraction,
     _multi_term_min_radius,
     _multi_term_perimeter,
     _multi_term_position_anchor,
@@ -153,6 +157,11 @@ def optimize_radially_convex_sets_and_circles(
     weight_set_attraction=0.0,
     circle_collision_alpha=0.0,
     offsets: float | np.ndarray = 0.1,
+    label_rect_size: tuple[float, float] | None = None,
+    weight_label_enclosure: float = 10.0,
+    weight_label_element_exclusion: float = 10.0,
+    weight_label_collision: float = 10.0,
+    weight_label_top: float = 1.0,
     representation: StarRepresentation | None = None,
     term_schedules=None,
     optim_config: OptimConfig | None = None,
@@ -186,6 +195,21 @@ def optimize_radially_convex_sets_and_circles(
             violations from persisting. Default 0.0 (pure quadratic).
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
+        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle to
+            reserve at the top of each set boundary.  When ``None`` (default)
+            no label rectangle is used.  When set, each star boundary is
+            forced to enclose a floating label rect whose position
+            (``label_positions``, one per set) is an optimization variable.
+            The optimizer pushes each label rect above the leaf circles while
+            keeping it inside the star boundary.
+        weight_label_enclosure: weight for the label enclosure term (star must
+            cover the label rect).  Default 10.0.
+        weight_label_element_exclusion: weight for keeping label rects away
+            from leaf circles.  Default 10.0.
+        weight_label_collision: weight for keeping label rects from overlapping
+            each other.  Default 10.0.
+        weight_label_top: weight for the upward-attraction term that pulls
+            label rects toward the top of each set.  Default 1.0.
         representation: star domain parametrization. One of :class:`Discrete`
             (default), :class:`Fourier`, or :class:`BSpline`.
         term_schedules: optional dict mapping term name to a JAX-compatible
@@ -205,9 +229,11 @@ def optimize_radially_convex_sets_and_circles(
 
     Returns:
         Tuple of (results, circles_out, history, problem) where results is a
-        list of S dicts each with "center", "radii", "angles"; circles_out is
-        an array of shape (N, 3) with optimized [cx, cy, r]; history is the
-        list of per-iteration loss dicts; and problem is the
+        list of S dicts each with "center", "radii", "angles", and
+        (when ``label_rect_size`` is set) "label_center" giving the optimized
+        ``[cx, cy]`` of the label rect; circles_out is an array of shape
+        (N, 3) with optimized [cx, cy, r]; history is the list of
+        per-iteration loss dicts; and problem is the
         :class:`~vizopt.base.OptimizationProblem` instance (needed for
         :func:`~vizopt.animation.snapshots_to_animated_svg`).
     """
@@ -235,6 +261,13 @@ def optimize_radially_convex_sets_and_circles(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
 
+    has_label = label_rect_size is not None
+    if has_label:
+        label_hw = np.full(S, label_rect_size[0], dtype=np.float32)
+        label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
+        # Start each label just above the upward-pointing boundary point
+        k_top = int(np.argmin(np.abs(angles - np.pi / 2)))
+
     input_parameters = {
         "circle_radii": circle_radii,
         "initial_circle_positions": initial_circle_positions,
@@ -243,6 +276,9 @@ def optimize_radially_convex_sets_and_circles(
         "offsets": offsets_array,
         "circle_collision_alpha": np.float32(circle_collision_alpha),
     }
+    if has_label:
+        input_parameters["label_rect_hw"] = label_hw
+        input_parameters["label_rect_hh"] = label_hh
 
     init_vars = representation.initialize_vars(S, initial_radii, initial_centers)
 
@@ -254,12 +290,21 @@ def optimize_radially_convex_sets_and_circles(
     for key in init_vars:
         if key != "centers":
             var_scales[key] = np.float32(rad_scale)
+    if has_label:
+        var_scales["label_positions"] = pos_scale_arr
+
+    if has_label:
+        initial_label_positions = initial_centers.copy()
+        initial_label_positions[:, 1] += initial_radii[:, k_top] * 0.6
 
     def initialize(_, seed):
-        return {
+        d = {
             **{k: v.copy() for k, v in init_vars.items()},
             "circle_positions": initial_circle_positions.copy(),
         }
+        if has_label:
+            d["label_positions"] = initial_label_positions.copy()
+        return d
 
     def wrap(fn):
         return representation.wrap(fn, angles_jnp)
@@ -328,6 +373,33 @@ def optimize_radially_convex_sets_and_circles(
             schedules.get("set_attraction"),
         ),
     ]
+    if has_label:
+        terms += [
+            ObjectiveTerm(
+                "label_enclosure",
+                wrap(_multi_term_label_enclosure),
+                weight_label_enclosure,
+                schedules.get("label_enclosure"),
+            ),
+            ObjectiveTerm(
+                "label_element_exclusion",
+                _multi_term_label_element_exclusion,
+                weight_label_element_exclusion,
+                schedules.get("label_element_exclusion"),
+            ),
+            ObjectiveTerm(
+                "label_collision",
+                _multi_term_label_label_collision,
+                weight_label_collision,
+                schedules.get("label_collision"),
+            ),
+            ObjectiveTerm(
+                "label_top",
+                _multi_term_label_top_attraction,
+                weight_label_top,
+                schedules.get("label_top"),
+            ),
+        ]
 
     problem = OptimizationProblemTemplate(
         terms=terms,
@@ -349,6 +421,7 @@ def optimize_radially_convex_sets_and_circles(
                 "center": np.array(optim_vars["centers"][s]),
                 "radii": radii_arr[s],
                 "angles": angles,
+                **({"label_center": np.array(optim_vars["label_positions"][s])} if has_label else {}),
                 **representation.extra_results(s, optim_vars),
             }
             for s in range(S)
@@ -371,6 +444,11 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     weight_set_attraction=0.0,
     circle_collision_alpha=1.0,
     offsets=None,
+    label_rect_size: tuple[float, float] | None = None,
+    weight_label_enclosure: float = 10.0,
+    weight_label_element_exclusion: float = 10.0,
+    weight_label_collision: float = 10.0,
+    weight_label_top: float = 1.0,
     representation: StarRepresentation | None = None,
     term_schedules=None,
     optim_config: OptimConfig | None = None,
@@ -402,6 +480,12 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             When ``None`` (default), computed automatically from the graph hierarchy
             via :func:`offsets_from_graph`: outer sets get larger offsets so that
             nested set boundaries are visually distinguishable.
+        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
+            See :func:`optimize_radially_convex_sets_and_circles`.
+        weight_label_enclosure: weight for the label enclosure term.
+        weight_label_element_exclusion: weight for label-circle exclusion.
+        weight_label_collision: weight for label-label collision.
+        weight_label_top: weight for the upward-attraction term.
         representation: star domain parametrization.
         term_schedules: optional dict mapping term name to a schedule callable.
         optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults when ``None``.
@@ -409,7 +493,8 @@ def optimize_radially_convex_sets_and_circles_from_graph(
 
     Returns:
         Tuple of (results, circles_out, history, problem) where results maps
-        set node name → dict with "center", "radii", "angles"; circles_out maps
+        set node name → dict with "center", "radii", "angles", and (when
+        ``label_rect_size`` is set) "label_center"; circles_out maps
         leaf node name → array of shape (3,) with optimized [cx, cy, r]; history
         is the list of per-iteration loss dicts; and problem is the
         :class:`~vizopt.base.OptimizationProblem` instance.
@@ -434,6 +519,11 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             weight_set_attraction=weight_set_attraction,
             circle_collision_alpha=circle_collision_alpha,
             offsets=offsets,
+            label_rect_size=label_rect_size,
+            weight_label_enclosure=weight_label_enclosure,
+            weight_label_element_exclusion=weight_label_element_exclusion,
+            weight_label_collision=weight_label_collision,
+            weight_label_top=weight_label_top,
             representation=representation,
             term_schedules=term_schedules,
             optim_config=optim_config,

@@ -15,6 +15,8 @@ from jax import numpy as jnp
 from ..utils import _SVG_SET_COLORS
 
 _MIN_RADIUS = 0.1
+_SLAB_EPS = 1e-7
+_SLAB_INF = 1e9
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +293,151 @@ def _multi_term_circle_collision(optim_vars, input_params):
     # Sum upper triangle only to count each pair once
     mask = jnp.triu(jnp.ones((radii.shape[0], radii.shape[0]), dtype=bool), k=1)
     return jnp.sum(jnp.where(mask, overlap**2 + alpha * overlap, 0.0))
+
+
+# ---------------------------------------------------------------------------
+# Label rectangle terms
+#
+# These terms apply when each set has a floating label rectangle whose position
+# is an optimization variable "label_positions" (S, 2).
+#
+# optim_vars (additional): "label_positions" (S, 2)
+# input_params (additional): "label_rect_hw" (S,), "label_rect_hh" (S,)
+# ---------------------------------------------------------------------------
+
+
+def _multi_term_label_enclosure(optim_vars, input_params):
+    """Each star boundary must enclose its own label rectangle.
+
+    Uses slab (ray-AABB) intersection: for each angle k the required radius
+    is the far-edge distance to the label rect; penalises squared violations.
+
+    Args:
+        optim_vars: must contain "centers" (S, 2), "radii" (S, K),
+            "label_positions" (S, 2).
+        input_params: must contain "label_rect_hw" (S,), "label_rect_hh" (S,),
+            "angles" (K,).
+
+    Returns:
+        Scalar penalty.
+    """
+    centers = optim_vars["centers"]                  # (S, 2)
+    radii = optim_vars["radii"]                      # (S, K)
+    label_positions = optim_vars["label_positions"]  # (S, 2)
+    angles = input_params["angles"]                  # (K,)
+    hw = input_params["label_rect_hw"][:, None]      # (S, 1)
+    hh = input_params["label_rect_hh"][:, None]      # (S, 1)
+
+    dx = (label_positions[:, 0] - centers[:, 0])[:, None]  # (S, 1)
+    dy = (label_positions[:, 1] - centers[:, 1])[:, None]  # (S, 1)
+
+    cos_a = jnp.cos(angles)[None, :]  # (1, K)
+    sin_a = jnp.sin(angles)[None, :]  # (1, K)
+
+    near_cos = jnp.abs(cos_a) < _SLAB_EPS
+    near_sin = jnp.abs(sin_a) < _SLAB_EPS
+    safe_cos = jnp.where(near_cos, _SLAB_EPS, cos_a)
+    safe_sin = jnp.where(near_sin, _SLAB_EPS, sin_a)
+
+    t_x1 = (dx - hw) / safe_cos  # (S, K)
+    t_x2 = (dx + hw) / safe_cos
+    x_in_range = jnp.abs(dx) <= hw
+    tx_lo = jnp.where(near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2))
+    tx_hi = jnp.where(near_cos, jnp.where(x_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2))
+
+    t_y1 = (dy - hh) / safe_sin
+    t_y2 = (dy + hh) / safe_sin
+    y_in_range = jnp.abs(dy) <= hh
+    ty_lo = jnp.where(near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2))
+    ty_hi = jnp.where(near_sin, jnp.where(y_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2))
+
+    t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K)
+    t_exit = jnp.minimum(tx_hi, ty_hi)   # (S, K)
+    hits = (t_enter <= t_exit) & (t_exit >= 0)
+
+    violations = jnp.where(hits, jnp.maximum(0.0, t_exit - radii), 0.0)
+    return jnp.sum(violations**2)
+
+
+def _multi_term_label_element_exclusion(optim_vars, input_params):
+    """Label rectangles must not overlap leaf circles.
+
+    Uses the rect-circle nearest-point distance: for each (set, circle) pair,
+    finds the closest point on the label rect to the circle center and
+    penalises the squared overlap ``max(0, r - dist)^2``.
+
+    Args:
+        optim_vars: must contain "label_positions" (S, 2),
+            "circle_positions" (N, 2).
+        input_params: must contain "circle_radii" (N,),
+            "label_rect_hw" (S,), "label_rect_hh" (S,).
+
+    Returns:
+        Scalar penalty.
+    """
+    label_positions = optim_vars["label_positions"]   # (S, 2)
+    circle_positions = optim_vars["circle_positions"]  # (N, 2)
+    circle_radii = input_params["circle_radii"]        # (N,)
+    hw = input_params["label_rect_hw"][:, None]        # (S, 1)
+    hh = input_params["label_rect_hh"][:, None]        # (S, 1)
+
+    lx = label_positions[:, None, 0]   # (S, 1)
+    ly = label_positions[:, None, 1]   # (S, 1)
+    cx = circle_positions[None, :, 0]  # (1, N)
+    cy = circle_positions[None, :, 1]  # (1, N)
+    r = circle_radii[None, :]          # (1, N)
+
+    nx = jnp.clip(cx, lx - hw, lx + hw)  # (S, N)
+    ny = jnp.clip(cy, ly - hh, ly + hh)
+    dist = jnp.sqrt((cx - nx) ** 2 + (cy - ny) ** 2 + 1e-12)
+    overlap = jnp.maximum(0.0, r - dist)
+    return jnp.sum(overlap**2)
+
+
+def _multi_term_label_label_collision(optim_vars, input_params):
+    """Penalty for overlapping label rectangles.
+
+    Uses the minimum axis-wise penetration depth between each pair of AABBs:
+    ``violation = max(0, min(overlap_x, overlap_y))``.
+
+    Args:
+        optim_vars: must contain "label_positions" (S, 2).
+        input_params: must contain "label_rect_hw" (S,), "label_rect_hh" (S,).
+
+    Returns:
+        Scalar penalty.
+    """
+    positions = optim_vars["label_positions"]  # (S, 2)
+    hw = input_params["label_rect_hw"]         # (S,)
+    hh = input_params["label_rect_hh"]         # (S,)
+    S = hw.shape[0]
+
+    dx = jnp.abs(positions[:, None, 0] - positions[None, :, 0])  # (S, S)
+    dy = jnp.abs(positions[:, None, 1] - positions[None, :, 1])
+    overlap_x = jnp.maximum(0.0, hw[:, None] + hw[None, :] - dx)
+    overlap_y = jnp.maximum(0.0, hh[:, None] + hh[None, :] - dy)
+    overlap = jnp.minimum(overlap_x, overlap_y)
+    mask = jnp.triu(jnp.ones((S, S), dtype=bool), k=1)
+    return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+
+
+def _multi_term_label_top_attraction(optim_vars, input_params):
+    """Pull label positions above their set centers (toward the top of each shape).
+
+    Minimises ``center_y - label_y`` for each set, which is equivalent to
+    maximising the upward displacement of each label relative to its center.
+    The gradient pushes ``label_positions[:, 1]`` upward until balanced by the
+    enclosure and element-exclusion penalties.
+
+    Args:
+        optim_vars: must contain "centers" (S, 2), "label_positions" (S, 2).
+
+    Returns:
+        Scalar loss (can be negative; the optimizer minimizes it).
+    """
+    centers = optim_vars["centers"]                  # (S, 2)
+    label_positions = optim_vars["label_positions"]  # (S, 2)
+    return jnp.sum(centers[:, 1] - label_positions[:, 1])
 
 
 # ---------------------------------------------------------------------------
