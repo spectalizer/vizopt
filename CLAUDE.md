@@ -195,3 +195,7 @@ Transform tasks into verifiable goals:
 - "Add validation" → "Write tests for invalid inputs, then make them pass"
 - "Fix the bug" → "Write a test that reproduces it, then make it pass"
 - "Refactor X" → "Ensure tests pass before and after"
+
+### 5. Add unit tests when you add functionality
+
+Unit tests in the `tests` folder, using pytest.
