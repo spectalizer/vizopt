@@ -289,7 +289,9 @@ def optimize_multiple_radially_convex_sets_bspline(
             "bspline_ctrl": initial_ctrl_pts,
         }
 
-    wrap = lambda fn: _wrap_bspline_term(fn, angles_jnp)
+    def wrap(fn):
+        return _wrap_bspline_term(fn, angles_jnp)
+
     schedules = term_schedules or {}
     terms = [
         ObjectiveTerm("enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")),
@@ -411,7 +413,9 @@ def optimize_multiple_radially_convex_sets_bspline_with_movable_circles(
             "circle_positions": initial_circle_positions.copy(),
         }
 
-    wrap = lambda fn: _wrap_bspline_term(fn, angles_jnp)
+    def wrap(fn):
+        return _wrap_bspline_term(fn, angles_jnp)
+
     schedules = term_schedules or {}
     terms = [
         ObjectiveTerm("enclosure", wrap(_multi_term_enclosure_movable), 10.0, schedules.get("enclosure")),

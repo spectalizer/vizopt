@@ -279,7 +279,7 @@ def _loss_curve_svg_lines(
         return panel_y + pad_top + (1.0 - t) * plot_h
 
     # Polyline points for full loss curve
-    curve_pts = [(to_x(it), to_y(l)) for it, l in zip(iters, losses)]
+    curve_pts = [(to_x(it), to_y(loss_val)) for it, loss_val in zip(iters, losses)]
     points = " ".join(f"{x:.1f},{y:.1f}" for x, y in curve_pts)
 
     # Cumulative arc-length along the polyline (for stroke-dashoffset animation)
@@ -397,12 +397,12 @@ def _optim_vars_spaghetti_svg_lines(
     # Flatten each snapshot's optim_vars into (n_scalars,) vectors
     all_leaves_per_frame = [jax.tree.leaves(ovars) for _, ovars in snapshots]
     first_leaves = all_leaves_per_frame[0]
-    leaf_sizes = [int(np.asarray(l).size) for l in first_leaves]
+    leaf_sizes = [int(np.asarray(leaf).size) for leaf in first_leaves]
     n_scalars = sum(leaf_sizes)
 
     series = np.zeros((n_scalars, len(snapshots)))
     for fi, leaves in enumerate(all_leaves_per_frame):
-        series[:, fi] = np.concatenate([np.asarray(l).ravel() for l in leaves])
+        series[:, fi] = np.concatenate([np.asarray(leaf).ravel() for leaf in leaves])
 
     # Y-axis range with 5 % padding
     raw_min, raw_max = float(series.min()), float(series.max())
