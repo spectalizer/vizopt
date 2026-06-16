@@ -112,6 +112,40 @@ def test_optimize_discrete_no_extra_results():
         assert "bspline_ctrl" not in r
 
 
+def test_convexity_alpha_reduces_concavity():
+    """convexity_alpha=1 should produce a more convex boundary than alpha=0."""
+    circles = np.array([[-2.0, 0.0, 0.4], [0.0, 2.0, 0.4], [2.0, 0.0, 0.4]], dtype=np.float32)
+    sets = [[0, 1, 2]]
+
+    def _run(alpha):
+        results, _, _, _ = optimize_radially_convex_sets_and_circles(
+            circles=circles,
+            sets=sets,
+            weight_convexity=5.0,
+            convexity_alpha=alpha,
+            weight_area=0.5,
+            weight_perimeter=0.5,
+            weight_smoothness=0.1,
+            representation=Discrete(k_angles=32),
+            optim_config=OptimConfig(n_iters=200, learning_rate=5e-3),
+            callback=_NO_PRINT,
+        )
+        import jax.numpy as jnp
+        radii = jnp.array(results[0]["radii"])
+        angles = jnp.array(results[0]["angles"])
+        center = jnp.array(results[0]["center"])
+        directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)
+        points = center[None, :] + radii[:, None] * directions
+        edges = jnp.roll(points, -1, axis=0) - points
+        edges_next = jnp.roll(edges, -1, axis=0)
+        cross = edges[:, 0] * edges_next[:, 1] - edges[:, 1] * edges_next[:, 0]
+        return float(jnp.sum(jnp.maximum(0.0, -cross)))
+
+    concavity_no_alpha = _run(0.0)
+    concavity_with_alpha = _run(1.0)
+    assert concavity_with_alpha < concavity_no_alpha
+
+
 # ---------------------------------------------------------------------------
 # make_british_islands_graph
 # ---------------------------------------------------------------------------

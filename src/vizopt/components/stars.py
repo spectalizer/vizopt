@@ -200,12 +200,16 @@ def _multi_term_convexity(optim_vars, input_params):
 
     At each vertex, computes the cross product of the two adjacent edge
     vectors. A negative cross product (right turn) indicates a concavity.
-    Penalizes squared violations: sum over all sets and angles of
-    ``max(0, -cross)²``.
+    Penalizes ``max(0, -cross)² + alpha * max(0, -cross)`` summed over all
+    sets and angles.  The linear term gives a constant non-zero gradient for
+    any concavity, preventing mild violations from stalling due to the
+    vanishing gradient of the pure quadratic near zero.  ``alpha=0`` recovers
+    the original pure-quadratic penalty.
     """
     centers = optim_vars["centers"]  # (S, 2)
     radii = optim_vars["radii"]  # (S, K)
     angles = input_params["angles"]  # (K,)
+    alpha = input_params["convexity_alpha"]
 
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
     points = centers[:, None, :] + radii[:, :, None] * directions[None, :, :]  # (S, K, 2)
@@ -214,7 +218,8 @@ def _multi_term_convexity(optim_vars, input_params):
     edges_next = jnp.roll(edges, -1, axis=1)  # (S, K, 2)
 
     cross = edges[:, :, 0] * edges_next[:, :, 1] - edges[:, :, 1] * edges_next[:, :, 0]  # (S, K)
-    return jnp.sum(jnp.maximum(0.0, -cross) ** 2)
+    violations = jnp.maximum(0.0, -cross)
+    return jnp.sum(violations ** 2 + alpha * violations)
 
 
 # ---------------------------------------------------------------------------

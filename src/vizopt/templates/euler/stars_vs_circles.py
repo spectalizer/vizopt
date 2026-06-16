@@ -158,6 +158,7 @@ def optimize_radially_convex_sets_and_circles(
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
     circle_collision_alpha=0.0,
+    convexity_alpha=0.5,
     offsets: float | np.ndarray = 0.1,
     label_rect_size: tuple[float, float] | None = None,
     weight_label_enclosure: float = 10.0,
@@ -197,6 +198,12 @@ def optimize_radially_convex_sets_and_circles(
             collision penalty: ``overlap² + alpha * overlap``. The linear term
             gives a constant non-zero gradient for any overlap, preventing tiny
             violations from persisting. Default 0.0 (pure quadratic).
+        convexity_alpha: coefficient for the linear term in the convexity
+            penalty: ``violation² + alpha * violation``, where violation is
+            ``max(0, -cross)``.  The linear term gives a non-zero gradient for
+            any concavity, preventing mild violations from stalling when the
+            pure-quadratic gradient is too small to overcome competing terms.
+            Default 0.5.
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
         label_rect_size: ``(hw, hh)`` half-extents of the label rectangle to
@@ -279,6 +286,7 @@ def optimize_radially_convex_sets_and_circles(
         "membership": membership,
         "offsets": offsets_array,
         "circle_collision_alpha": np.float32(circle_collision_alpha),
+        "convexity_alpha": np.float32(convexity_alpha),
     }
     if has_label:
         input_parameters["label_rect_hw"] = label_hw
@@ -454,6 +462,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
     circle_collision_alpha=1.0,
+    convexity_alpha=0.5,
     offsets=None,
     label_rect_size: tuple[float, float] | None = None,
     weight_label_enclosure: float = 10.0,
@@ -487,6 +496,8 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             of every set it belongs to. Default 0.0 (disabled).
         circle_collision_alpha: coefficient for the linear term in the circle
             collision penalty. Default 0.0 (pure quadratic).
+        convexity_alpha: coefficient for the linear term in the convexity
+            penalty. Default 0.5.
         offsets: padding added to each circle's radius in the enclosure term,
             per ``(set, circle)`` pair. Scalar, shape ``(N,)``, or shape ``(S, N)``.
             When ``None`` (default), computed automatically from the graph hierarchy
@@ -531,6 +542,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             weight_bounding_box=weight_bounding_box,
             weight_set_attraction=weight_set_attraction,
             circle_collision_alpha=circle_collision_alpha,
+            convexity_alpha=convexity_alpha,
             offsets=offsets,
             label_rect_size=label_rect_size,
             weight_label_enclosure=weight_label_enclosure,
