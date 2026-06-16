@@ -242,6 +242,7 @@ def _svg_configuration_rect(snapshots, input_params, size):
     angles = input_params["angles"]
     S = input_params["membership"].shape[0]
     N = len(rect_hw)
+    has_labels = "label_positions" in snapshots[0][1]
 
     all_x, all_y = [], []
     for _, v in snapshots:
@@ -257,6 +258,14 @@ def _svg_configuration_rect(snapshots, input_params, size):
             cx, cy = pos[i, 0], pos[i, 1]
             all_x.extend([cx - rect_hw[i], cx + rect_hw[i]])
             all_y.extend([cy - rect_hh[i], cy + rect_hh[i]])
+        if has_labels:
+            label_hw = input_params["label_rect_hw"]
+            label_hh = input_params["label_rect_hh"]
+            lpos = np.array(v["label_positions"])
+            for s in range(S):
+                lx, ly = lpos[s, 0], lpos[s, 1]
+                all_x.extend([lx - label_hw[s], lx + label_hw[s]])
+                all_y.extend([ly - label_hh[s], ly + label_hh[s]])
 
     x_min, y_min = min(all_x), min(all_y)
     span = max(max(all_x) - x_min, max(all_y) - y_min)
@@ -315,6 +324,31 @@ def _svg_configuration_rect(snapshots, input_params, size):
             "x": x_frames,
             "y": y_frames,
         })
+
+    if has_labels:
+        label_hw = input_params["label_rect_hw"]
+        label_hh = input_params["label_rect_hh"]
+        for s in range(S):
+            color = _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
+            w_svg = dim_to_svg(2 * float(label_hw[s]))
+            h_svg = dim_to_svg(2 * float(label_hh[s]))
+            x_frames, y_frames = [], []
+            for _, v in snapshots:
+                lx, ly = float(v["label_positions"][s, 0]), float(v["label_positions"][s, 1])
+                px, py = to_svg(lx, ly)
+                x_frames.append(f"{px - w_svg / 2:.1f}")
+                y_frames.append(f"{py - h_svg / 2:.1f}")
+            elements.append({
+                "tag": "rect",
+                "width": f"{w_svg:.1f}",
+                "height": f"{h_svg:.1f}",
+                "fill": color,
+                "fill-opacity": "0.35",
+                "stroke": color,
+                "stroke-width": "1",
+                "x": x_frames,
+                "y": y_frames,
+            })
 
     return elements
 
@@ -434,6 +468,7 @@ def optimize_radially_convex_sets_and_rectangles(
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
     rect_collision_alpha=0.1,
+    convexity_alpha=0.5,
     k_angles: int = 64,
     offsets: float | np.ndarray = 0.1,
     label_rect_size: tuple[float, float] | None = None,
@@ -473,6 +508,10 @@ def optimize_radially_convex_sets_and_rectangles(
             collision penalty: ``overlap² + alpha * overlap``.  The linear term
             gives a constant non-zero gradient for any overlap, preventing tiny
             violations from persisting.  Default 0.0 (pure quadratic).
+        convexity_alpha: coefficient for the linear term in the convexity
+            penalty: ``violation² + alpha * violation``.  The linear term gives
+            a non-zero gradient for any concavity, preventing mild violations
+            from stalling.  Default 0.5.
         k_angles: angular resolution (number of uniformly-spaced rays).
         offsets: padding added to each rectangle's half-extents in the enclosure
             and exclusion terms.  Scalar, shape (N,), or shape (S, N).
@@ -545,6 +584,7 @@ def optimize_radially_convex_sets_and_rectangles(
         "membership": membership,
         "offsets": offsets_array,
         "rect_collision_alpha": np.float32(rect_collision_alpha),
+        "convexity_alpha": np.float32(convexity_alpha),
     }
     if has_label:
         input_parameters["label_rect_hw"] = label_hw
@@ -637,6 +677,7 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
     rect_collision_alpha=0.1,
+    convexity_alpha=0.5,
     k_angles: int = 64,
     offsets=0.1,
     label_rect_size: tuple[float, float] | None = None,
@@ -668,6 +709,8 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         weight_set_attraction: weight for the set-attraction term.
         rect_collision_alpha: coefficient for the linear term in the rectangle
             collision penalty.  Default 0.0 (pure quadratic).
+        convexity_alpha: coefficient for the linear term in the convexity
+            penalty.  Default 0.5.
         k_angles: angular resolution.
         offsets: padding per (set, rect) pair.
         label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
@@ -704,6 +747,7 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         weight_bounding_box=weight_bounding_box,
         weight_set_attraction=weight_set_attraction,
         rect_collision_alpha=rect_collision_alpha,
+        convexity_alpha=convexity_alpha,
         k_angles=k_angles,
         offsets=offsets,
         label_rect_size=label_rect_size,
