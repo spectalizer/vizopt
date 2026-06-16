@@ -200,10 +200,15 @@ def _term_rect_collision(optim_vars, input_params):
 
     Uses the minimum axis-wise penetration depth: two AABBs overlap iff both
     x- and y-gaps are negative, so violation = max(0, min(overlap_x, overlap_y)).
+
+    Penalty is ``overlap² + alpha * overlap``. The linear term gives a constant
+    non-zero gradient for any overlap, preventing tiny violations from persisting
+    due to vanishing gradients. alpha=0 recovers the pure quadratic penalty.
     """
     positions = optim_vars["rect_positions"]  # (N, 2)
     hw = input_params["rect_hw"]  # (N,)
     hh = input_params["rect_hh"]
+    alpha = input_params["rect_collision_alpha"]
     N = hw.shape[0]
 
     dx = jnp.abs(positions[:, None, 0] - positions[None, :, 0])  # (N, N)
@@ -212,7 +217,7 @@ def _term_rect_collision(optim_vars, input_params):
     overlap_y = jnp.maximum(0.0, hh[:, None] + hh[None, :] - dy)
     overlap = jnp.minimum(overlap_x, overlap_y)
     mask = jnp.triu(jnp.ones((N, N), dtype=bool), k=1)
-    return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+    return jnp.sum(jnp.where(mask, overlap**2 + alpha * overlap, 0.0))
 
 
 def _term_set_attraction_rect(optim_vars, input_params):
@@ -428,6 +433,7 @@ def optimize_radially_convex_sets_and_rectangles(
     weight_rect_collision=10.0,
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
+    rect_collision_alpha=0.1,
     k_angles: int = 64,
     offsets: float | np.ndarray = 0.1,
     label_rect_size: tuple[float, float] | None = None,
@@ -463,6 +469,10 @@ def optimize_radially_convex_sets_and_rectangles(
             set boundaries.  Default 0.0 (disabled).
         weight_set_attraction: weight for pulling rectangles toward their set
             centers.  Default 0.0 (disabled).
+        rect_collision_alpha: coefficient for the linear term in the rectangle
+            collision penalty: ``overlap² + alpha * overlap``.  The linear term
+            gives a constant non-zero gradient for any overlap, preventing tiny
+            violations from persisting.  Default 0.0 (pure quadratic).
         k_angles: angular resolution (number of uniformly-spaced rays).
         offsets: padding added to each rectangle's half-extents in the enclosure
             and exclusion terms.  Scalar, shape (N,), or shape (S, N).
@@ -534,6 +544,7 @@ def optimize_radially_convex_sets_and_rectangles(
         "angles": angles,
         "membership": membership,
         "offsets": offsets_array,
+        "rect_collision_alpha": np.float32(rect_collision_alpha),
     }
     if has_label:
         input_parameters["label_rect_hw"] = label_hw
@@ -625,6 +636,7 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
     weight_rect_collision=10.0,
     weight_bounding_box=0.0,
     weight_set_attraction=0.0,
+    rect_collision_alpha=0.1,
     k_angles: int = 64,
     offsets=0.1,
     label_rect_size: tuple[float, float] | None = None,
@@ -654,6 +666,8 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         weight_rect_collision: weight for the rectangle collision penalty.
         weight_bounding_box: weight for the bounding-box objective.
         weight_set_attraction: weight for the set-attraction term.
+        rect_collision_alpha: coefficient for the linear term in the rectangle
+            collision penalty.  Default 0.0 (pure quadratic).
         k_angles: angular resolution.
         offsets: padding per (set, rect) pair.
         label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
@@ -689,6 +703,7 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         weight_rect_collision=weight_rect_collision,
         weight_bounding_box=weight_bounding_box,
         weight_set_attraction=weight_set_attraction,
+        rect_collision_alpha=rect_collision_alpha,
         k_angles=k_angles,
         offsets=offsets,
         label_rect_size=label_rect_size,
