@@ -432,6 +432,7 @@ def _multi_term_label_label_collision(optim_vars, input_params):
     positions = optim_vars["label_positions"]  # (S, 2)
     hw = input_params["label_rect_hw"]         # (S,)
     hh = input_params["label_rect_hh"]         # (S,)
+    alpha = input_params.get("rect_collision_alpha", 0.0)
     S = hw.shape[0]
 
     dx = jnp.abs(positions[:, None, 0] - positions[None, :, 0])  # (S, S)
@@ -440,7 +441,7 @@ def _multi_term_label_label_collision(optim_vars, input_params):
     overlap_y = jnp.maximum(0.0, hh[:, None] + hh[None, :] - dy)
     overlap = jnp.minimum(overlap_x, overlap_y)
     mask = jnp.triu(jnp.ones((S, S), dtype=bool), k=1)
-    return jnp.sum(jnp.where(mask, overlap**2, 0.0))
+    return jnp.sum(jnp.where(mask, overlap**2 + alpha * overlap, 0.0))
 
 
 def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
@@ -465,13 +466,14 @@ def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
     label_hh = input_params["label_rect_hh"]         # (S,)
     rect_hw = input_params["rect_hw"]                # (N,)
     rect_hh = input_params["rect_hh"]                # (N,)
+    alpha = input_params.get("rect_collision_alpha", 0.0)
 
     dx = jnp.abs(label_positions[:, None, 0] - rect_positions[None, :, 0])  # (S, N)
     dy = jnp.abs(label_positions[:, None, 1] - rect_positions[None, :, 1])
     overlap_x = jnp.maximum(0.0, label_hw[:, None] + rect_hw[None, :] - dx)
     overlap_y = jnp.maximum(0.0, label_hh[:, None] + rect_hh[None, :] - dy)
     overlap = jnp.minimum(overlap_x, overlap_y)
-    return jnp.sum(overlap**2)
+    return jnp.sum(overlap**2 + alpha * overlap)
 
 
 def _multi_term_label_top_attraction(optim_vars, input_params):
