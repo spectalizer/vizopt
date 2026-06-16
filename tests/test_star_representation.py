@@ -59,7 +59,9 @@ def test_discrete_to_radii_identity():
 
 def test_discrete_wrap_is_identity():
     rep = Discrete(k_angles=K)
-    fn = lambda v, p: v["radii"].sum()
+    def fn(v, p):
+        return v["radii"].sum()
+
     wrapped = rep.wrap(fn, ANGLES_JNP)
     assert wrapped is fn
 

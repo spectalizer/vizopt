@@ -16,7 +16,8 @@ from vizopt.templates.euler.stars_vs_circles import (
 )
 
 _FAST = OptimConfig(n_iters=5, learning_rate=1e-2)
-_NO_PRINT = lambda *_: None
+def _NO_PRINT(*_):
+    pass
 
 
 # ---------------------------------------------------------------------------

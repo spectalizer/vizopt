@@ -12,7 +12,8 @@ from vizopt.base import (
     build_objective,
 )
 
-_NO_PRINT = lambda *_: None  # silent callback for tests
+def _NO_PRINT(*_):
+    pass
 
 
 # --- ObjectiveTerm ---
@@ -25,7 +26,9 @@ def test_objective_term_defaults():
 
 
 def test_objective_term_fields():
-    compute = lambda v, p: v["x"]
+    def compute(v, p):
+        return v["x"]
+
     term = ObjectiveTerm(name="bar", compute=compute, multiplier=2.5)
     assert term.name == "bar"
     assert term.compute is compute
@@ -80,7 +83,9 @@ def test_build_objective_uses_input_parameters():
 
 def test_build_objective_schedule_applied():
     """Schedule modulates the effective weight at each step."""
-    schedule = lambda step: jnp.where(step == 0, 0.0, 1.0)
+    def schedule(step):
+        return jnp.where(step == 0, 0.0, 1.0)
+
     term = ObjectiveTerm(
         name="s", compute=lambda v, p: v["x"], multiplier=1.0, schedule=schedule
     )
