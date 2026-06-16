@@ -20,6 +20,7 @@ from ...components.stars import (
     _init_centers_and_radii,
     _multi_term_area,
     _multi_term_circle_collision,
+    _multi_term_convexity,
     _multi_term_enclosure_movable,
     _multi_term_exclusion_movable,
     _multi_term_label_element_exclusion,
@@ -151,6 +152,7 @@ def optimize_radially_convex_sets_and_circles(
     weight_perimeter=1.0,
     weight_exclusion=10.0,
     weight_smoothness=1.0,
+    weight_convexity=0.0,
     weight_position_anchor=1.0,
     weight_circle_collision=10.0,
     weight_bounding_box=0.0,
@@ -180,6 +182,8 @@ def optimize_radially_convex_sets_and_circles(
         weight_perimeter: weight for the perimeter objective.
         weight_exclusion: weight for the exclusion penalty.
         weight_smoothness: weight for the smoothness penalty.
+        weight_convexity: weight for the convexity penalty, which penalizes
+            concave turns in the star polygon boundary. Default 0.0 (disabled).
         weight_position_anchor: weight for penalizing circle positions deviating
             from their initial positions. Higher values keep circles closer to
             their starting positions.
@@ -215,7 +219,7 @@ def optimize_radially_convex_sets_and_circles(
         term_schedules: optional dict mapping term name to a JAX-compatible
             callable ``(step: Array) -> Array`` that scales the term's weight
             over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
-            "smoothness", "area", "perimeter", "position_anchor",
+            "smoothness", "convexity", "area", "perimeter", "position_anchor",
             "circle_collision", "bounding_box", "set_attraction". The effective
             weight at step t
             is ``base_weight * schedule(t)``. Schedules must use JAX ops so
@@ -340,6 +344,12 @@ def optimize_radially_convex_sets_and_circles(
             schedules.get("smoothness"),
         ),
         ObjectiveTerm(
+            "convexity",
+            wrap(_multi_term_convexity),
+            weight_convexity,
+            schedules.get("convexity"),
+        ),
+        ObjectiveTerm(
             "area", wrap(_multi_term_area), weight_area, schedules.get("area")
         ),
         ObjectiveTerm(
@@ -438,6 +448,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     weight_perimeter=1.0,
     weight_exclusion=10.0,
     weight_smoothness=1.0,
+    weight_convexity=0.0,
     weight_position_anchor=1.0,
     weight_circle_collision=10.0,
     weight_bounding_box=0.0,
@@ -466,6 +477,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
         weight_perimeter: weight for the perimeter objective.
         weight_exclusion: weight for the exclusion penalty.
         weight_smoothness: weight for the smoothness penalty.
+        weight_convexity: weight for the convexity penalty. Default 0.0 (disabled).
         weight_position_anchor: weight for penalizing circle positions deviating
             from their initial positions.
         weight_circle_collision: weight for penalizing overlapping circles.
@@ -513,6 +525,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             weight_perimeter=weight_perimeter,
             weight_exclusion=weight_exclusion,
             weight_smoothness=weight_smoothness,
+            weight_convexity=weight_convexity,
             weight_position_anchor=weight_position_anchor,
             weight_circle_collision=weight_circle_collision,
             weight_bounding_box=weight_bounding_box,

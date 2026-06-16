@@ -195,6 +195,28 @@ def _multi_term_perimeter(optim_vars, input_params):
     return jnp.sum(jnp.sqrt(jnp.sum((points_next - points) ** 2, axis=2) + 1e-12))
 
 
+def _multi_term_convexity(optim_vars, input_params):
+    """Penalty for concave turns in the star polygon boundary.
+
+    At each vertex, computes the cross product of the two adjacent edge
+    vectors. A negative cross product (right turn) indicates a concavity.
+    Penalizes squared violations: sum over all sets and angles of
+    ``max(0, -cross)²``.
+    """
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
+    angles = input_params["angles"]  # (K,)
+
+    directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
+    points = centers[:, None, :] + radii[:, :, None] * directions[None, :, :]  # (S, K, 2)
+
+    edges = jnp.roll(points, -1, axis=1) - points  # (S, K, 2)
+    edges_next = jnp.roll(edges, -1, axis=1)  # (S, K, 2)
+
+    cross = edges[:, :, 0] * edges_next[:, :, 1] - edges[:, :, 1] * edges_next[:, :, 0]  # (S, K)
+    return jnp.sum(jnp.maximum(0.0, -cross) ** 2)
+
+
 # ---------------------------------------------------------------------------
 # ObjectiveTerm compute functions — movable circle positions
 #

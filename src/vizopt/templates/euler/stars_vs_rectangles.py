@@ -18,6 +18,7 @@ from ...base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTem
 from ...components.stars import (
     _build_membership,
     _multi_term_area,
+    _multi_term_convexity,
     _multi_term_label_element_exclusion_rect,
     _multi_term_label_enclosure,
     _multi_term_label_label_collision,
@@ -188,22 +189,6 @@ def _term_exclusion_rect(optim_vars, input_params):
         input_params["membership"],
     )
 
-
-def _term_convexity(optim_vars, input_params):
-    """Penalty for non-convex turns in the star polygon.
-
-    For a CCW polygon the cross product of consecutive edge vectors must be
-    non-negative at every vertex.  Penalises squared violations.
-    """
-    centers = optim_vars["centers"]  # (S, 2)
-    radii = optim_vars["radii"]      # (S, K)
-    angles = input_params["angles"]  # (K,)
-    directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
-    pts = centers[:, None, :] + radii[:, :, None] * directions[None, :, :]  # (S, K, 2)
-    edge1 = jnp.roll(pts, -1, axis=1) - pts          # (S, K, 2)
-    edge2 = jnp.roll(pts, -2, axis=1) - jnp.roll(pts, -1, axis=1)
-    cross = edge1[:, :, 0] * edge2[:, :, 1] - edge1[:, :, 1] * edge2[:, :, 0]
-    return jnp.sum(jnp.maximum(0.0, -cross) ** 2)
 
 
 def _term_position_anchor_rect(optim_vars, input_params):
@@ -588,7 +573,7 @@ def optimize_radially_convex_sets_and_rectangles(
         ObjectiveTerm("exclusion", _term_exclusion_rect, weight_exclusion, schedules.get("exclusion")),
         ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
         ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("convexity", _term_convexity, weight_convexity, schedules.get("convexity")),
+        ObjectiveTerm("convexity", _multi_term_convexity, weight_convexity, schedules.get("convexity")),
         ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
         ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter, schedules.get("perimeter")),
         ObjectiveTerm("position_anchor", _term_position_anchor_rect, weight_position_anchor, schedules.get("position_anchor")),
