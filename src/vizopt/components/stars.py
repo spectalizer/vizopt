@@ -347,16 +347,18 @@ def _multi_term_circle_collision(optim_vars, input_params):
 
 
 def _multi_term_label_enclosure(optim_vars, input_params):
-    """Each star boundary must enclose its own label rectangle.
+    """Each star boundary must enclose all label rects of sets it contains.
 
-    Uses slab (ray-AABB) intersection: for each angle k the required radius
-    is the far-edge distance to the label rect; penalises squared violations.
+    Uses slab (ray-AABB) intersection over all (outer_set, label_rect) pairs
+    selected by ``input_params["label_membership"]`` (S, S) bool: entry [s, l]
+    is True when boundary s must enclose label rect l.  When the key is absent,
+    each boundary encloses only its own label rect (diagonal).
 
     Args:
         optim_vars: must contain "centers" (S, 2), "radii" (S, K),
             "label_positions" (S, 2).
         input_params: must contain "label_rect_hw" (S,), "label_rect_hh" (S,),
-            "angles" (K,).
+            "angles" (K,); optionally "label_membership" (S, S) bool.
 
     Returns:
         Scalar penalty.
@@ -365,37 +367,53 @@ def _multi_term_label_enclosure(optim_vars, input_params):
     radii = optim_vars["radii"]                      # (S, K)
     label_positions = optim_vars["label_positions"]  # (S, 2)
     angles = input_params["angles"]                  # (K,)
-    hw = input_params["label_rect_hw"][:, None]      # (S, 1)
-    hh = input_params["label_rect_hh"][:, None]      # (S, 1)
+    hw = input_params["label_rect_hw"]               # (S,)
+    hh = input_params["label_rect_hh"]               # (S,)
+    S = hw.shape[0]
 
-    dx = (label_positions[:, 0] - centers[:, 0])[:, None]  # (S, 1)
-    dy = (label_positions[:, 1] - centers[:, 1])[:, None]  # (S, 1)
+    label_membership = input_params.get("label_membership", jnp.eye(S, dtype=bool))  # (S, S)
 
-    cos_a = jnp.cos(angles)[None, :]  # (1, K)
-    sin_a = jnp.sin(angles)[None, :]  # (1, K)
+    # dx[s, l]: displacement from center of boundary s to label rect l
+    dx = label_positions[None, :, 0] - centers[:, None, 0]  # (S, S)
+    dy = label_positions[None, :, 1] - centers[:, None, 1]
 
-    near_cos = jnp.abs(cos_a) < _SLAB_EPS
-    near_sin = jnp.abs(sin_a) < _SLAB_EPS
-    safe_cos = jnp.where(near_cos, _SLAB_EPS, cos_a)
-    safe_sin = jnp.where(near_sin, _SLAB_EPS, sin_a)
+    cos_a = jnp.cos(angles)  # (K,)
+    sin_a = jnp.sin(angles)
 
-    t_x1 = (dx - hw) / safe_cos  # (S, K)
-    t_x2 = (dx + hw) / safe_cos
-    x_in_range = jnp.abs(dx) <= hw
+    dx_ = dx[:, None, :]        # (S, 1, S)
+    dy_ = dy[:, None, :]
+    ca_ = cos_a[None, :, None]  # (1, K, 1)
+    sa_ = sin_a[None, :, None]
+    hw_ = hw[None, None, :]     # (1, 1, S)
+    hh_ = hh[None, None, :]
+
+    near_cos = jnp.abs(ca_) < _SLAB_EPS
+    near_sin = jnp.abs(sa_) < _SLAB_EPS
+    safe_cos = jnp.where(near_cos, _SLAB_EPS, ca_)
+    safe_sin = jnp.where(near_sin, _SLAB_EPS, sa_)
+
+    t_x1 = (dx_ - hw_) / safe_cos  # (S, K, S)
+    t_x2 = (dx_ + hw_) / safe_cos
+    x_in_range = jnp.abs(dx_) <= hw_
     tx_lo = jnp.where(near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2))
     tx_hi = jnp.where(near_cos, jnp.where(x_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2))
 
-    t_y1 = (dy - hh) / safe_sin
-    t_y2 = (dy + hh) / safe_sin
-    y_in_range = jnp.abs(dy) <= hh
+    t_y1 = (dy_ - hh_) / safe_sin
+    t_y2 = (dy_ + hh_) / safe_sin
+    y_in_range = jnp.abs(dy_) <= hh_
     ty_lo = jnp.where(near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2))
     ty_hi = jnp.where(near_sin, jnp.where(y_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2))
 
-    t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K)
-    t_exit = jnp.minimum(tx_hi, ty_hi)   # (S, K)
+    t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K, S)
+    t_exit = jnp.minimum(tx_hi, ty_hi)
     hits = (t_enter <= t_exit) & (t_exit >= 0)
 
-    violations = jnp.where(hits, jnp.maximum(0.0, t_exit - radii), 0.0)
+    required = label_membership[:, None, :]  # (S, 1, S)
+    violations = jnp.where(
+        hits & required,
+        jnp.maximum(0.0, t_exit - radii[:, :, None]),
+        0.0,
+    )
     return jnp.sum(violations**2)
 
 

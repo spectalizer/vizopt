@@ -30,6 +30,7 @@ from ...components.stars import (
 )
 from ...schedules import TermSchedules
 from ...utils import _SVG_SET_COLORS
+from .graph_utils import offsets_from_graph
 
 _EPS = 1e-7
 _INF = 1e9
@@ -472,6 +473,7 @@ def optimize_radially_convex_sets_and_rectangles(
     k_angles: int = 64,
     offsets: float | np.ndarray = 0.1,
     label_rect_size: tuple[float, float] | None = None,
+    label_membership: np.ndarray | None = None,
     weight_label_enclosure: float = 10.0,
     weight_label_element_exclusion: float = 10.0,
     weight_label_collision: float = 10.0,
@@ -520,6 +522,11 @@ def optimize_radially_convex_sets_and_rectangles(
             no label rectangle is used.  When set, each star boundary is forced
             to enclose a floating label rect whose position (``label_positions``,
             one per set) is an optimization variable.
+        label_membership: bool array of shape (S, S) where entry [s, l] is True
+            when boundary ``s`` must enclose label rect ``l``.  When ``None``
+            (default) each boundary encloses only its own label rect.  Pass a
+            matrix derived from the set hierarchy to enforce that outer set
+            boundaries also enclose the label rects of all nested sets.
         weight_label_enclosure: weight for the label enclosure term.  Default 10.0.
         weight_label_element_exclusion: weight for keeping label rects away from
             leaf rectangles.  Default 10.0.
@@ -574,6 +581,11 @@ def optimize_radially_convex_sets_and_rectangles(
         label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
         initial_label_positions = initial_centers.copy()
         initial_label_positions[:, 1] += np.max(initial_radii, axis=1) - label_hh
+        label_membership_arr = (
+            np.eye(S, dtype=bool)
+            if label_membership is None
+            else np.asarray(label_membership, dtype=bool)
+        )
 
     input_parameters = {
         "rect_hw": rect_hw,
@@ -588,6 +600,7 @@ def optimize_radially_convex_sets_and_rectangles(
     if has_label:
         input_parameters["label_rect_hw"] = label_hw
         input_parameters["label_rect_hh"] = label_hh
+        input_parameters["label_membership"] = label_membership_arr
 
     mean_size = float(np.mean(np.concatenate([rect_hw, rect_hh])))
     pos_scale_x = max(float(np.std(rects_array[:, 0])), mean_size)
@@ -678,7 +691,7 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
     rect_collision_alpha=0.1,
     convexity_alpha=1.0,
     k_angles: int = 64,
-    offsets=0.1,
+    offsets=None,
     label_rect_size: tuple[float, float] | None = None,
     weight_label_enclosure: float = 10.0,
     weight_label_element_exclusion: float = 10.0,
@@ -711,7 +724,12 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         convexity_alpha: coefficient for the linear term in the convexity
             penalty.  Default 0.5.
         k_angles: angular resolution.
-        offsets: padding per (set, rect) pair.
+        offsets: padding added to each rectangle's half-extents in the enclosure
+            and exclusion terms.  Scalar, shape ``(N,)``, or shape ``(S, N)``.
+            When ``None`` (default), computed automatically from the graph
+            hierarchy via :func:`~vizopt.templates.euler.graph_utils.offsets_from_graph`:
+            outer sets get larger offsets so that nested boundaries are visually
+            distinguishable, scaled to mean rectangle half-size.
         label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
             See :func:`optimize_radially_convex_sets_and_rectangles`.
         weight_label_enclosure: weight for the label enclosure term.
@@ -733,6 +751,25 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
     leaf_names, rects, name_to_idx = _leaf_rects_from_graph(inclusion_graph)
     set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
 
+    if offsets is None:
+        mean_halfsize = float(np.mean(rects[:, 2:4]))
+        offsets = offsets_from_graph(
+            inclusion_graph, set_names, leaf_names,
+            offset_step=mean_halfsize * 0.3,
+            sub_step=mean_halfsize * 0.1,
+            min_offset=mean_halfsize * 0.1,
+        )
+
+    label_membership = None
+    if label_rect_size is not None:
+        S = len(set_names)
+        label_membership = np.eye(S, dtype=bool)
+        for i, s1 in enumerate(set_names):
+            descendants = nx.descendants(inclusion_graph, s1)
+            for j, s2 in enumerate(set_names):
+                if s2 in descendants:
+                    label_membership[i, j] = True
+
     results_list, rects_out_arr, history, problem = optimize_radially_convex_sets_and_rectangles(
         rectangles=rects,
         sets=sets,
@@ -750,6 +787,7 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
         k_angles=k_angles,
         offsets=offsets,
         label_rect_size=label_rect_size,
+        label_membership=label_membership,
         weight_label_enclosure=weight_label_enclosure,
         weight_label_element_exclusion=weight_label_element_exclusion,
         weight_label_collision=weight_label_collision,
