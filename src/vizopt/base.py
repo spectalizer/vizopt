@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
-from jax import Array
+from jax import Array, jit
 from jax import numpy as jnp
 
 OptimVars = TypeVar("OptimVars")
@@ -258,6 +258,13 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
         fun = build_objective(self.terms, self.input_parameters, self.var_scales)
 
+        _terms = self.terms
+        _input_parameters = self.input_parameters
+
+        @jit
+        def _compute_all_terms(physical_vars):
+            return {term.name: term.compute(physical_vars, _input_parameters) for term in _terms}
+
         best_vars: OptimVars | None = None
         best_history: list[dict] = []
         best_loss = float("inf")
@@ -284,9 +291,10 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 if (i_iter % track_every == 0) or i_iter == config.n_iters - 1:
                     record: dict = {"iteration": i_iter, "total": float(loss_value)}
                     step = jnp.int32(i_iter)
+                    term_values = _compute_all_terms(physical_vars)
                     unscheduled_total = 0.0
                     for term in self.terms:
-                        raw = float(term.compute(physical_vars, self.input_parameters))
+                        raw = float(term_values[term.name])
                         sched = (
                             float(term.schedule(step))
                             if term.schedule is not None

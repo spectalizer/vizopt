@@ -129,9 +129,8 @@ def soft_rasterize_star_bspline(
         masks: (n_sets, H, W) soft membership values in (0, 1).
     """
     diff = grid_xy[None, :, :, :] - centers[:, None, None, :]
-    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)
-
     rho2 = jnp.sum(diff**2, axis=-1)
+    dist = jnp.sqrt(rho2 + 1e-12)
     dx_safe = jnp.where(rho2 > 0, diff[..., 0], 1.0)
     dy_safe = jnp.where(rho2 > 0, diff[..., 1], 0.0)
     alpha = jnp.arctan2(dy_safe, dx_safe)  # (n_sets, H, W)

@@ -3,6 +3,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
+from vizopt.components.bspline_stars import (
+    raster_collision_loss_bspline,
+)
 from vizopt.components.stars import (
     BSpline,
     Discrete,
@@ -13,16 +16,12 @@ from vizopt.components.stars import (
     _multi_term_perimeter,
     _multi_term_smoothness,
 )
-from vizopt.components.bspline_stars import (
-    raster_collision_loss_bspline,
-)
 from vizopt.templates.star_vs_star import (
     _build_exclusion_mask,
     _multi_term_star_enclosure,
     _multi_term_target_area,
     _radius_from_target_area,
 )
-
 
 # ---------------------------------------------------------------------------
 # Pixel grid
@@ -91,10 +90,9 @@ def soft_rasterize_star(
     # diff[s, h, w] = grid_xy[h, w] - centers[s]  →  (n_sets, H, W, 2)
     diff = grid_xy[None, :, :, :] - centers[:, None, None, :]
 
-    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)  # (n_sets, H, W)
-
     # Double-where trick: safe for autodiff even at the origin
     rho2 = jnp.sum(diff**2, axis=-1)
+    dist = jnp.sqrt(rho2 + 1e-12)  # (n_sets, H, W)
     dx_safe = jnp.where(rho2 > 0, diff[..., 0], 1.0)
     dy_safe = jnp.where(rho2 > 0, diff[..., 1], 0.0)
     alpha = jnp.arctan2(dy_safe, dx_safe)  # (n_sets, H, W)
@@ -178,16 +176,15 @@ def soft_rasterize_star_fourier(
     M = (fourier_coeffs.shape[-1] - 1) // 2
 
     diff = grid_xy[None, :, :, :] - centers[:, None, None, :]
-    dist = jnp.sqrt(jnp.sum(diff**2, axis=-1) + 1e-12)
-
     rho2 = jnp.sum(diff**2, axis=-1)
+    dist = jnp.sqrt(rho2 + 1e-12)
     dx_safe = jnp.where(rho2 > 0, diff[..., 0], 1.0)
     dy_safe = jnp.where(rho2 > 0, diff[..., 1], 0.0)
     alpha = jnp.arctan2(dy_safe, dx_safe)  # (n_sets, H, W)
 
     def _r_fourier(coeffs_s, alpha_s):
         # coeffs_s: (2M+1,)  alpha_s: (H, W)
-        ks = jnp.arange(1, M + 1)                        # (M,)
+        ks = jnp.arange(1, M + 1)  # (M,)
         theta = ks[:, None, None] * alpha_s[None, :, :]  # (M, H, W)
         r = coeffs_s[0]
         r = r + jnp.einsum("m,mhw->hw", coeffs_s[1::2], jnp.cos(theta))
@@ -228,8 +225,8 @@ def raster_collision_loss_fourier(optim_vars, input_params):
 
 _RASTER_COLLISION = {
     Discrete: raster_collision_loss,
-    Fourier:  raster_collision_loss_fourier,
-    BSpline:  raster_collision_loss_bspline,
+    Fourier: raster_collision_loss_fourier,
+    BSpline: raster_collision_loss_bspline,
 }
 
 
@@ -258,6 +255,7 @@ def optimize_star_domains_raster(
     temperature=0.05,
     optim_config=None,
     callback=None,
+    track_every=100,
 ):
     """Optimise pure star domains using a raster-based collision loss for exclusion.
 
@@ -360,13 +358,17 @@ def optimize_star_domains_raster(
         return representation.wrap(fn, angles_jnp)
 
     terms = [
-        ObjectiveTerm("target_area",  wrap(_multi_term_target_area),    weight_target_area),
-        ObjectiveTerm("raster_excl",  _RASTER_COLLISION[type(representation)], weight_exclusion),
-        ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure),
-        ObjectiveTerm("min_radius",   wrap(_multi_term_min_radius),     10.0),
-        ObjectiveTerm("smoothness",   wrap(_multi_term_smoothness),     weight_smoothness),
-        ObjectiveTerm("area",         wrap(_multi_term_area),           weight_area),
-        ObjectiveTerm("perimeter",    wrap(_multi_term_perimeter),      weight_perimeter),
+        ObjectiveTerm("target_area", wrap(_multi_term_target_area), weight_target_area),
+        ObjectiveTerm(
+            "raster_excl", _RASTER_COLLISION[type(representation)], weight_exclusion
+        ),
+        ObjectiveTerm(
+            "star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure
+        ),
+        ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
+        ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness),
+        ObjectiveTerm("area", wrap(_multi_term_area), weight_area),
+        ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
     ]
 
     problem = OptimizationProblemTemplate(
@@ -375,7 +377,9 @@ def optimize_star_domains_raster(
         svg_configuration=representation.make_svg_configuration(),
     ).instantiate(input_parameters)
 
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    optim_vars, history = problem.optimize(
+        optim_config, callback=callback, track_every=track_every
+    )
 
     radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
     results = [
