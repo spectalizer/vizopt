@@ -417,6 +417,73 @@ def _multi_term_label_enclosure(optim_vars, input_params):
     return jnp.sum(violations**2)
 
 
+def _multi_term_label_set_exclusion(optim_vars, input_params):
+    """Set boundaries must not enclose label rects of sets they don't contain.
+
+    For each (s, l) pair where ``label_membership[s, l]`` is False, penalises
+    boundary s reaching the near edge of label rect l.  This is the label-rect
+    counterpart of the leaf-element exclusion term.
+
+    Args:
+        optim_vars: must contain "centers" (S, 2), "radii" (S, K),
+            "label_positions" (S, 2).
+        input_params: must contain "label_rect_hw" (S,), "label_rect_hh" (S,),
+            "angles" (K,), "label_membership" (S, S) bool.
+
+    Returns:
+        Scalar penalty.
+    """
+    centers = optim_vars["centers"]                  # (S, 2)
+    radii = optim_vars["radii"]                      # (S, K)
+    label_positions = optim_vars["label_positions"]  # (S, 2)
+    angles = input_params["angles"]                  # (K,)
+    hw = input_params["label_rect_hw"]               # (S,)
+    hh = input_params["label_rect_hh"]               # (S,)
+    label_membership = input_params["label_membership"]  # (S, S)
+
+    dx = label_positions[None, :, 0] - centers[:, None, 0]  # (S, S)
+    dy = label_positions[None, :, 1] - centers[:, None, 1]
+
+    cos_a = jnp.cos(angles)
+    sin_a = jnp.sin(angles)
+
+    dx_ = dx[:, None, :]        # (S, 1, S)
+    dy_ = dy[:, None, :]
+    ca_ = cos_a[None, :, None]  # (1, K, 1)
+    sa_ = sin_a[None, :, None]
+    hw_ = hw[None, None, :]     # (1, 1, S)
+    hh_ = hh[None, None, :]
+
+    near_cos = jnp.abs(ca_) < _SLAB_EPS
+    near_sin = jnp.abs(sa_) < _SLAB_EPS
+    safe_cos = jnp.where(near_cos, _SLAB_EPS, ca_)
+    safe_sin = jnp.where(near_sin, _SLAB_EPS, sa_)
+
+    t_x1 = (dx_ - hw_) / safe_cos  # (S, K, S)
+    t_x2 = (dx_ + hw_) / safe_cos
+    x_in_range = jnp.abs(dx_) <= hw_
+    tx_lo = jnp.where(near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2))
+    tx_hi = jnp.where(near_cos, jnp.where(x_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2))
+
+    t_y1 = (dy_ - hh_) / safe_sin
+    t_y2 = (dy_ + hh_) / safe_sin
+    y_in_range = jnp.abs(dy_) <= hh_
+    ty_lo = jnp.where(near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2))
+    ty_hi = jnp.where(near_sin, jnp.where(y_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2))
+
+    t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K, S)
+    t_exit = jnp.minimum(tx_hi, ty_hi)
+    hits = (t_enter <= t_exit) & (t_exit >= 0)
+
+    excluded = ~label_membership[:, None, :]  # (S, 1, S)
+    violations = jnp.where(
+        hits & excluded & (t_enter > 0),
+        jnp.maximum(0.0, radii[:, :, None] - t_enter),
+        0.0,
+    )
+    return jnp.sum(violations**2)
+
+
 def _multi_term_label_element_exclusion(optim_vars, input_params):
     """Label rectangles must not overlap leaf circles.
 
