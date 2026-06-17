@@ -307,7 +307,7 @@ def optimize_radially_convex_sets_and_circles(
 
     if has_label:
         initial_label_positions = initial_centers.copy()
-        initial_label_positions[:, 1] += initial_radii[:, k_top] * 0.6
+        initial_label_positions[:, 1] += initial_radii[:, k_top] - label_hh
 
     def initialize(_, seed):
         d = {

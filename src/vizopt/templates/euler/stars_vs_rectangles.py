@@ -572,9 +572,8 @@ def optimize_radially_convex_sets_and_rectangles(
     if has_label:
         label_hw = np.full(S, label_rect_size[0], dtype=np.float32)
         label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
-        k_top = int(np.argmin(np.abs(angles - np.pi / 2)))
         initial_label_positions = initial_centers.copy()
-        initial_label_positions[:, 1] += initial_radii[:, k_top] * 0.6
+        initial_label_positions[:, 1] += np.max(initial_radii, axis=1) - label_hh
 
     input_parameters = {
         "rect_hw": rect_hw,
