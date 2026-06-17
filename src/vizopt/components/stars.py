@@ -198,13 +198,20 @@ def _multi_term_perimeter(optim_vars, input_params):
 def _multi_term_convexity(optim_vars, input_params):
     """Penalty for concave turns in the star polygon boundary.
 
-    At each vertex, computes the cross product of the two adjacent edge
-    vectors. A negative cross product (right turn) indicates a concavity.
-    Penalizes ``max(0, -cross)² + alpha * max(0, -cross)`` summed over all
-    sets and angles.  The linear term gives a constant non-zero gradient for
-    any concavity, preventing mild violations from stalling due to the
-    vanishing gradient of the pure quadratic near zero.  ``alpha=0`` recovers
-    the original pure-quadratic penalty.
+    At each vertex, computes the sine of the turning angle between adjacent
+    edges (cross product normalised by edge lengths).  A negative value
+    (right turn) indicates a concavity.  Penalizes
+    ``max(0, -sin_alpha)² + alpha * max(0, -sin_alpha)`` summed over all sets
+    and angles.
+
+    Normalising by edge lengths makes the penalty scale-invariant: it does not
+    shrink as K increases or as the shape scales, keeping the convexity term
+    comparable in magnitude to area and perimeter.  Values per violation are in
+    [0, 1] (squared sine of the turning angle).
+
+    The linear ``alpha`` term gives a non-zero gradient even for mild
+    concavities, preventing stalling near zero.  ``alpha=0`` recovers the pure
+    quadratic penalty.
     """
     centers = optim_vars["centers"]  # (S, 2)
     radii = optim_vars["radii"]  # (S, K)
@@ -218,7 +225,13 @@ def _multi_term_convexity(optim_vars, input_params):
     edges_next = jnp.roll(edges, -1, axis=1)  # (S, K, 2)
 
     cross = edges[:, :, 0] * edges_next[:, :, 1] - edges[:, :, 1] * edges_next[:, :, 0]  # (S, K)
-    violations = jnp.maximum(0.0, -cross)
+
+    # Normalise by product of edge lengths to get sin(turning_angle) ∈ [-1, 1]
+    edge_len = jnp.sqrt(jnp.sum(edges ** 2, axis=-1) + 1e-12)  # (S, K)
+    edge_len_next = jnp.roll(edge_len, -1, axis=1)  # (S, K)
+    sin_alpha = cross / (edge_len * edge_len_next)  # (S, K)
+
+    violations = jnp.maximum(0.0, -sin_alpha)
     return jnp.sum(violations ** 2 + alpha * violations)
 
 
