@@ -31,6 +31,9 @@ Venn diagrams represent sets as closed shapes, whereby the shape representing a 
 
 *Interesting fact 3: Euler diagrams are a superset of treemaps*
 
+With some imagination, you can see that treemaps are just tightly packed Euler diagrams for specific sets of sets.
+If you took the animal examples and considered only phylogenetic relations, you should end up with a strictly hierarchical set of sets, which would be equivalent to a tree (with the elements as leaves). Representing parent-child relationships in trees geometrically is the basic of treemaps. 
+
 ## Searching for Better Primitives
 (the search for the right primitives/parameterization)
 
@@ -42,11 +45,11 @@ We want to look for a nice *family* of shapes.
 
 A typical instantiation of Euler diagrams uses circles, but circles are rather rigid, and they waste space.
 
-Consider the simplest case — two equally-sized circles of radius r, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius 2r. Its area is 4πr², while the two inner circles together cover only 2πr²: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds — each layer inflates the container, but the added space is dead area that carries no information. A tight boundary would hug the contents and waste nothing. 
+Consider the simplest case: two equally-sized circles of radius *r*, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius *2r*. Its area is *4πr²*, while the two inner circles together cover only *2πr²*: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds: each layer inflates the container, but the added space is mostly dead area that carries no information. A tight boundary would hug the contents and waste nothing. 
 
 ### Rectangles
 
-Rectangles pack more efficiently and power treemaps well — but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles)).
+Rectangles pack more efficiently and power treemaps well, but they are as rigid as circles... but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles)).
 
 ![Three levels of binary nesting: leaf circles cover only 12.5% of the enclosing area.](img/circle_nesting.svg)
 
