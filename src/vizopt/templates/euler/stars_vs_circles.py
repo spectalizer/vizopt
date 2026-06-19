@@ -75,6 +75,7 @@ def optimize_radially_convex_sets_and_circles(
     sets,
     weight_area=1.0,
     weight_perimeter=1.0,
+    weight_enclosure=20.0,
     weight_exclusion=10.0,
     weight_smoothness=1.0,
     weight_convexity=0.0,
@@ -106,6 +107,8 @@ def optimize_radially_convex_sets_and_circles(
         sets: list of S subsets, each a collection of integer indices into circles.
         weight_area: weight for the area objective.
         weight_perimeter: weight for the perimeter objective.
+        weight_enclosure: weight for the enclosure penalty (each circle must lie
+            inside its set boundary). Default 10.0.
         weight_exclusion: weight for the exclusion penalty.
         weight_smoothness: weight for the smoothness penalty.
         weight_convexity: weight for the convexity penalty, which penalizes
@@ -255,7 +258,7 @@ def optimize_radially_convex_sets_and_circles(
         ObjectiveTerm(
             "enclosure",
             wrap(_multi_term_enclosure_movable),
-            10.0,
+            weight_enclosure,
             schedules.get("enclosure"),
         ),
         ObjectiveTerm(
@@ -364,7 +367,11 @@ def optimize_radially_convex_sets_and_circles(
                 "center": np.array(optim_vars["centers"][s]),
                 "radii": radii_arr[s],
                 "angles": angles,
-                **({"label_center": np.array(optim_vars["label_positions"][s])} if has_label else {}),
+                **(
+                    {"label_center": np.array(optim_vars["label_positions"][s])}
+                    if has_label
+                    else {}
+                ),
                 **representation.extra_results(s, optim_vars),
             }
             for s in range(S)
@@ -379,6 +386,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     inclusion_graph: nx.DiGraph,
     weight_area=1.0,
     weight_perimeter=1.0,
+    weight_enclosure=10.0,
     weight_exclusion=10.0,
     weight_smoothness=1.0,
     weight_convexity=0.0,
@@ -409,6 +417,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             Leaf nodes must carry ``center`` ([x, y]) and ``r`` (float) attributes.
         weight_area: weight for the area objective.
         weight_perimeter: weight for the perimeter objective.
+        weight_enclosure: weight for the enclosure penalty. Default 10.0.
         weight_exclusion: weight for the exclusion penalty.
         weight_smoothness: weight for the smoothness penalty.
         weight_convexity: weight for the convexity penalty. Default 0.0 (disabled).
@@ -459,6 +468,7 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             sets=sets,
             weight_area=weight_area,
             weight_perimeter=weight_perimeter,
+            weight_enclosure=weight_enclosure,
             weight_exclusion=weight_exclusion,
             weight_smoothness=weight_smoothness,
             weight_convexity=weight_convexity,
