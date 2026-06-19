@@ -263,7 +263,10 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
         @jit
         def _compute_all_terms(physical_vars):
-            return {term.name: term.compute(physical_vars, _input_parameters) for term in _terms}
+            return {
+                term.name: term.compute(physical_vars, _input_parameters)
+                for term in _terms
+            }
 
         best_vars: OptimVars | None = None
         best_history: list[dict] = []
@@ -309,6 +312,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                         record[f"{term.name}_unscheduled"] = (
                             raw * term.multiplier * end_sched
                         )
+                        record[f"{term.name}_unweighted"] = raw
                         unscheduled_total += raw * term.multiplier * end_sched
                     _last_unscheduled[0] = unscheduled_total
                     _history.append(record)
