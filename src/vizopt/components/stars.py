@@ -580,22 +580,19 @@ def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
 
 
 def _multi_term_label_top_attraction(optim_vars, input_params):
-    """Pull label positions above their set centers (toward the top of each shape).
+    """Pull label positions upward (toward the top of each shape).
 
-    Minimises ``center_y - label_y`` for each set, which is equivalent to
-    maximising the upward displacement of each label relative to its center.
-    The gradient pushes ``label_positions[:, 1]`` upward until balanced by the
-    enclosure and element-exclusion penalties.
+    Minimises ``-sum(label_y)``, pushing each label rectangle up until
+    balanced by the enclosure and element-exclusion penalties.
 
     Args:
-        optim_vars: must contain "centers" (S, 2), "label_positions" (S, 2).
+        optim_vars: must contain "label_positions" (S, 2).
 
     Returns:
         Scalar loss (can be negative; the optimizer minimizes it).
     """
-    centers = optim_vars["centers"]                  # (S, 2)
     label_positions = optim_vars["label_positions"]  # (S, 2)
-    return jnp.sum(centers[:, 1] - label_positions[:, 1])
+    return -jnp.sum(label_positions[:, 1])
 
 
 # ---------------------------------------------------------------------------
