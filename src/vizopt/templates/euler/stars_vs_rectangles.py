@@ -63,11 +63,11 @@ def _slab_t(centers, rect_xy, hw_sn, hh_sn, angles):
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)
 
-    dx_ = dx[:, None, :]        # (S, 1, N)
+    dx_ = dx[:, None, :]  # (S, 1, N)
     dy_ = dy[:, None, :]
     ca_ = cos_a[None, :, None]  # (1, K, 1)
     sa_ = sin_a[None, :, None]
-    hw_ = hw_sn[:, None, :]     # (S, 1, N)
+    hw_ = hw_sn[:, None, :]  # (S, 1, N)
     hh_ = hh_sn[:, None, :]
 
     # When cos ≈ 0 the ray is axis-aligned in y; the x-slab is a boolean
@@ -79,15 +79,23 @@ def _slab_t(centers, rect_xy, hw_sn, hh_sn, angles):
     t_x1 = (dx_ - hw_) / safe_cos
     t_x2 = (dx_ + hw_) / safe_cos
     x_in_range = jnp.abs(dx_) <= hw_
-    tx_lo = jnp.where(near_cos, jnp.where(x_in_range, -_INF, _INF), jnp.minimum(t_x1, t_x2))
-    tx_hi = jnp.where(near_cos, jnp.where(x_in_range,  _INF, -_INF), jnp.maximum(t_x1, t_x2))
+    tx_lo = jnp.where(
+        near_cos, jnp.where(x_in_range, -_INF, _INF), jnp.minimum(t_x1, t_x2)
+    )
+    tx_hi = jnp.where(
+        near_cos, jnp.where(x_in_range, _INF, -_INF), jnp.maximum(t_x1, t_x2)
+    )
 
     safe_sin = jnp.where(near_sin, _EPS, sa_)
     t_y1 = (dy_ - hh_) / safe_sin
     t_y2 = (dy_ + hh_) / safe_sin
     y_in_range = jnp.abs(dy_) <= hh_
-    ty_lo = jnp.where(near_sin, jnp.where(y_in_range, -_INF, _INF), jnp.minimum(t_y1, t_y2))
-    ty_hi = jnp.where(near_sin, jnp.where(y_in_range,  _INF, -_INF), jnp.maximum(t_y1, t_y2))
+    ty_lo = jnp.where(
+        near_sin, jnp.where(y_in_range, -_INF, _INF), jnp.minimum(t_y1, t_y2)
+    )
+    ty_hi = jnp.where(
+        near_sin, jnp.where(y_in_range, _INF, -_INF), jnp.maximum(t_y1, t_y2)
+    )
 
     t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K, N)
     t_exit = jnp.minimum(tx_hi, ty_hi)
@@ -100,7 +108,9 @@ def _slab_t(centers, rect_xy, hw_sn, hh_sn, angles):
 # ---------------------------------------------------------------------------
 
 
-def _enclosure_penalty_rect(centers, radii, rect_xy, rect_hw, rect_hh, offsets, angles, membership):
+def _enclosure_penalty_rect(
+    centers, radii, rect_xy, rect_hw, rect_hh, offsets, angles, membership
+):
     """Enclosure penalty: boundary must reach the far edge of each member rect.
 
     Args:
@@ -128,7 +138,9 @@ def _enclosure_penalty_rect(centers, radii, rect_xy, rect_hw, rect_hh, offsets, 
     return jnp.sum(violations**2)
 
 
-def _exclusion_penalty_rect(centers, radii, rect_xy, rect_hw, rect_hh, offsets, angles, membership):
+def _exclusion_penalty_rect(
+    centers, radii, rect_xy, rect_hw, rect_hh, offsets, angles, membership
+):
     """Exclusion penalty: boundary must not reach the near edge of excluded rects.
 
     Args:
@@ -192,9 +204,10 @@ def _term_exclusion_rect(optim_vars, input_params):
     )
 
 
-
 def _term_position_anchor_rect(optim_vars, input_params):
-    return jnp.sum((optim_vars["rect_positions"] - input_params["initial_rect_positions"]) ** 2)
+    return jnp.sum(
+        (optim_vars["rect_positions"] - input_params["initial_rect_positions"]) ** 2
+    )
 
 
 def _term_rect_collision(optim_vars, input_params):
@@ -225,8 +238,8 @@ def _term_rect_collision(optim_vars, input_params):
 def _term_set_attraction_rect(optim_vars, input_params):
     """Pulls each rectangle toward the center of its set(s) (and vice versa)."""
     rect_positions = optim_vars["rect_positions"]  # (N, 2)
-    centers = optim_vars["centers"]                # (S, 2)
-    membership = input_params["membership"]        # (S, N)
+    centers = optim_vars["centers"]  # (S, 2)
+    membership = input_params["membership"]  # (S, N)
     diff = rect_positions[None, :, :] - centers[:, None, :]  # (S, N, 2)
     dist_sq = jnp.sum(diff**2, axis=2)
     return jnp.sum(jnp.where(membership, dist_sq, 0.0))
@@ -297,35 +310,41 @@ def _svg_configuration_rect(snapshots, input_params, size):
                 px, py = to_svg(bx, by)
                 pts.append(f"{px:.1f},{py:.1f}")
             points_frames.append(" ".join(pts))
-        elements.append({
-            "tag": "polygon",
-            "fill": color,
-            "fill-opacity": "0.12",
-            "stroke": color,
-            "stroke-width": "1.5",
-            "stroke-linejoin": "round",
-            "points": points_frames,
-        })
+        elements.append(
+            {
+                "tag": "polygon",
+                "fill": color,
+                "fill-opacity": "0.12",
+                "stroke": color,
+                "stroke-width": "1.5",
+                "stroke-linejoin": "round",
+                "points": points_frames,
+            }
+        )
 
     for i in range(N):
         w_svg = dim_to_svg(2 * float(rect_hw[i]))
         h_svg = dim_to_svg(2 * float(rect_hh[i]))
         x_frames, y_frames = [], []
         for _, v in snapshots:
-            px, py = to_svg(float(v["rect_positions"][i, 0]), float(v["rect_positions"][i, 1]))
+            px, py = to_svg(
+                float(v["rect_positions"][i, 0]), float(v["rect_positions"][i, 1])
+            )
             x_frames.append(f"{px - w_svg / 2:.1f}")
             y_frames.append(f"{py - h_svg / 2:.1f}")
-        elements.append({
-            "tag": "rect",
-            "width": f"{w_svg:.1f}",
-            "height": f"{h_svg:.1f}",
-            "fill": "#4472c4",
-            "fill-opacity": "0.45",
-            "stroke": "#2a52a0",
-            "stroke-width": "1",
-            "x": x_frames,
-            "y": y_frames,
-        })
+        elements.append(
+            {
+                "tag": "rect",
+                "width": f"{w_svg:.1f}",
+                "height": f"{h_svg:.1f}",
+                "fill": "#4472c4",
+                "fill-opacity": "0.45",
+                "stroke": "#2a52a0",
+                "stroke-width": "1",
+                "x": x_frames,
+                "y": y_frames,
+            }
+        )
 
     if has_labels:
         label_hw = input_params["label_rect_hw"]
@@ -336,21 +355,25 @@ def _svg_configuration_rect(snapshots, input_params, size):
             h_svg = dim_to_svg(2 * float(label_hh[s]))
             x_frames, y_frames = [], []
             for _, v in snapshots:
-                lx, ly = float(v["label_positions"][s, 0]), float(v["label_positions"][s, 1])
+                lx, ly = float(v["label_positions"][s, 0]), float(
+                    v["label_positions"][s, 1]
+                )
                 px, py = to_svg(lx, ly)
                 x_frames.append(f"{px - w_svg / 2:.1f}")
                 y_frames.append(f"{py - h_svg / 2:.1f}")
-            elements.append({
-                "tag": "rect",
-                "width": f"{w_svg:.1f}",
-                "height": f"{h_svg:.1f}",
-                "fill": color,
-                "fill-opacity": "0.35",
-                "stroke": color,
-                "stroke-width": "1",
-                "x": x_frames,
-                "y": y_frames,
-            })
+            elements.append(
+                {
+                    "tag": "rect",
+                    "width": f"{w_svg:.1f}",
+                    "height": f"{h_svg:.1f}",
+                    "fill": color,
+                    "fill-opacity": "0.35",
+                    "stroke": color,
+                    "stroke-width": "1",
+                    "x": x_frames,
+                    "y": y_frames,
+                }
+            )
 
     return elements
 
@@ -360,7 +383,9 @@ def _svg_configuration_rect(snapshots, input_params, size):
 # ---------------------------------------------------------------------------
 
 
-def _init_centers_and_radii_from_rects(rects_array, sets, angles, radius_multiplier=1.05):
+def _init_centers_and_radii_from_rects(
+    rects_array, sets, angles, radius_multiplier=1.05
+):
     """Initialize per-set centers and radii from member rectangles.
 
     Args:
@@ -397,22 +422,32 @@ def _init_centers_and_radii_from_rects(rects_array, sets, angles, radius_multipl
         t_x1 = (dx - hw) / safe_cos
         t_x2 = (dx + hw) / safe_cos
         x_in_range = np.abs(dx) <= hw
-        tx_lo = np.where(near_cos, np.where(x_in_range, -_INF, _INF), np.minimum(t_x1, t_x2))
-        tx_hi = np.where(near_cos, np.where(x_in_range,  _INF, -_INF), np.maximum(t_x1, t_x2))
+        tx_lo = np.where(
+            near_cos, np.where(x_in_range, -_INF, _INF), np.minimum(t_x1, t_x2)
+        )
+        tx_hi = np.where(
+            near_cos, np.where(x_in_range, _INF, -_INF), np.maximum(t_x1, t_x2)
+        )
 
         # y-slab: (K, M)
         t_y1 = (dy - hh) / safe_sin
         t_y2 = (dy + hh) / safe_sin
         y_in_range = np.abs(dy) <= hh
-        ty_lo = np.where(near_sin, np.where(y_in_range, -_INF, _INF), np.minimum(t_y1, t_y2))
-        ty_hi = np.where(near_sin, np.where(y_in_range,  _INF, -_INF), np.maximum(t_y1, t_y2))
+        ty_lo = np.where(
+            near_sin, np.where(y_in_range, -_INF, _INF), np.minimum(t_y1, t_y2)
+        )
+        ty_hi = np.where(
+            near_sin, np.where(y_in_range, _INF, -_INF), np.maximum(t_y1, t_y2)
+        )
 
-        t_enter = np.maximum(tx_lo, ty_lo)   # (K, M)
+        t_enter = np.maximum(tx_lo, ty_lo)  # (K, M)
         t_exit = np.minimum(tx_hi, ty_hi)
         hits = (t_enter <= t_exit) & (t_exit >= 0)
         t_exits_k = np.where(hits, t_exit, 0.0).max(axis=1)  # (K,)
 
-        initial_radii[s] = np.maximum(radius_multiplier * t_exits_k, 1.0).astype(np.float32)
+        initial_radii[s] = np.maximum(radius_multiplier * t_exits_k, 1.0).astype(
+            np.float32
+        )
 
     return initial_centers, initial_radii
 
@@ -634,25 +669,94 @@ def optimize_radially_convex_sets_and_rectangles(
     ) or {}
 
     terms = [
-        ObjectiveTerm("enclosure", _term_enclosure_rect, 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", _term_exclusion_rect, weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", _multi_term_smoothness, weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("convexity", _multi_term_convexity, weight_convexity, schedules.get("convexity")),
+        ObjectiveTerm(
+            "enclosure", _term_enclosure_rect, 10.0, schedules.get("enclosure")
+        ),
+        ObjectiveTerm(
+            "exclusion",
+            _term_exclusion_rect,
+            weight_exclusion,
+            schedules.get("exclusion"),
+        ),
+        ObjectiveTerm(
+            "min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")
+        ),
+        ObjectiveTerm(
+            "smoothness",
+            _multi_term_smoothness,
+            weight_smoothness,
+            schedules.get("smoothness"),
+        ),
+        ObjectiveTerm(
+            "convexity",
+            _multi_term_convexity,
+            weight_convexity,
+            schedules.get("convexity"),
+        ),
         ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", _multi_term_perimeter, weight_perimeter, schedules.get("perimeter")),
-        ObjectiveTerm("position_anchor", _term_position_anchor_rect, weight_position_anchor, schedules.get("position_anchor")),
-        ObjectiveTerm("rect_collision", _term_rect_collision, weight_rect_collision, schedules.get("rect_collision")),
-        ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, weight_bounding_box, schedules.get("bounding_box")),
-        ObjectiveTerm("set_attraction", _term_set_attraction_rect, weight_set_attraction, schedules.get("set_attraction")),
+        ObjectiveTerm(
+            "perimeter",
+            _multi_term_perimeter,
+            weight_perimeter,
+            schedules.get("perimeter"),
+        ),
+        ObjectiveTerm(
+            "position_anchor",
+            _term_position_anchor_rect,
+            weight_position_anchor,
+            schedules.get("position_anchor"),
+        ),
+        ObjectiveTerm(
+            "rect_collision",
+            _term_rect_collision,
+            weight_rect_collision,
+            schedules.get("rect_collision"),
+        ),
+        ObjectiveTerm(
+            "bounding_box",
+            _multi_term_total_bounding_box,
+            weight_bounding_box,
+            schedules.get("bounding_box"),
+        ),
+        ObjectiveTerm(
+            "set_attraction",
+            _term_set_attraction_rect,
+            weight_set_attraction,
+            schedules.get("set_attraction"),
+        ),
     ]
     if has_label:
         terms += [
-            ObjectiveTerm("label_enclosure", _multi_term_label_enclosure, weight_label_enclosure, schedules.get("label_enclosure")),
-            ObjectiveTerm("label_element_exclusion", _multi_term_label_element_exclusion_rect, weight_label_element_exclusion, schedules.get("label_element_exclusion")),
-            ObjectiveTerm("label_set_exclusion", _multi_term_label_set_exclusion, weight_label_set_exclusion, schedules.get("label_set_exclusion")),
-            ObjectiveTerm("label_collision", _multi_term_label_label_collision, weight_label_collision, schedules.get("label_collision")),
-            ObjectiveTerm("label_top", _multi_term_label_top_attraction, weight_label_top, schedules.get("label_top")),
+            ObjectiveTerm(
+                "label_enclosure",
+                _multi_term_label_enclosure,
+                weight_label_enclosure,
+                schedules.get("label_enclosure"),
+            ),
+            ObjectiveTerm(
+                "label_element_exclusion",
+                _multi_term_label_element_exclusion_rect,
+                weight_label_element_exclusion,
+                schedules.get("label_element_exclusion"),
+            ),
+            ObjectiveTerm(
+                "label_set_exclusion",
+                _multi_term_label_set_exclusion,
+                weight_label_set_exclusion,
+                schedules.get("label_set_exclusion"),
+            ),
+            ObjectiveTerm(
+                "label_collision",
+                _multi_term_label_label_collision,
+                weight_label_collision,
+                schedules.get("label_collision"),
+            ),
+            ObjectiveTerm(
+                "label_top",
+                _multi_term_label_top_attraction,
+                weight_label_top,
+                schedules.get("label_top"),
+            ),
         ]
 
     problem = OptimizationProblemTemplate(
@@ -673,7 +777,11 @@ def optimize_radially_convex_sets_and_rectangles(
             "center": np.array(optim_vars["centers"][s]),
             "radii": radii_arr[s],
             "angles": angles,
-            **({"label_center": np.array(optim_vars["label_positions"][s])} if has_label else {}),
+            **(
+                {"label_center": np.array(optim_vars["label_positions"][s])}
+                if has_label
+                else {}
+            ),
         }
         for s in range(S)
     ]
@@ -758,7 +866,9 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
     if offsets is None:
         mean_halfsize = float(np.mean(rects[:, 2:4]))
         offsets = offsets_from_graph(
-            inclusion_graph, set_names, leaf_names,
+            inclusion_graph,
+            set_names,
+            leaf_names,
             offset_step=mean_halfsize * 0.3,
             sub_step=mean_halfsize * 0.1,
             min_offset=mean_halfsize * 0.1,
@@ -774,32 +884,34 @@ def optimize_radially_convex_sets_and_rectangles_from_graph(
                 if s2 in descendants:
                     label_membership[i, j] = True
 
-    results_list, rects_out_arr, history, problem = optimize_radially_convex_sets_and_rectangles(
-        rectangles=rects,
-        sets=sets,
-        weight_area=weight_area,
-        weight_perimeter=weight_perimeter,
-        weight_exclusion=weight_exclusion,
-        weight_smoothness=weight_smoothness,
-        weight_convexity=weight_convexity,
-        weight_position_anchor=weight_position_anchor,
-        weight_rect_collision=weight_rect_collision,
-        weight_bounding_box=weight_bounding_box,
-        weight_set_attraction=weight_set_attraction,
-        rect_collision_alpha=rect_collision_alpha,
-        convexity_alpha=convexity_alpha,
-        k_angles=k_angles,
-        offsets=offsets,
-        label_rect_size=label_rect_size,
-        label_membership=label_membership,
-        weight_label_enclosure=weight_label_enclosure,
-        weight_label_element_exclusion=weight_label_element_exclusion,
-        weight_label_set_exclusion=weight_label_set_exclusion,
-        weight_label_collision=weight_label_collision,
-        weight_label_top=weight_label_top,
-        term_schedules=term_schedules,
-        optim_config=optim_config,
-        callback=callback,
+    results_list, rects_out_arr, history, problem = (
+        optimize_radially_convex_sets_and_rectangles(
+            rectangles=rects,
+            sets=sets,
+            weight_area=weight_area,
+            weight_perimeter=weight_perimeter,
+            weight_exclusion=weight_exclusion,
+            weight_smoothness=weight_smoothness,
+            weight_convexity=weight_convexity,
+            weight_position_anchor=weight_position_anchor,
+            weight_rect_collision=weight_rect_collision,
+            weight_bounding_box=weight_bounding_box,
+            weight_set_attraction=weight_set_attraction,
+            rect_collision_alpha=rect_collision_alpha,
+            convexity_alpha=convexity_alpha,
+            k_angles=k_angles,
+            offsets=offsets,
+            label_rect_size=label_rect_size,
+            label_membership=label_membership,
+            weight_label_enclosure=weight_label_enclosure,
+            weight_label_element_exclusion=weight_label_element_exclusion,
+            weight_label_set_exclusion=weight_label_set_exclusion,
+            weight_label_collision=weight_label_collision,
+            weight_label_top=weight_label_top,
+            term_schedules=term_schedules,
+            optim_config=optim_config,
+            callback=callback,
+        )
     )
 
     named_results = {set_names[s]: results_list[s] for s in range(len(set_names))}
