@@ -206,6 +206,9 @@ def optimize_radially_convex_sets_and_circles(
         label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
         # Start each label just above the upward-pointing boundary point
         k_top = int(np.argmin(np.abs(angles - np.pi / 2)))
+    else:
+        label_hw = label_hh = np.empty(S, dtype=np.float32)
+        k_top = 0
 
     input_parameters = {
         "circle_radii": circle_radii,

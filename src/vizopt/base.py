@@ -55,7 +55,7 @@ class ObjectiveTerm:
     """
 
     name: str
-    compute: Callable[[OptimVars, Any], Array]
+    compute: Callable[[Any, Any], Array]
     multiplier: float = 1.0
     schedule: Callable[[Array], Array] | None = None
 
