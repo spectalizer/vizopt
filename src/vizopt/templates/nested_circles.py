@@ -484,14 +484,14 @@ def optimize_circular_layout_with_enclosed_nodes(
     problem = OptimizationProblemTemplate(
         terms=terms, initialize=initialize
     ).instantiate(input_parameters)
-    optim_vars, _ = problem.optimize(optim_config)
+    result = problem.optimize(optim_config)
 
     pos = {
         node: tuple(float(c) for c in xy)
-        for node, xy in zip(all_node_names, optim_vars["node_xys"])
+        for node, xy in zip(all_node_names, result.optim_vars["node_xys"])
     }
     non_leaf_node_radius_dict = dict(
-        zip(non_leaf_nodes, optim_vars["variable_node_radii"])
+        zip(non_leaf_nodes, result.optim_vars["variable_node_radii"])
     )
     return pos, non_leaf_node_radius_dict
 
@@ -595,13 +595,13 @@ def optimize_circular_layout_with_enclosed_and_linked_nodes(
     problem = OptimizationProblemTemplate(
         terms=terms, initialize=initialize
     ).instantiate(input_parameters)
-    optim_vars, _ = problem.optimize(optim_config)
+    result = problem.optimize(optim_config)
 
     pos = {
         node: tuple(float(c) for c in xy)
-        for node, xy in zip(all_node_names, optim_vars["node_xys"])
+        for node, xy in zip(all_node_names, result.optim_vars["node_xys"])
     }
     enclosing_node_radius_dict = dict(
-        zip(enclosing_node_names, optim_vars["variable_node_radii"])
+        zip(enclosing_node_names, result.optim_vars["variable_node_radii"])
     )
     return pos, enclosing_node_radius_dict

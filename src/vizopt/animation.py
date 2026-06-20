@@ -28,7 +28,7 @@ class SnapshotCallback:
     Example::
 
         cb = SnapshotCallback(every=100)
-        optim_vars_opt, history = problem.optimize(n_iters=2000, callback=cb)
+        result = problem.optimize(n_iters=2000, callback=cb)
         anim = animate(problem, cb.snapshots)
     """
 

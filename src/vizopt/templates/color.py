@@ -383,5 +383,5 @@ def optimize_colors(
         coverage_weight=coverage_weight,
         luminosity_weight=luminosity_weight,
     )
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
-    return np.array(_build_rgb(optim_vars, input_parameters)), history
+    result = problem.optimize(optim_config, callback=callback)
+    return np.array(_build_rgb(result.optim_vars, input_parameters)), result.history

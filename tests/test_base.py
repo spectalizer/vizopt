@@ -9,6 +9,7 @@ from vizopt.base import (
     OptimConfig,
     OptimizationProblem,
     OptimizationProblemTemplate,
+    OptimizationResult,
     build_objective,
 )
 
@@ -157,37 +158,39 @@ def _simple_problem(x0: float = 3.0) -> OptimizationProblem:
     return _make_simple_template().instantiate({"x0": x0})
 
 
-def test_optimize_returns_optim_vars_and_history():
-    optim_vars, history = _simple_problem().optimize(
+def test_optimize_returns_optimization_result():
+    result = _simple_problem().optimize(
         OptimConfig(n_iters=10, learning_rate=0.1), callback=_NO_PRINT
     )
-    assert isinstance(optim_vars, dict)
-    assert isinstance(history, list)
+    assert isinstance(result, OptimizationResult)
+    assert isinstance(result.optim_vars, dict)
+    assert isinstance(result.history, list)
+    assert isinstance(result.final_loss, float)
 
 
 def test_optimize_minimizes():
-    optim_vars, _ = _simple_problem(x0=3.0).optimize(
+    result = _simple_problem(x0=3.0).optimize(
         OptimConfig(n_iters=1000, learning_rate=0.01), callback=_NO_PRINT
     )
-    assert abs(float(optim_vars["x"])) < 0.5
+    assert abs(float(result.optim_vars["x"])) < 0.5
 
 
 def test_optimize_history_structure():
-    _, history = _simple_problem().optimize(
+    result = _simple_problem().optimize(
         OptimConfig(n_iters=20, learning_rate=0.01), track_every=5, callback=_NO_PRINT
     )
-    assert len(history) == 5  # steps 0, 5, 10, 15, 19 (final)
-    for record in history:
+    assert len(result.history) == 5  # steps 0, 5, 10, 15, 19 (final)
+    for record in result.history:
         assert "iteration" in record
         assert "total" in record
         assert "sq" in record
 
 
 def test_optimize_track_every():
-    _, history = _simple_problem().optimize(
+    result = _simple_problem().optimize(
         OptimConfig(n_iters=100, learning_rate=0.01), track_every=25, callback=_NO_PRINT
     )
-    assert [r["iteration"] for r in history] == [0, 25, 50, 75, 99]
+    assert [r["iteration"] for r in result.history] == [0, 25, 50, 75, 99]
 
 
 def test_optimize_callback_called_every_iteration():

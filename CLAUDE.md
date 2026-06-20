@@ -33,7 +33,7 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
    - `ObjectiveTerm`: A named, weighted term in a composite loss function (name, compute, multiplier)
    - `build_objective()`: Combines a list of `ObjectiveTerm`s into a single `fun(optim_vars) -> scalar`
    - `OptimizationProblemTemplate`: A reusable template for a class of problems — holds terms, an `initialize` function, optional Pydantic `input_params_class` for validation, and optional `plot_configuration`
-   - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.optimize()` which returns `(optim_vars, history)`
+   - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.optimize()` which returns an `OptimizationResult` (fields: `optim_vars`, `history`, `final_loss`)
 
 2. **[jaxopt.py](src/vizopt/jaxopt.py)** - Generic gradient descent optimizer
    - `optimize_gradient_descent()`: Wraps Optax's Adam optimizer with JAX JIT compilation
@@ -64,9 +64,9 @@ The framework separates *problem definition* from *problem instantiation*:
 1. Define `ObjectiveTerm`s (loss components with names, compute functions, and multipliers)
 2. Create an `OptimizationProblemTemplate` with those terms, an `initialize` function, optional Pydantic class for input validation, and optional `plot_configuration`
 3. Call `template.instantiate(input_parameters)` → `OptimizationProblem`
-4. Call `problem.optimize(n_iters, learning_rate, callback, track_every)` → `(optim_vars, history)`
+4. Call `problem.optimize(n_iters, learning_rate, callback, track_every)` → `OptimizationResult`
 
-`history` is a list of dicts with keys `"iteration"`, `"total"`, and one key per term name (weighted values), recorded every `track_every` iterations.
+`OptimizationResult` has fields `optim_vars`, `history`, and `final_loss`. `history` is a list of dicts with keys `"iteration"`, `"total"`, and one key per term name (weighted values), recorded every `track_every` iterations.
 
 #### Input Parameters and Validation
 

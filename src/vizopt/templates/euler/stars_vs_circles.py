@@ -357,30 +357,30 @@ def optimize_radially_convex_sets_and_circles(
             _svg_configuration_movable
         ),
     ).instantiate(input_parameters, var_scales=var_scales)
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    result = problem.optimize(optim_config, callback=callback)
 
     circles_out = np.concatenate(
-        [np.array(optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
+        [np.array(result.optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
     )
 
-    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
+    radii_arr = np.array(representation.to_radii(result.optim_vars, angles_jnp))
     return (
         [
             {
-                "center": np.array(optim_vars["centers"][s]),
+                "center": np.array(result.optim_vars["centers"][s]),
                 "radii": radii_arr[s],
                 "angles": angles,
                 **(
-                    {"label_center": np.array(optim_vars["label_positions"][s])}
+                    {"label_center": np.array(result.optim_vars["label_positions"][s])}
                     if has_label
                     else {}
                 ),
-                **representation.extra_results(s, optim_vars),
+                **representation.extra_results(s, result.optim_vars),
             }
             for s in range(S)
         ],
         circles_out,
-        history,
+        result.history,
         problem,
     )
 

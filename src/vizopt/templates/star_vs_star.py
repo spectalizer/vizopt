@@ -364,19 +364,19 @@ def optimize_star_domains(
         svg_configuration=representation.make_svg_configuration(),
     ).instantiate(input_parameters)
 
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    result = problem.optimize(optim_config, callback=callback)
 
-    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
+    radii_arr = np.array(representation.to_radii(result.optim_vars, angles_jnp))
     results = [
         {
-            "center": np.array(optim_vars["centers"][s]),
+            "center": np.array(result.optim_vars["centers"][s]),
             "radii": radii_arr[s],
             "angles": angles,
-            **representation.extra_results(s, optim_vars),
+            **representation.extra_results(s, result.optim_vars),
         }
         for s in range(n_sets)
     ]
-    return results, history, problem
+    return results, result.history, problem
 
 
 def optimize_star_vs_star(
@@ -477,16 +477,16 @@ def optimize_star_vs_star(
         svg_configuration=representation.make_svg_configuration(_svg_configuration_fixed),
     ).instantiate(input_parameters)
 
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    result = problem.optimize(optim_config, callback=callback)
 
-    radii_arr = np.array(representation.to_radii(optim_vars, angles_jnp))
+    radii_arr = np.array(representation.to_radii(result.optim_vars, angles_jnp))
     results = [
         {
-            "center": np.array(optim_vars["centers"][s]),
+            "center": np.array(result.optim_vars["centers"][s]),
             "radii": radii_arr[s],
             "angles": angles,
-            **representation.extra_results(s, optim_vars),
+            **representation.extra_results(s, result.optim_vars),
         }
         for s in range(n_sets)
     ]
-    return results, history, problem
+    return results, result.history, problem

@@ -38,6 +38,24 @@ class OptimConfig:
 
 
 @dataclass
+class OptimizationResult(Generic[OptimVars]):
+    """Result returned by [`OptimizationProblem.optimize`][vizopt.base.OptimizationProblem.optimize].
+
+    Attributes:
+        optim_vars: Optimized variables in physical (un-scaled) space.
+        history: Per-iteration records. Each dict has keys ``"iteration"``,
+            ``"total"``, one key per term name (schedule-weighted value), one
+            per term name suffixed ``_unscheduled`` (end-weighted), and one per
+            term name suffixed ``_unweighted`` (raw, un-multiplied value).
+        final_loss: Scalar loss of the best run at the last iteration.
+    """
+
+    optim_vars: OptimVars
+    history: list[dict]
+    final_loss: float
+
+
+@dataclass
 class ObjectiveTerm:
     """A term in an objective function.
 
@@ -221,7 +239,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         optim_config: OptimConfig | None = None,
         callback: Callback | None = None,
         track_every: int = 10,
-    ) -> tuple[OptimVars, list[dict]]:
+    ) -> "OptimizationResult[OptimVars]":
         """Run gradient descent to minimize the objective.
 
         When ``optim_config.n_restarts > 1``, the optimization is run that
@@ -230,18 +248,14 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
         Args:
             optim_config: Optimizer settings (iterations, learning rate, seeds,
-                restarts). Uses :class:`OptimConfig` defaults when ``None``.
+                restarts). Uses [OptimConfig][vizopt.base.OptimConfig] defaults when ``None``.
             callback: Optional callback called after each iteration with
                 (iteration, loss, optim_vars, grads).
             track_every: Record per-term history every this many iterations.
 
         Returns:
-            Tuple of (optimized variables, history). History is a list of
-            dicts with keys ``"iteration"``, ``"total"``, one key per term
-            name with the schedule-weighted value, and one key per term name
-            suffixed ``_unscheduled`` with the end-weighted value (schedule
-            evaluated at the final step). When using multiple restarts, history corresponds
-            to the best run.
+            An [OptimizationResult][vizopt.base.OptimizationResult] with the
+            optimized variables, per-term history, and final loss of the best run.
         """
         from . import jaxopt  # lazy import to avoid circular dependency
 
@@ -354,7 +368,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 best_history = history
 
         assert best_vars is not None
-        return best_vars, best_history
+        return OptimizationResult(best_vars, best_history, best_loss)
 
 
 def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:

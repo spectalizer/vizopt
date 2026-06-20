@@ -218,6 +218,6 @@ def optimize_circle_packing(
         collision_offset=collision_offset,
         initial_node_xys=initial_node_xys,
     )
-    optim_vars, _ = problem.optimize(optim_config)
+    result = problem.optimize(optim_config)
 
-    return [tuple(float(c) for c in xy) for xy in optim_vars["node_xys"]]
+    return [tuple(float(c) for c in xy) for xy in result.optim_vars["node_xys"]]

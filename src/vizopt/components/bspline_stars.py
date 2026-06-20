@@ -306,19 +306,19 @@ def optimize_multiple_radially_convex_sets_bspline(
         initialize=initialize,
         svg_configuration=_svg_configuration_bspline_fixed,
     ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    result = problem.optimize(optim_config, callback=callback)
 
-    radii_arr = np.array(bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp))
+    radii_arr = np.array(bspline_to_radii(result.optim_vars["bspline_ctrl"], angles_jnp))
     results = [
         {
-            "center": np.array(optim_vars["centers"][s]),
+            "center": np.array(result.optim_vars["centers"][s]),
             "radii": radii_arr[s],
             "angles": angles,
-            "bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s]),
+            "bspline_ctrl": np.array(result.optim_vars["bspline_ctrl"][s]),
         }
         for s in range(S)
     ]
-    return results, history, problem
+    return results, result.history, problem
 
 
 def optimize_multiple_radially_convex_sets_bspline_with_movable_circles(
@@ -434,19 +434,19 @@ def optimize_multiple_radially_convex_sets_bspline_with_movable_circles(
         initialize=initialize,
         svg_configuration=_svg_configuration_bspline_movable,
     ).instantiate(input_parameters)
-    optim_vars, history = problem.optimize(optim_config, callback=callback)
+    result = problem.optimize(optim_config, callback=callback)
 
     circles_out = np.concatenate(
-        [np.array(optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
+        [np.array(result.optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
     )
-    radii_arr = np.array(bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp))
+    radii_arr = np.array(bspline_to_radii(result.optim_vars["bspline_ctrl"], angles_jnp))
     results = [
         {
-            "center": np.array(optim_vars["centers"][s]),
+            "center": np.array(result.optim_vars["centers"][s]),
             "radii": radii_arr[s],
             "angles": angles,
-            "bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s]),
+            "bspline_ctrl": np.array(result.optim_vars["bspline_ctrl"][s]),
         }
         for s in range(S)
     ]
-    return results, circles_out, history, problem
+    return results, circles_out, result.history, problem
