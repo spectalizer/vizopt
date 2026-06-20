@@ -146,6 +146,7 @@ When a NetworkX `DiGraph` encodes a set hierarchy or containment relationship, t
 ## Style guide
 
 - Google-style docstrings
+- No imports inside functions unless genuinely needed (e.g. lazy imports for optional/heavy deps like `matplotlib`)
 
 ## General guidelines
 

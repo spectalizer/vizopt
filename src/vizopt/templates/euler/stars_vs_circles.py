@@ -385,6 +385,51 @@ def optimize_radially_convex_sets_and_circles(
     )
 
 
+def _make_plot_configuration(set_names, leaf_names, representation, has_label):
+    def plot_configuration(optim_vars, input_params):
+        from matplotlib import pyplot as plt
+
+        angles = input_params["angles"]
+        circle_radii = input_params["circle_radii"]
+        radii_arr = np.array(representation.to_radii(optim_vars, jnp.array(angles)))
+        centers = np.array(optim_vars["centers"])
+        circle_positions = np.array(optim_vars["circle_positions"])
+        S = len(set_names)
+        colors = plt.cm.tab10(np.linspace(0, 0.9, S))
+
+        _, ax = plt.subplots(figsize=(7, 7))
+        for s, (name, color) in enumerate(zip(set_names, colors)):
+            cx, cy = centers[s]
+            radii = radii_arr[s]
+            bx = np.append(cx + radii * np.cos(angles), cx + radii[0] * np.cos(angles[0]))
+            by = np.append(cy + radii * np.sin(angles), cy + radii[0] * np.sin(angles[0]))
+            ax.fill(bx, by, alpha=0.15, color=color)
+            ax.plot(bx, by, color=color, linewidth=2, label=name)
+
+        for i, (name, pos) in enumerate(zip(leaf_names, circle_positions)):
+            r = float(circle_radii[i])
+            ax.add_patch(plt.Circle(pos, r, facecolor="lightyellow", alpha=0.9,
+                                    edgecolor="dimgray", linewidth=1.5))
+            ax.text(float(pos[0]), float(pos[1]), str(name), ha="center", va="center",
+                    fontsize=9, fontweight="bold")
+
+        if has_label:
+            label_positions = np.array(optim_vars["label_positions"])
+            for name, color, lp in zip(set_names, colors, label_positions):
+                ax.text(float(lp[0]), float(lp[1]), name, ha="center", va="center",
+                        fontsize=9, fontweight="bold", color=color)
+        else:
+            ax.legend(fontsize=9)
+
+        ax.set_aspect("equal")
+        ax.autoscale_view()
+        ax.margins(0.15)
+        ax.axis("off")
+        plt.tight_layout()
+
+    return plot_configuration
+
+
 def optimize_radially_convex_sets_and_circles_from_graph(
     inclusion_graph: nx.DiGraph,
     weight_area=1.0,
@@ -462,8 +507,12 @@ def optimize_radially_convex_sets_and_circles_from_graph(
     leaf_names, circles, name_to_idx = _leaf_circles_from_graph(inclusion_graph)
     set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
 
+    if representation is None:
+        representation = Discrete()
     if offsets is None:
         offsets = offsets_from_graph(inclusion_graph, set_names, leaf_names)
+
+    has_label = label_rect_size is not None
 
     results_list, circles_out_arr, history, problem = (
         optimize_radially_convex_sets_and_circles(
@@ -492,6 +541,10 @@ def optimize_radially_convex_sets_and_circles_from_graph(
             optim_config=optim_config,
             callback=callback,
         )
+    )
+
+    problem.plot_configuration = _make_plot_configuration(
+        set_names, leaf_names, representation, has_label
     )
 
     named_results = {set_names[s]: results_list[s] for s in range(len(set_names))}
