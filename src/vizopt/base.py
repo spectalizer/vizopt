@@ -1,7 +1,7 @@
 """Base classes"""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
 from jax import Array, jit
@@ -233,6 +233,20 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
     var_scales: dict | None = None
+    result: "OptimizationResult[OptimVars] | None" = field(default=None, init=False, repr=False)
+
+    def plot(self) -> None:
+        """Plot the last optimization result using ``plot_configuration``.
+
+        Raises:
+            ValueError: If ``plot_configuration`` is not set or ``optimize()``
+                has not been called yet.
+        """
+        if self.plot_configuration is None:
+            raise ValueError("plot_configuration is not set on this problem.")
+        if self.result is None:
+            raise ValueError("No result yet — call optimize() first.")
+        self.plot_configuration(self.result.optim_vars, self.input_parameters)
 
     def optimize(
         self,
@@ -368,7 +382,8 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 best_history = history
 
         assert best_vars is not None
-        return OptimizationResult(best_vars, best_history, best_loss)
+        self.result = OptimizationResult(best_vars, best_history, best_loss)
+        return self.result
 
 
 def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:
