@@ -44,12 +44,18 @@ def _term_collision(optim_vars, input_params):
 # ---------------------------------------------------------------------------
 
 
-def _plot_configuration(optim_vars, input_params):
+def plot_circles(positions, radii):
+    """Plot a set of circles.
+
+    Args:
+        positions: Array of shape (n, 2) with (x, y) centre coordinates.
+        radii: Sequence of n radii.
+    """
     import matplotlib.patches as mpatches
     from matplotlib import pyplot as plt
 
-    positions = optim_vars["node_xys"]
-    radii = input_params["node_radii"]
+    positions = np.asarray(positions)
+    radii = list(radii)
     n = len(radii)
     colors = plt.colormaps["tab20"].colors
     _, ax = plt.subplots(figsize=(5, 5))
@@ -65,16 +71,16 @@ def _plot_configuration(optim_vars, input_params):
             )
         )
     margin = float(max(radii))
-    ax.set_xlim(
-        float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin
-    )
-    ax.set_ylim(
-        float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin
-    )
+    ax.set_xlim(float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin)
+    ax.set_ylim(float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin)
     ax.set_aspect("equal")
     ax.set_title(f"Circle packing: {n} circles")
     plt.axis("off")
     plt.tight_layout()
+
+
+def _plot_configuration(optim_vars, input_params):
+    plot_circles(optim_vars["node_xys"], input_params["node_radii"])
 
 
 # ---------------------------------------------------------------------------
