@@ -28,6 +28,9 @@ No, we are not talking about Venn diagrams here. Venn diagrams represent every p
 The actual definition: *closed shapes...*
 Venn diagrams represent sets as closed shapes, whereby the shape representing a subset of a given set is contained within the shape representing the superset.
 
+Two kinds of Euler diagrams: showing individual elements (which is possible for small discrete sets) or not.
+
+Requirements for Euler diagrams: closed **connex** shapes... 
 
 *Interesting fact 3: Euler diagrams are a superset of treemaps*
 
