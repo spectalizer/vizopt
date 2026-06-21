@@ -167,6 +167,46 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
     return G
 
 
+def make_overlapping_circles_example():
+    """Build a multi-set example with overlapping circle memberships.
+
+    Contains 9 circles arranged in two main clusters, one isolated obstacle
+    circle, and two additional bottom circles. Four sets are defined with
+    partially overlapping membership to exercise exclusion and smoothness terms.
+
+    Returns:
+        Tuple of ``(circles, sets, offsets)`` where ``circles`` is a list of
+        ``(cx, cy, r)`` tuples, ``sets`` is a list of lists of circle indices,
+        and ``offsets`` is a ``(4, 1)`` float array of boundary offsets.
+    """
+    circles = [
+        # Set 0: left cluster
+        (0.0,  0.0, 0.6),
+        (1.2,  0.3, 0.5),
+        (0.3,  1.4, 0.4),
+        # Set 1: right cluster
+        (4.5,  0.0, 0.6),
+        (5.5,  0.5, 0.5),
+        (4.2,  1.3, 0.4),
+        # Isolated circle (obstacle for both)
+        (2.5,  0.5, 0.3),
+        # Additional bottom circles
+        (1.2, -1.3, 0.5),
+        (5.5, -1.5, 0.5),
+    ]
+
+    sets = [
+        [0, 1, 2],     # left cluster
+        [3, 4, 5],     # right cluster
+        [1, 3, 7, 8],  # bottom set, partially intersecting left and right
+        [3, 4, 5, 8],  # right + bottom right
+    ]
+
+    offsets = np.array([[0.1], [0.1], [0.1], [0.2]])
+
+    return circles, sets, offsets
+
+
 def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGraph:
     """Build the British Isles set-hierarchy as a DiGraph.
 
