@@ -235,8 +235,11 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     var_scales: dict | None = None
     result: "OptimizationResult[OptimVars] | None" = field(default=None, init=False, repr=False)
 
-    def plot(self) -> None:
+    def plot(self, **kwargs) -> None:
         """Plot the last optimization result using ``plot_configuration``.
+
+        Keyword arguments are forwarded to ``plot_configuration``, allowing
+        optional display flags (e.g. ``show_arrows=True``).
 
         Raises:
             ValueError: If ``plot_configuration`` is not set or ``optimize()``
@@ -246,7 +249,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
             raise ValueError("plot_configuration is not set on this problem.")
         if self.result is None:
             raise ValueError("No result yet — call optimize() first.")
-        self.plot_configuration(self.result.optim_vars, self.input_parameters)
+        self.plot_configuration(self.result.optim_vars, self.input_parameters, **kwargs)
 
     def optimize(
         self,

@@ -357,6 +357,9 @@ def optimize_radially_convex_sets_and_circles(
             _svg_configuration_movable
         ),
     ).instantiate(input_parameters, var_scales=var_scales)
+    problem.plot_configuration = _make_plot_configuration(
+        [f"Set {s}" for s in range(S)], list(range(N)), representation, has_label
+    )
     result = problem.optimize(optim_config, callback=callback)
 
     circles_out = np.concatenate(
@@ -385,17 +388,18 @@ def optimize_radially_convex_sets_and_circles(
     )
 
 
-def _make_plot_configuration(set_names, leaf_names, representation, has_label):
-    def plot_configuration(optim_vars, input_params):
+def _make_plot_configuration(set_names, leaf_names, representation, has_label, set_colors=None):
+    def plot_configuration(optim_vars, input_params, show_arrows=False):
         from matplotlib import pyplot as plt
 
         angles = input_params["angles"]
         circle_radii = input_params["circle_radii"]
+        initial_positions = input_params["initial_circle_positions"]
         radii_arr = np.array(representation.to_radii(optim_vars, jnp.array(angles)))
         centers = np.array(optim_vars["centers"])
         circle_positions = np.array(optim_vars["circle_positions"])
         S = len(set_names)
-        colors = plt.cm.tab10(np.linspace(0, 0.9, S))
+        colors = set_colors if set_colors is not None else plt.cm.tab10(np.linspace(0, 0.9, S))
 
         _, ax = plt.subplots(figsize=(7, 7))
         for s, (name, color) in enumerate(zip(set_names, colors)):
@@ -408,10 +412,16 @@ def _make_plot_configuration(set_names, leaf_names, representation, has_label):
 
         for i, (name, pos) in enumerate(zip(leaf_names, circle_positions)):
             r = float(circle_radii[i])
-            ax.add_patch(plt.Circle(pos, r, facecolor="lightyellow", alpha=0.9,
+            ox, oy = float(initial_positions[i, 0]), float(initial_positions[i, 1])
+            nx_, ny_ = float(pos[0]), float(pos[1])
+            if show_arrows and np.hypot(nx_ - ox, ny_ - oy) > 0.01:
+                ax.annotate("", xy=(nx_, ny_), xytext=(ox, oy),
+                            arrowprops=dict(arrowstyle="->", color="k", lw=1.0))
+                ax.add_patch(plt.Circle((ox, oy), r, facecolor="none", edgecolor="dimgray",
+                                        linewidth=1, linestyle="--", alpha=0.4))
+            ax.add_patch(plt.Circle((nx_, ny_), r, facecolor="lightyellow", alpha=0.9,
                                     edgecolor="dimgray", linewidth=1.5))
-            ax.text(float(pos[0]), float(pos[1]), str(name), ha="center", va="center",
-                    fontsize=9, fontweight="bold")
+            ax.text(nx_, ny_, str(name), ha="center", va="center", fontsize=9, fontweight="bold")
 
         if has_label:
             label_positions = np.array(optim_vars["label_positions"])
@@ -543,8 +553,13 @@ def optimize_radially_convex_sets_and_circles_from_graph(
         )
     )
 
+    set_colors = [
+        inclusion_graph.nodes[n].get("color") for n in set_names
+    ]
+    if any(c is None for c in set_colors):
+        set_colors = None
     problem.plot_configuration = _make_plot_configuration(
-        set_names, leaf_names, representation, has_label
+        set_names, leaf_names, representation, has_label, set_colors=set_colors
     )
 
     named_results = {set_names[s]: results_list[s] for s in range(len(set_names))}
