@@ -389,7 +389,7 @@ def optimize_radially_convex_sets_and_circles(
 
 
 def _make_plot_configuration(set_names, leaf_names, representation, has_label, set_colors=None):
-    def plot_configuration(optim_vars, input_params, show_arrows=False):
+    def plot_configuration(optim_vars, input_params, show_arrows=False, ax=None):
         from matplotlib import pyplot as plt
 
         angles = input_params["angles"]
@@ -401,7 +401,9 @@ def _make_plot_configuration(set_names, leaf_names, representation, has_label, s
         S = len(set_names)
         colors = set_colors if set_colors is not None else plt.cm.tab10(np.linspace(0, 0.9, S))
 
-        _, ax = plt.subplots(figsize=(7, 7))
+        _own_figure = ax is None
+        if _own_figure:
+            _, ax = plt.subplots(figsize=(7, 7))
         for s, (name, color) in enumerate(zip(set_names, colors)):
             cx, cy = centers[s]
             radii = radii_arr[s]
@@ -435,7 +437,8 @@ def _make_plot_configuration(set_names, leaf_names, representation, has_label, s
         ax.autoscale_view()
         ax.margins(0.15)
         ax.axis("off")
-        plt.tight_layout()
+        if _own_figure:
+            plt.tight_layout()
 
     return plot_configuration
 

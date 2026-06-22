@@ -18,45 +18,70 @@ Consonants
 The mind naturally groups things.
 Bears are mammals. Mammals are animals. Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestral animals.
 Some programming languages are object-oriented, some are statically types, and many are both.
-Be it in linguistics or biology, you will find sets, sets containing other sets, and sets intersecting in different ways.
+Be it in linguistics or biology, geopolitics or mathematics, you will find sets, sets containing other sets, and sets intersecting in different ways.
 
 Euler diagrams are the visual representation of these *containment* and *intersection* relations.
+
+**Definition**:
+> An Euler diagram is a diagram that uses closed curves to represent sets, where spatial containment and overlap encode subset and intersection relationships.
+
+The shape representing a subset of a given set is contained within the shape representing the superset.
 
 *Interesting fact 1: Euler diagrams are not Venn diagrams*
 No, we are not talking about Venn diagrams here. Venn diagrams represent every possible set intersection, including empty intersections.
 
-The actual definition: *closed shapes...*
-Venn diagrams represent sets as closed shapes, whereby the shape representing a subset of a given set is contained within the shape representing the superset.
 
-Two kinds of Euler diagrams: showing individual elements (which is possible for small discrete sets) or not.
+Can we be more precise?
+First off, one can distinguish two types of Euler diagrams: those showing individual elements (which is possible for small discrete sets) and those that only represent the sets. This article focuses on the first type.
 
-Requirements for Euler diagrams: closed **connex** shapes... 
+One can specify the requirements more precisely:
+
+* **Shape topology**: The closed shape representing each set should be a connected region (no disjoint pieces) and it should not have any hole. The shape may further be restricted to families such as polygons, circles or ellipses, but we will come back to this topic.
+
+* **Enclosure**: if A ⊆ B, the shape for A should lie entirely inside the shape for B.
+
+* **Intersection**: the shapes for A and B should overlap if and only if A ∩ B is not empty.
+
+* **Area proportionality** (optional but desirable): the area of a region should be proportional to the *size* of the corresponding set, i.e. the number of elements it contains in the case of discrete sets.
+
+* Additional requirements can be formulated, including: *two shapes should not run concurrently*, or *two intersecting curves should cross, not just touch* etc. See
+
+*Interesting fact 2: It is impossible to draw Euler diagrams for certain set configurations.*
+
+See e.g. Rottmann et al. 2024 in the reference list. Also, which set configurations can be represented by an Euler diagram depends on the shapes you use. Using only rectangles means you could not even draw an Euler diagram for the 3 intersecting sets in the Figure below.
+
+![Euler diagram representing three simple sets over three elements.](img/simple_three_sets.svg)
+*Euler diagram representing three simple sets over three elements. Try drawing the same with axis-aligned rectangles only.*
+
+
+
+## Searching for the Best Primitives
+(the search for the right primitives/parameterization)
+
+While *closed shape* in the above definition is a wonderfully general description, applying to circles and rectangles as well as more complex polygonal and curved regions of the plane, this generality is not really helpful when it comes to defining an algorithm that draws actual Euler diagrams.
+
+If we want an algorithm to draw Euler diagrams, we need to look for a nice *family* of shapes.
+
+### Euler diagrams with circles
+
+A typical instantiation of Euler diagrams uses circles, but circles are rather rigid, and they can waste a lot of space.
+
+Consider the simplest case: two equally-sized circles of radius *r*, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius *2r*. Its area is *4πr²*, while the two inner circles together cover only *2πr²*: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds: each layer inflates the container, but the added space is mostly dead area that carries no information. 
+
+![Three levels of binary nesting: leaf circles cover only 9% of the enclosing area. Even without offset between parent and children circles, leaf circles would cover at most 12.5% of the enclosing area.](img/circle_nesting.svg)
+
+### Rectangles
+
+Rectangles pack more efficiently and power treemaps well, but . .
+
+Rectangles are another simple and often used candidate for set boundaries. They do pack more efficiently than circles, and can be quite useful in the context of treemaps (see below), but they do not offer much more freedom than circles and do not play too well with gradient-based optimization.
+The three-set example above already demonstrates the limited expressiveness of axis-aligned rectangles. What is more, rectangle-based objectives tend to be rougher than their counterparts with circles and other shapes. This has to do with the intersection area between two rectangles being a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness of the optimization landscape makes gradient-based optimization harder.
+
 
 *Interesting fact 3: Euler diagrams are a superset of treemaps*
 
 With some imagination, you can see that treemaps are just tightly packed Euler diagrams for specific sets of sets.
 If you took the animal examples and considered only phylogenetic relations, you should end up with a strictly hierarchical set of sets, which would be equivalent to a tree (with the elements as leaves). Representing parent-child relationships in trees geometrically is the basic of treemaps. 
-
-## Searching for Better Primitives
-(the search for the right primitives/parameterization)
-
-Now *closed shape* is a wonderfully general description, applying to circles and rectangles as well as more complex polygonal and curved regions of the plane, but this generality is not really helpful when it comes to defining an algorithm that should draw actual Euler diagrams.
-
-We want to look for a nice *family* of shapes.
-
-### Euler diagrams with circles
-
-A typical instantiation of Euler diagrams uses circles, but circles are rather rigid, and they waste space.
-
-Consider the simplest case: two equally-sized circles of radius *r*, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius *2r*. Its area is *4πr²*, while the two inner circles together cover only *2πr²*: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds: each layer inflates the container, but the added space is mostly dead area that carries no information. A tight boundary would hug the contents and waste nothing. 
-
-### Rectangles
-
-Rectangles pack more efficiently and power treemaps well, but they are as rigid as circles... but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles)).
-
-![Three levels of binary nesting: leaf circles cover only 12.5% of the enclosing area.](img/circle_nesting.svg)
-
-*Interesting fact 3: Some set configurations cannot be represented with a nice Euler diagram*
 
 
 ## Introducing radially convex sets
@@ -142,20 +167,14 @@ TODO Wax lyrical about the foam.
 
 ### References and related work
 
+* [Rottmann, P., Rodgers, P., Yan, X., Archambault, D., Wang, B., & Haunert, J. H. (2024, June). *Generating Euler diagrams through combinatorial optimization*. In Computer Graphics Forum (Vol. 43, No. 3, p. e15089).](https://onlinelibrary.wiley.com/doi/10.1111/cgf.15089)
+
 [Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s beautiful and inspiring tree of birds in cross section.
 
 *Interesting fact 5: Overlapping sets are the same as hypergraphs*
 
 
-## Appendix: Rectangles {#appendix-rectangles}
 
-*To be written.*
-
-Rectangles are a natural candidate for set boundaries — axis-aligned, easy to render, and the basis of treemaps. Two arguments against them:
-
-**Expressiveness.** There exist set configurations (intersections and containments) that cannot be realized by any arrangement of axis-aligned rectangles. This section demonstrates such a configuration and proves it is impossible to represent exactly.
-
-**Optimization landscape.** Rectangle-based objectives tend to be less smooth than their star-polygon counterparts — intersection area between two rectangles is a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness makes gradient-based optimization harder and convergence less reliable. *To be elaborated.* 
 
 ---
 
@@ -165,3 +184,9 @@ Rectangles are a natural candidate for set boundaries — axis-aligned, easy to 
 - **"How to use it at home" section** — write the practical walkthrough showing how to use the `vizopt` package to reproduce results.
 - **Conclusion prose** — expand the conclusion; wax lyrical about the foam metaphor.
 - **Appendix: Rectangles** — write the impossibility proof and the optimization landscape argument (currently placeholder stubs).
+
+# Deleted
+
+A tight boundary would hug the contents and waste nothing. 
+
+.. but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles))

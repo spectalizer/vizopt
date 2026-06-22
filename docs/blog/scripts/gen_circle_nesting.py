@@ -1,15 +1,18 @@
-"""Generate the nested-circles space-waste illustration for the blog post."""
+"""Generate the nested-circles space-waste illustration for the blog post.
+
+Run with `uv run python docs/blog/scripts/gen_circle_nesting.py`
+"""
 
 import matplotlib.pyplot as plt
 
 DEPTH = 3
-ROOT_R = 2 ** DEPTH  # = 8, leaf radius = 1
+ROOT_R = 2**DEPTH  # = 8, leaf radius = 1
 
 fill = ["#f8f9fa", "#dee2e6", "#adb5bd", "#6c757d"]
 edge = ["#9ca3af", "#6b7280", "#374151", "#111827"]
 
 
-def draw(ax, cx, cy, r, depth, direction="h"):
+def draw(ax, cx, cy, r, depth, direction="h", reduce_factor=0.9):
     level = DEPTH - depth
     ax.add_patch(
         plt.Circle(
@@ -22,14 +25,14 @@ def draw(ax, cx, cy, r, depth, direction="h"):
         )
     )
     if depth > 0:
-        cr = r / 2
+        cr = r / 2 * reduce_factor
         nd = "v" if direction == "h" else "h"
         if direction == "h":
-            draw(ax, cx - cr, cy, cr, depth - 1, nd)
-            draw(ax, cx + cr, cy, cr, depth - 1, nd)
+            draw(ax, cx - r / 2, cy, cr, depth - 1, nd)
+            draw(ax, cx + r / 2, cy, cr, depth - 1, nd)
         else:
-            draw(ax, cx, cy - cr, cr, depth - 1, nd)
-            draw(ax, cx, cy + cr, cr, depth - 1, nd)
+            draw(ax, cx, cy - r / 2, cr, depth - 1, nd)
+            draw(ax, cx, cy + r / 2, cr, depth - 1, nd)
 
 
 fig, ax = plt.subplots(figsize=(6, 6))
