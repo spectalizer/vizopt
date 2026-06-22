@@ -18,7 +18,9 @@ def graph_to_optimizer_inputs(G):
     idx = {name: i for i, name in enumerate(set_names)}
     enclosures = [(idx[u], idx[v]) for u, v in G.edges]
     target_areas = [G.nodes[n].get("target_area") for n in set_names]
-    initial_centers = np.array([G.nodes[n]["center"] for n in set_names], dtype=np.float32)
+    initial_centers = np.array(
+        [G.nodes[n]["center"] for n in set_names], dtype=np.float32
+    )
     return set_names, idx, enclosures, target_areas, initial_centers
 
 
@@ -94,8 +96,10 @@ def make_multiples_of_primes_graph(
     for i, elem in enumerate(elements):
         G.add_node(
             elem,
-            center=[float(layout_r * np.cos(pos_angles[i])),
-                    float(layout_r * np.sin(pos_angles[i]))],
+            center=[
+                float(layout_r * np.cos(pos_angles[i])),
+                float(layout_r * np.sin(pos_angles[i])),
+            ],
             r=r,
         )
     for p in primes:
@@ -130,13 +134,13 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
     """
     G: nx.DiGraph = nx.DiGraph()
 
-    G.add_node("Bears",      center=[ 2.0,  1.5], r=r)
-    G.add_node("Whales",     center=[-2.0,  1.5], r=r)
-    G.add_node("Dolphins",   center=[-3.0,  0.5], r=r)
-    G.add_node("Snakes",     center=[ 2.0, -1.0], r=r)
-    G.add_node("Lizards",    center=[ 3.0, -1.5], r=r)
-    G.add_node("Sea Turtles",center=[-1.0, -2.0], r=r)
-    G.add_node("Sharks",     center=[-2.5, -1.5], r=r)
+    G.add_node("Bears", center=[2.0, 1.5], r=r)
+    G.add_node("Whales", center=[-2.0, 1.5], r=r)
+    G.add_node("Dolphins", center=[-3.0, 0.5], r=r)
+    G.add_node("Snakes", center=[2.0, -1.0], r=r)
+    G.add_node("Lizards", center=[3.0, -1.5], r=r)
+    G.add_node("Sea Turtles", center=[-1.0, -2.0], r=r)
+    G.add_node("Sharks", center=[-2.5, -1.5], r=r)
 
     G.add_node("Mammals")
     G.add_node("Reptiles")
@@ -181,23 +185,23 @@ def make_overlapping_circles_example():
     """
     circles = [
         # Set 0: left cluster
-        (0.0,  0.0, 0.6),
-        (1.2,  0.3, 0.5),
-        (0.3,  1.4, 0.4),
+        (0.0, 0.0, 0.6),
+        (1.2, 0.3, 0.5),
+        (0.3, 1.4, 0.4),
         # Set 1: right cluster
-        (4.5,  0.0, 0.6),
-        (5.5,  0.5, 0.5),
-        (4.2,  1.3, 0.4),
+        (4.5, 0.0, 0.6),
+        (5.5, 0.5, 0.5),
+        (4.2, 1.3, 0.4),
         # Isolated circle (obstacle for both)
-        (2.5,  0.5, 0.3),
+        (2.5, 0.5, 0.3),
         # Additional bottom circles
         (1.2, -1.3, 0.5),
         (5.5, -1.5, 0.5),
     ]
 
     sets = [
-        [0, 1, 2],     # left cluster
-        [3, 4, 5],     # right cluster
+        [0, 1, 2],  # left cluster
+        [3, 4, 5],  # right cluster
         [1, 3, 7, 8],  # bottom set, partially intersecting left and right
         [3, 4, 5, 8],  # right + bottom right
     ]
@@ -225,39 +229,45 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
     """
     G = nx.DiGraph()
 
-    G.add_node("England",             target_area=3.40, center=[ 2.0,  0.0], color="#4472c4")
-    G.add_node("Scotland",            target_area=2.00, center=[ 1.5,  4.5], color="#70ad47")
-    G.add_node("Wales",               target_area=0.55, center=[ 0.0,  1.0], color="#ff0000")
-    G.add_node("Northern Ireland",    target_area=0.40, center=[-2.5,  3.5], color="#ffc000")
-    G.add_node("Republic of Ireland", target_area=1.80, center=[-2.5,  0.5], color="#169b62")
-    G.add_node("Crown Dependencies",  target_area=None, center=[ 1.5, -1.5], color="#7030a0")
-    G.add_node("Great Britain",       target_area=None, center=[ 1.5,  2.0], color="#264478")
-    G.add_node("United Kingdom",      target_area=None, center=[ 0.5,  2.5], color="#1f3864")
-    G.add_node("Ireland island",      target_area=None, center=[-2.5,  2.0], color="#375623")
-    G.add_node("British Islands",     target_area=None, center=[ 0.5,  1.5], color="#808080")
-    G.add_node("Isle of Man",         target_area=0.07, center=[-0.8,  2.5], color="#c05780")
-    G.add_node("Jersey",              target_area=0.04, center=[ 3.0, -3.5], color="#e8a838")
-    G.add_node("Guernsey",            target_area=0.03, center=[ 1.2, -3.8], color="#2e9bba")
+    G.add_node("England", target_area=3.40, center=[2.0, 0.0], color="#4472c4")
+    G.add_node("Scotland", target_area=2.00, center=[1.5, 4.5], color="#70ad47")
+    G.add_node("Wales", target_area=0.55, center=[0.0, 1.0], color="#ff0000")
+    G.add_node(
+        "Northern Ireland", target_area=0.40, center=[-2.5, 3.5], color="#ffc000"
+    )
+    G.add_node(
+        "Republic of Ireland", target_area=1.80, center=[-2.5, 0.5], color="#169b62"
+    )
+    G.add_node(
+        "Crown Dependencies", target_area=None, center=[1.5, -1.5], color="#7030a0"
+    )
+    G.add_node("Great Britain", target_area=None, center=[1.5, 2.0], color="#264478")
+    G.add_node("United Kingdom", target_area=None, center=[0.5, 2.5], color="#1f3864")
+    G.add_node("Ireland island", target_area=None, center=[-2.5, 2.0], color="#375623")
+    G.add_node("British Islands", target_area=None, center=[0.5, 1.5], color="#808080")
+    G.add_node("Isle of Man", target_area=0.07, center=[-0.8, 2.5], color="#c05780")
+    G.add_node("Jersey", target_area=0.04, center=[3.0, -3.5], color="#e8a838")
+    G.add_node("Guernsey", target_area=0.03, center=[1.2, -3.8], color="#2e9bba")
 
     # Edges: parent → child  (parent ⊃ child)
-    G.add_edge("Great Britain",       "England")
-    G.add_edge("Great Britain",       "Scotland")
-    G.add_edge("Great Britain",       "Wales")
-    G.add_edge("United Kingdom",      "Great Britain")
-    G.add_edge("United Kingdom",      "Northern Ireland")
-    G.add_edge("British Islands",     "United Kingdom")
-    G.add_edge("British Islands",     "Crown Dependencies")
-    G.add_edge("Crown Dependencies",  "Isle of Man")
-    G.add_edge("Crown Dependencies",  "Jersey")
-    G.add_edge("Crown Dependencies",  "Guernsey")
+    G.add_edge("Great Britain", "England")
+    G.add_edge("Great Britain", "Scotland")
+    G.add_edge("Great Britain", "Wales")
+    G.add_edge("United Kingdom", "Great Britain")
+    G.add_edge("United Kingdom", "Northern Ireland")
+    G.add_edge("British Islands", "United Kingdom")
+    G.add_edge("British Islands", "Crown Dependencies")
+    G.add_edge("Crown Dependencies", "Isle of Man")
+    G.add_edge("Crown Dependencies", "Jersey")
+    G.add_edge("Crown Dependencies", "Guernsey")
 
     if include_ireland_island:
-        G.add_edge("Ireland island",      "Northern Ireland")
-        G.add_edge("Ireland island",      "Republic of Ireland")
-        G.add_edge("British Islands",     "Ireland island")
+        G.add_edge("Ireland island", "Northern Ireland")
+        G.add_edge("Ireland island", "Republic of Ireland")
+        G.add_edge("British Islands", "Ireland island")
     else:
         G.remove_node("Ireland island")
-        G.add_edge("British Islands",     "Republic of Ireland")
+        G.add_edge("British Islands", "Republic of Ireland")
 
     # Add r to leaf nodes for use with stars_vs_circles.from_graph API
     for n in G.nodes:
@@ -266,3 +276,26 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
             G.nodes[n]["r"] = float(np.sqrt(area / np.pi))
 
     return G
+
+
+def make_simple_three_element_graph():
+    """Three elements A, B, C with three overlapping sets: {A, B}, {B, C}, and {A, C}."""
+
+    G_simple = nx.DiGraph()
+
+    G_simple.add_node("A", center=[0.0, 2.5], r=0.5)
+    G_simple.add_node("B", center=[-2.2, -1.2], r=0.4)
+    G_simple.add_node("C", center=[2.2, -1.2], r=0.3)
+
+    G_simple.add_node("{A, B}")
+    G_simple.add_node("{B, C}")
+    G_simple.add_node("{A, C}")
+
+    G_simple.add_edge("{A, B}", "A")
+    G_simple.add_edge("{A, B}", "B")
+    G_simple.add_edge("{B, C}", "B")
+    G_simple.add_edge("{B, C}", "C")
+    G_simple.add_edge("{A, C}", "A")
+    G_simple.add_edge("{A, C}", "C")
+
+    return G_simple
