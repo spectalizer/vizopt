@@ -8,12 +8,6 @@ TODO Add a nice animation somewhere near the beginning of the article.
 
 ## What are Euler diagrams?
 
-### Example gallery
-EU orgs
-Academic disciplines
-Natural languages
-Programming languages
-Consonants
 
 The mind naturally groups things.
 Bears are mammals. Mammals are animals. Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestral animals.
@@ -36,7 +30,7 @@ First off, one can distinguish two types of Euler diagrams: those showing indivi
 
 One can specify the requirements more precisely:
 
-* **Shape topology**: The closed shape representing each set should be a connected region (no disjoint pieces) and it should not have any hole. The shape may further be restricted to families such as polygons, circles or ellipses, but we will come back to this topic.
+* **Shape topology**: The closed shape representing each set should delimit a connected region (no disjoint pieces) without any hole. What is more, the curve delimiting this region should be *simple* in the sense of not intersecting itself. The shape may further be restricted to families such as polygons, circles or ellipses, and we will come back to this topic.
 
 * **Enclosure**: if A ⊆ B, the shape for A should lie entirely inside the shape for B.
 
@@ -72,109 +66,129 @@ Consider the simplest case: two equally-sized circles of radius *r*, enclosed in
 
 ### Rectangles
 
-Rectangles pack more efficiently and power treemaps well, but . .
 
-Rectangles are another simple and often used candidate for set boundaries. They do pack more efficiently than circles, and can be quite useful in the context of treemaps (see below), but they do not offer much more freedom than circles and do not play too well with gradient-based optimization.
+Rectangles are another simple and often used candidate for set boundaries in Euler diagmras. They do pack more efficiently than circles, and can be quite useful in the context of treemaps (see below), but they do not offer much more freedom than circles and do not play too well with gradient-based optimization.
 The three-set example above already demonstrates the limited expressiveness of axis-aligned rectangles. What is more, rectangle-based objectives tend to be rougher than their counterparts with circles and other shapes. This has to do with the intersection area between two rectangles being a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness of the optimization landscape makes gradient-based optimization harder.
 
 
 *Interesting fact 3: Euler diagrams are a superset of treemaps*
 
 With some imagination, you can see that treemaps are just tightly packed Euler diagrams for specific sets of sets.
-If you took the animal examples and considered only phylogenetic relations, you should end up with a strictly hierarchical set of sets, which would be equivalent to a tree (with the elements as leaves). Representing parent-child relationships in trees geometrically is the basic of treemaps. 
+If you took the animal examples and considered only phylogenetic relations, you should end up with a strictly hierarchical set of sets, which would be equivalent to a tree (with the elements as leaves). Representing parent-child relationships in trees geometrically is the idea of treemaps. 
 
+![Three levels of binary nesting with rectangles: leaf rectangles now cover more than two thirds of the enclosing area, and they could cover 100% without offset between parent and children rectangles.](img/rectangle_nesting.svg)
+
+Given the limitations of circles and rectangles we just discussed, I spent a lot of time asking myself what better shape families could be. Polygons are an obvious generalization of rectangles, but they turn out to be almost **too flexible**: a polygon parameterized with *(x_i, y_i)* coordinates can intersect itself. This is when I remembered radially convex sets.
 
 ## Introducing radially convex sets
 
-A region is *radially convex* (or *star-shaped*) if there is a center point from which every point on the boundary is directly visible — no part of the boundary hides behind another. Imagine standing at the center of a room: if you can see every wall from that single spot, the room is star-shaped. Every convex shape qualifies, but so do many non-convex ones: a crescent does not, a star polygon does.
+A region is *radially convex* (or *star-shaped*) if there is a center point from which every point on the boundary is directly visible. Imagine standing at the center of a room: if you can see every wall from that single spot, the room is star-shaped. Every convex shape qualifies, but so do many non-convex ones: a crescent does not, a star polygon does.
 
-This is precisely the condition studied in the art gallery problem, which asks how many guards are needed to watch every point in a room. For a star-shaped room, one guard standing at the center always suffices.
+This relates to the [*art gallery problem*](https://en.wikipedia.org/wiki/Art_gallery_problem), which asks how many guards are needed to watch every point in a room. For a star-shaped room, one guard standing at the center suffices.
 
 ![Three examples: a convex blob, a non-convex star-shaped region, and a C-shape that is not star-shaped.](img/radially_convex_sets.svg)
 
-Star-shaped regions admit a compact parameterization: fix a center, then specify one radius per direction. Sample K angles uniformly in [0, 2π), and the boundary becomes a vector of K radii — a fixed-size, continuous representation that gradient descent can move through freely. Circles are the special case where all K radii are equal; every other shape in the family is reachable by letting them differ.
+Star-shaped regions admit a compact parameterization: fix a center, then specify one radius per direction. 
+Circles are the special case where all K radii are equal; every other shape in the family is reachable by letting them differ.
+
+Using K angles sampled uniformly in [0, 2π), one can represent a star-shape region with K+2 numbers. This fixed-size, continuous representation can then be optimized using gradient descent. 
 
 ## Smooth optimization of smooth shapes
 
-... Because the boundary is a smooth function of its K radii, every desideratum we care about — enclosure, compactness, non-overlap — can be written as a differentiable loss term and the whole thing handed to an optimizer. (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
+So here is the idea: let us represent set elements with circles and sets as *star-shaped* radially convex sets and find the best possible arrangement of these circles and radially convex sets.
 
-So here is the idea: let us represent set elements with circles and sets as *star-shaped* radially convex sets and find the best possible arrangement of these circles and radially convex sets accordingl.
+Because the boundary is a smooth function of its center and K radii, every desideratum we care about — enclosure, non-overlap, compactness — can be written as a differentiable loss term and the whole thing handed to an optimizer. 
 
-Setting up the optimization...
+### Constraints and aesthetic terms
 
-The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and the positions of the circles themselves. The total loss is a weighted sum of terms in three groups.
+The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and the positions of the element circles. The total loss is a weighted sum of terms which be grouped in three categories: hard constraints, esthetic objectives and regularization.
 
 **Hard constraints.** 
 
+These constraints are non-negotiable and carry high weights. Violations are penalized both quadratically (very high penalties for large violations) and linearly (already significant penalties for small violations).
+
 * *Enclosure* checks that every member circle is inside its boundary: for each ray angle, it computes the minimum radius that would just graze the circle at that angle, and penalizes any shortfall.
 
-* *Exclusion* is the mirror image: for each non-member circle, it penalizes any radius that reaches into it. Both carry high weights.
+* *Exclusion* is the mirror image: for each non-member circle, it penalizes any radius that reaches into it.
 
 * *Circle collision* prevents circles from overlapping each other as they move.
 
-*How does the check work?* For each angle θ, project the vector from the set center to the circle center onto the ray: the along-ray component is *tang* and the perpendicular offset is *perp*. The circle's shadow along that ray spans from *tang* − √(r² − perp²) (near edge) to *tang* + √(r² − perp²) (far edge). Enclosure requires the boundary radius to reach the far edge; exclusion requires it to stop before the near edge. Violations are penalized quadratically.
+*How do the enclosure and exclusion checks work?* For each angle θ, project the vector from the set center to the circle center onto the ray: the along-ray component is *tang* and the perpendicular offset is *perp*. The circle's shadow along that ray spans from *tang* − √(r² − perp²) (near edge) to *tang* + √(r² − perp²) (far edge). Enclosure requires the boundary radius to reach the far edge; exclusion requires it to stop before the near edge.
+For exclusion this is equivalent to checking that the boundary point lies outside the circle (distance d ≥ r): a boundary point outside the circle is exactly one that falls short of the near edge.
 
-For exclusion this is equivalent to checking that the boundary point lies outside the circle (distance d ≥ r) — a boundary point outside the circle is exactly one that falls short of the near edge. For enclosure the threshold is the far edge, not the circle center, so the analogous check d ≤ r would be wrong: a boundary point can be inside the circle while only reaching the near side.
 
 ![Enclosure and exclusion: the circle's shadow along the ray and the two critical radii.](img/enclosure_geometry.svg)
 
-This works cheaply because the moving elements are circles. A star-vs-star intersection — needed if boundaries could also be arbitrary shapes — has no closed form: it requires comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is thus justified by runtime efficiency. Besides, it visually differentiates elements from sets.
+This works cheaply because the moving elements are circles. A star-vs-star intersection has no closed form: it would require comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is thus justified by runtime efficiency. Besides, it visually differentiates elements from sets.
 
 **Aesthetic objectives.** pushing toward compact shapes.
 
-* *Area* penalizes fat blobs
+* *Area* penalizes fat blobs or otherwise large shapes.
 
 * *Perimeter* penalizes elongated or wiggly outlines. 
 
-(Their interplay is easiest to see with circles held fixed: try turning the area weight up and watch the boundaries shrink to hug their members, or turn the perimeter weight up and watch them round off. In the movable variant these interact with the anchor term, and the balance between them is one of the more satisfying knobs to tune.)
+(Their interplay is easiest to see with circles held fixed: try turning the area weight up and watch the boundaries shrink to hug their members, or turn the perimeter weight up and watch them round off.)
 
 **Regularization.**
 
-* *Min-radius* keeps boundaries from collapsing to a point.
+* *Min-radius* keeps boundaries from collapsing to a point or (worse)radii from becoming negative.
 
 * *Smoothness* penalizes squared differences between adjacent radii, discouraging jagged outlines.
 
-* *Position anchor* penalizes circles for drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
+* A *convexity* term can be used to penalize concavities (*dents* in the shape).
+
+* *Position anchor* can prevent circles for drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
+
+### Implementation
+
+I have implemented all this in Python using [JAX](https://docs.jax.dev), allowing for automatic differentiation and Just-in-time (JIT)compilation. Automatic differentiation means you can focus on defining and parameterizing the objective terms without having to worry about gradients. JIT compilation means you can run a gradient-based optimizer (e.g. Adam) for a few thousand iterations in seconds rather than minutes.
+
+This is available in my `vizopt` package (mathematical optimization for data visualization, still in early stage), so you can also try it at home.
 
 
-Implementation:
-All terms are implemented in JAX, allowing for automatic differentiation and JIT-compilation. We run a gradient-based optimizer (e.g. Adam) for a few thousand iterations.
-
-Advanced topic 1: Representation
-(Splines, Fourier, simple)
-
-Advanced topic 2: Curriculum learning
-(Curriculum etc.)
-
-
-
-
-TODO How can you do it at home? Using the `vizopt` package
-
-*Interesting fact 4: Even where Euler diagrams are possible, there may be a better way to represent overlapping sets*
-(matrix etc.)
 
 ### Conclusions
 
 
-I have often advocated for the use of mathematical optimization in data visualization, but this is probably the best use case for it I have ever encountered.
-This is expensive but it is worth it.
+I have often advocated for the use of mathematical optimization in data visualization, but this is probably one of the best use case for it I have ever encountered.
+This mathematical optimization of radially convex sets does require some effort, both in terms of configuration (lots of weights to tune) and in terms of computation (up to half a minute of optimization for larger sets of sets) but it is worth it.
 
-TODO Wax lyrical about the foam.
+
+After months looking at 
+[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s wonderful tree of bird species in cross section and wondering how the preparation of such beautiful diagrams could be automated, it has been a delight coming closer to that goal. While I previously wrote about developing [*the worst language learning tool in the world](https://medium.com/language-lab/the-worst-language-learning-tool-in-the-world-41f755649854), I am much more self-gratulatory when it comes to these Euler diagrams.
+
+
+Nevertheless, do not assume an Euler diagram is always the best way to visualize overlapping sets.
+
+*Interesting fact 4: Even where Euler diagrams are possible, there may be a better way to represent overlapping sets*
+
+Matrix-based representations, node-link diagrams or overlays on other visualizations can also be used and are often preferable, especially if the number of sets and elements becomes large.
 
 
 
 
 ### References and related work
 
-* [Rottmann, P., Rodgers, P., Yan, X., Archambault, D., Wang, B., & Haunert, J. H. (2024, June). *Generating Euler diagrams through combinatorial optimization*. In Computer Graphics Forum (Vol. 43, No. 3, p. e15089).](https://onlinelibrary.wiley.com/doi/10.1111/cgf.15089)
+* [Rottmann, P., Rodgers, P., Yan, X., Archambault, D., Wang, B., & Haunert, J. H. (2024). Generating Euler diagrams through combinatorial optimization. In *Computer Graphics Forum* (Vol. 43, No. 3, p. e15089).](https://onlinelibrary.wiley.com/doi/10.1111/cgf.15089)
 
-[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s beautiful and inspiring tree of birds in cross section.
+* Alsallakh, B., Micallef, L., Aigner, W., Hauser, H., Miksch, S., & Rodgers, P. (2016). The state‐of‐the‐art of set visualization. In *Computer Graphics Forum* (Vol. 35, No. 1, pp. 234-260).
 
 *Interesting fact 5: Overlapping sets are the same as hypergraphs*
 
 
+## Appendix
 
+### Advanced topic 1: Representation
+
+The main text describes the simplest boundary representation: K radii at uniformly-spaced angles, one optimisation variable per angle. This discrete representation has maximum freedom, allowing any star-shaped polygon to be reached. Still, we are often not interested in *any* star-shaped polygon but rather tend prefer smooth polygons. While this can be enforced using the smoothness penalty term, alternative representations with built-in smoothness are also available:
+
+* A Fourier representation encodes the boundary as r(θ) = a₀ + Σ aₖcos(kθ) + bₖsin(kθ): with M harmonics you get a C∞-smooth curve in only 2M+1 parameters, and high-frequency wrinkles are structurally impossible.
+
+* A B-spline representation uses a uniform periodic cubic spline with N control points, giving C²-smooth boundaries and local control — moving one control point only reshapes a nearby arc, not the whole boundary.
+
+### Advanced topic 2: Curriculum learning
+
+(Curriculum etc.)
 
 ---
 
@@ -190,3 +204,9 @@ TODO Wax lyrical about the foam.
 A tight boundary would hug the contents and waste nothing. 
 
 .. but they cannot represent every set configuration, and some are mathematically impossible to express with axis-aligned regions (see [Appendix: Rectangles](#appendix-rectangles))
+
+ — no part of the boundary hides behind another
+
+ Sample K angles uniformly in [0, 2π), and the boundary becomes a vector of K radii — a 
+
+ (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
