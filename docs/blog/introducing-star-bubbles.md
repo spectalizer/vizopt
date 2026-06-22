@@ -9,9 +9,13 @@ TODO Add a nice animation somewhere near the beginning of the article.
 ## What are Euler diagrams?
 
 
-The mind naturally groups things.
-Bears are mammals. Mammals are animals. Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestral animals.
-Some programming languages are object-oriented, some are statically types, and many are both.
+The mind naturally groups things. Things are grouped hierarchically:
+Bears are mammals. Mammals are animals. 
+But hierarchies can also overlap:
+Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestral animals.
+
+England is part of Great Britain, which is part of the United Kingdom. Northern Ireland is also part of the United Kingdom, but geographically it is part of the Island called Ireland.
+
 Be it in linguistics or biology, geopolitics or mathematics, you will find sets, sets containing other sets, and sets intersecting in different ways.
 
 Euler diagrams are the visual representation of these *containment* and *intersection* relations.
@@ -175,6 +179,8 @@ Matrix-based representations, node-link diagrams or overlays on other visualizat
 
 *Interesting fact 5: Overlapping sets are the same as hypergraphs*
 
+...
+
 
 ## Appendix
 
@@ -188,9 +194,12 @@ The main text describes the simplest boundary representation: K radii at uniform
 
 ### Advanced topic 2: Curriculum learning
 
-(Curriculum etc.)
 
----
+Gradient descent is good at going downhill but bad at escaping local minima. For Euler diagrams, local minima often correspond to tangled layouts where circles belonging to the same set are separated by circles from sets to which they do not belong.
+
+A technique called *curriculum learning*, by analogy with the pedagogical idea of presenting easy material before hard material, can avoid or alleviate local minima by introducing terms gradually over the course of the optimization run. Hard constraint terms (exclusion, enclosure, circle collision) can start small to allow circles to escape bad configuration before ramping up. Meanwhile, one can use a set-attraction term pulling circles towards the sets they belong to as a *relaxation term* that initially helps the optimization to find a rough grouping, and is subsequently ramped down.
+
+
 
 ## TODOs
 
@@ -210,3 +219,5 @@ A tight boundary would hug the contents and waste nothing.
  Sample K angles uniformly in [0, 2π), and the boundary becomes a vector of K radii — a 
 
  (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
+
+ Some programming languages are object-oriented, some are statically types, and many are both.
