@@ -1,6 +1,6 @@
 # Introducing Stars-and-Bubbles Euler diagrams
 
-Smoother better visualization of overlapping sets using mathematical optimization.
+Smoother, better visualization of overlapping sets using mathematical optimization.
 
 TODO Add a nice animation somewhere near the beginning of the article.
 
@@ -12,7 +12,7 @@ TODO Add a nice animation somewhere near the beginning of the article.
 The mind naturally groups things. Things are grouped hierarchically:
 Bears are mammals. Mammals are animals. 
 But hierarchies can also overlap:
-Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestral animals.
+Bears are also terrestrial animals, which are also animals. Whales are mammals but not terrestrial animals.
 
 England is part of Great Britain, which is part of the United Kingdom. Northern Ireland is also part of the United Kingdom, but geographically it is part of the Island called Ireland.
 
@@ -71,7 +71,7 @@ Consider the simplest case: two equally-sized circles of radius *r*, enclosed in
 ### Rectangles
 
 
-Rectangles are another simple and often used candidate for set boundaries in Euler diagmras. They do pack more efficiently than circles, and can be quite useful in the context of treemaps (see below), but they do not offer much more freedom than circles and do not play too well with gradient-based optimization.
+Rectangles are another simple and often used candidate for set boundaries in Euler diagrams. They do pack more efficiently than circles, and can be quite useful in the context of treemaps (see below), but they do not offer much more freedom than circles and do not play too well with gradient-based optimization.
 The three-set example above already demonstrates the limited expressiveness of axis-aligned rectangles. What is more, rectangle-based objectives tend to be rougher than their counterparts with circles and other shapes. This has to do with the intersection area between two rectangles being a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness of the optimization landscape makes gradient-based optimization harder.
 
 
@@ -105,7 +105,7 @@ Because the boundary is a smooth function of its center and K radii, every desid
 
 ### Constraints and aesthetic terms
 
-The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and the positions of the element circles. The total loss is a weighted sum of terms which be grouped in three categories: hard constraints, esthetic objectives and regularization.
+The optimizer jointly adjusts two things: the shape of each boundary (its center and K radii) and the positions of the element circles. The total loss is a weighted sum of terms which can be grouped in three categories: hard constraints, esthetic objectives and regularization.
 
 **Hard constraints.** 
 
@@ -125,7 +125,9 @@ For exclusion this is equivalent to checking that the boundary point lies outsid
 
 This works cheaply because the moving elements are circles. A star-vs-star intersection has no closed form: it would require comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is thus justified by runtime efficiency. Besides, it visually differentiates elements from sets.
 
-**Aesthetic objectives.** pushing toward compact shapes.
+**Aesthetic objectives.** 
+
+These terms push toward compact shapes.
 
 * *Area* penalizes fat blobs or otherwise large shapes.
 
@@ -135,23 +137,23 @@ This works cheaply because the moving elements are circles. A star-vs-star inter
 
 **Regularization.**
 
-* *Min-radius* keeps boundaries from collapsing to a point or (worse)radii from becoming negative.
+* *Min-radius* keeps boundaries from collapsing to a point or (worse) radii from becoming negative.
 
 * *Smoothness* penalizes squared differences between adjacent radii, discouraging jagged outlines.
 
 * A *convexity* term can be used to penalize concavities (*dents* in the shape).
 
-* *Position anchor* can prevent circles for drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
+* *Position anchor* can prevent circles from drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
 
 ### Implementation
 
-I have implemented all this in Python using [JAX](https://docs.jax.dev), allowing for automatic differentiation and Just-in-time (JIT)compilation. Automatic differentiation means you can focus on defining and parameterizing the objective terms without having to worry about gradients. JIT compilation means you can run a gradient-based optimizer (e.g. Adam) for a few thousand iterations in seconds rather than minutes.
+I have implemented all this in Python using [JAX](https://docs.jax.dev), allowing for automatic differentiation and Just-in-time (JIT) compilation. Automatic differentiation means you can focus on defining and parameterizing the objective terms without having to worry about gradients. JIT compilation means you can run a gradient-based optimizer (e.g. Adam) for a few thousand iterations in seconds rather than minutes.
 
 This is available in my `vizopt` package (mathematical optimization for data visualization, still in early stage), so you can also try it at home.
 
 
 
-### Conclusions
+## Conclusions
 
 
 I have often advocated for the use of mathematical optimization in data visualization, but this is probably one of the best use case for it I have ever encountered.
@@ -159,7 +161,7 @@ This mathematical optimization of radially convex sets does require some effort,
 
 
 After months looking at 
-[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s wonderful tree of bird species in cross section and wondering how the preparation of such beautiful diagrams could be automated, it has been a delight coming closer to that goal. While I previously wrote about developing [*the worst language learning tool in the world](https://medium.com/language-lab/the-worst-language-learning-tool-in-the-world-41f755649854), I am much more self-gratulatory when it comes to these Euler diagrams.
+[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s wonderful tree of bird species in cross section and wondering how the preparation of such beautiful diagrams could be automated, it has been a delight coming closer to that goal. While I previously wrote about developing [*the worst language learning tool in the world*](https://medium.com/language-lab/the-worst-language-learning-tool-in-the-world-41f755649854), I am much more self-congratulatory when it comes to these Euler diagrams.
 
 
 Nevertheless, do not assume an Euler diagram is always the best way to visualize overlapping sets.
@@ -171,7 +173,7 @@ Matrix-based representations, node-link diagrams or overlays on other visualizat
 
 
 
-### References and related work
+## References and related work
 
 * [Rottmann, P., Rodgers, P., Yan, X., Archambault, D., Wang, B., & Haunert, J. H. (2024). Generating Euler diagrams through combinatorial optimization. In *Computer Graphics Forum* (Vol. 43, No. 3, p. e15089).](https://onlinelibrary.wiley.com/doi/10.1111/cgf.15089)
 
@@ -186,7 +188,7 @@ Matrix-based representations, node-link diagrams or overlays on other visualizat
 
 ### Advanced topic 1: Representation
 
-The main text describes the simplest boundary representation: K radii at uniformly-spaced angles, one optimisation variable per angle. This discrete representation has maximum freedom, allowing any star-shaped polygon to be reached. Still, we are often not interested in *any* star-shaped polygon but rather tend prefer smooth polygons. While this can be enforced using the smoothness penalty term, alternative representations with built-in smoothness are also available:
+The main text describes the simplest boundary representation: K radii at uniformly-spaced angles, one optimisation variable per angle. This discrete representation has maximum freedom, allowing any star-shaped polygon to be reached. Still, we are often not interested in *any* star-shaped polygon but rather tend to prefer smooth polygons. While this can be enforced using the smoothness penalty term, alternative representations with built-in smoothness are also available:
 
 * A Fourier representation encodes the boundary as r(θ) = a₀ + Σ aₖcos(kθ) + bₖsin(kθ): with M harmonics you get a C∞-smooth curve in only 2M+1 parameters, and high-frequency wrinkles are structurally impossible.
 
