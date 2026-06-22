@@ -35,22 +35,24 @@ def draw(ax, cx, cy, r, depth, direction="h", reduce_factor=0.9):
             draw(ax, cx, cy + r / 2, cr, depth - 1, nd)
 
 
-fig, ax = plt.subplots(figsize=(6, 6))
+fig, ax = plt.subplots(figsize=(4, 4))
 fig.patch.set_facecolor("white")
 ax.set_facecolor("white")
 
-draw(ax, 0, 0, ROOT_R, DEPTH)
+reduce_factor = 0.9
+draw(ax, 0, 0, ROOT_R, DEPTH, reduce_factor=reduce_factor)
 
 n_leaves = 2**DEPTH
-eff = n_leaves / ROOT_R**2  # leaf area / root area (r=1 at leaves)
-ax.text(
-    0,
-    -ROOT_R - 1.3,
-    f"Leaf circles cover {eff:.0%} of the enclosing area",
-    ha="center",
-    fontsize=10,
-    color="#374151",
-)
+eff = n_leaves * (reduce_factor / ROOT_R) ** 2  # leaf area / root area (r=1 at leaves)
+if False:
+    ax.text(
+        0,
+        -ROOT_R - 1.3,
+        f"Leaf circles cover {eff:.0%} of the enclosing area",
+        ha="center",
+        fontsize=10,
+        color="#374151",
+    )
 
 pad = 1.5
 ax.set_xlim(-ROOT_R - pad, ROOT_R + pad)

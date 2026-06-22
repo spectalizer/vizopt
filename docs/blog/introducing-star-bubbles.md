@@ -4,6 +4,8 @@ Smoother, better visualization of overlapping sets using mathematical optimizati
 
 TODO Add a nice animation somewhere near the beginning of the article.
 
+![An Euler diagram representing a very limited animal taxonomy.](img/euler_animal_taxonomy.svg)
+*An Euler diagram representing a very limited animal taxonomy.*
 
 
 ## What are Euler diagrams?
@@ -49,6 +51,7 @@ One can specify the requirements more precisely:
 See e.g. Rottmann et al. 2024 in the reference list. Also, which set configurations can be represented by an Euler diagram depends on the shapes you use. Using only rectangles means you could not even draw an Euler diagram for the 3 intersecting sets in the Figure below.
 
 ![Euler diagram representing three simple sets over three elements.](img/simple_three_sets.svg)
+
 *Euler diagram representing three simple sets over three elements. Try drawing the same with axis-aligned rectangles only.*
 
 
@@ -66,7 +69,9 @@ A typical instantiation of Euler diagrams uses circles, but circles are rather r
 
 Consider the simplest case: two equally-sized circles of radius *r*, enclosed in the smallest circle that contains both. Pack them side by side and the enclosing circle has radius *2r*. Its area is *4πr²*, while the two inner circles together cover only *2πr²*: half the enclosing region is empty (more with some space between enclosed and enclosing circles), belonging to neither subset. With multiple levels of nesting this compounds: each layer inflates the container, but the added space is mostly dead area that carries no information. 
 
-![Three levels of binary nesting: leaf circles cover only 9% of the enclosing area. Even without offset between parent and children circles, leaf circles would cover at most 12.5% of the enclosing area.](img/circle_nesting.svg)
+![Circle-based Euler diagrams with three levels of binary nesting.](img/circle_nesting.svg)
+
+*Circle-based Euler diagrams with three levels of binary nesting: leaf circles cover only 9% of the enclosing area. Even without offset between parent and children circles, leaf circles would cover at most 12.5% of the enclosing area.*
 
 ### Rectangles
 
@@ -80,7 +85,9 @@ The three-set example above already demonstrates the limited expressiveness of a
 With some imagination, you can see that treemaps are just tightly packed Euler diagrams for specific sets of sets.
 If you took the animal examples and considered only phylogenetic relations, you should end up with a strictly hierarchical set of sets, which would be equivalent to a tree (with the elements as leaves). Representing parent-child relationships in trees geometrically is the idea of treemaps. 
 
-![Three levels of binary nesting with rectangles: leaf rectangles now cover more than two thirds of the enclosing area, and they could cover 100% without offset between parent and children rectangles.](img/rectangle_nesting.svg)
+![Rectangle-based Euler diagram with three levels of binary nesting.](img/rectangle_nesting.svg)
+
+*Rectangle-based Euler diagram with three levels of binary nesting, i.e. treemap: leaf rectangles now cover more than two thirds (73%) of the enclosing area, and they could cover 100% without offset between parent and children rectangles.*
 
 Given the limitations of circles and rectangles we just discussed, I spent a lot of time asking myself what better shape families could be. Polygons are an obvious generalization of rectangles, but they turn out to be almost **too flexible**: a polygon parameterized with *(x_i, y_i)* coordinates can intersect itself. This is when I remembered radially convex sets.
 
@@ -144,6 +151,11 @@ These terms push toward compact shapes.
 * A *convexity* term can be used to penalize concavities (*dents* in the shape).
 
 * *Position anchor* can prevent circles from drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
+
+
+![Different objective terms...](img/euler_different_objective_terms.svg)
+
+*Different objective terms....*
 
 ### Implementation
 

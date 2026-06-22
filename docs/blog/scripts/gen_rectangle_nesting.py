@@ -52,14 +52,15 @@ draw(ax, -ROOT_W / 2, -ROOT_H / 2, ROOT_W, ROOT_H, DEPTH)
 
 n_leaves = 2**DEPTH
 eff = REDUCE**DEPTH
-ax.text(
-    0,
-    -ROOT_H / 2 - 1.3,
-    f"Leaf rectangles cover {eff:.0%} of the enclosing area",
-    ha="center",
-    fontsize=10,
-    color="#374151",
-)
+if False:
+    ax.text(
+        0,
+        -ROOT_H / 2 - 1.3,
+        f"Leaf rectangles cover {eff:.0%} of the enclosing area",
+        ha="center",
+        fontsize=10,
+        color="#374151",
+    )
 
 pad = 1.5
 ax.set_xlim(-ROOT_W / 2 - pad, ROOT_W / 2 + pad)
