@@ -31,10 +31,7 @@ The shape representing a subset of a given set is contained within the shape rep
 No, we are not talking about Venn diagrams here. Venn diagrams represent every possible set intersection, including empty intersections.
 
 
-Can we be more precise?
-First off, one can distinguish two types of Euler diagrams: those showing individual elements (which is possible for small discrete sets) and those that only represent the sets. This article focuses on the first type.
-
-One can specify the requirements more precisely:
+One can distinguish two types of Euler diagrams: those showing individual elements (which is possible for small discrete sets) and those that only represent the sets. This article focuses on the first type. We can now state the requirements more precisely:
 
 * **Shape topology**: The closed shape representing each set should delimit a connected region (no disjoint pieces) without any hole. What is more, the curve delimiting this region should be *simple* in the sense of not intersecting itself. The shape may further be restricted to families such as polygons, circles or ellipses, and we will come back to this topic.
 
@@ -44,20 +41,18 @@ One can specify the requirements more precisely:
 
 * **Area proportionality** (optional but desirable): the area of a region should be proportional to the *size* of the corresponding set, i.e. the number of elements it contains in the case of discrete sets.
 
-* Additional requirements can be formulated, including: *two shapes should not run concurrently*, or *two intersecting curves should cross, not just touch* etc. See
+* Additional requirements can be formulated, including: *two shapes should not run concurrently*, or *two intersecting curves should cross, not just touch* etc. See Rottmann et al. (2024).
 
 *Interesting fact 2: It is impossible to draw Euler diagrams for certain set configurations.*
 
-See e.g. Rottmann et al. 2024 in the reference list. Also, which set configurations can be represented by an Euler diagram depends on the shapes you use. Using only rectangles means you could not even draw an Euler diagram for the 3 intersecting sets in the Figure below.
+Some set systems simply cannot be drawn as Euler diagrams with connected, non-self-intersecting curves, no matter how hard you try, and this can be proven mathematically. See e.g. Rottmann et al. (2024) in the reference list for a formal treatment. Which set systems are drawable also depends on the shapes you use. Using only rectangles means you could not even draw an Euler diagram for the 3 intersecting sets in the Figure below.
 
 ![Euler diagram representing three simple sets over three elements.](img/simple_three_sets.svg)
 
 *Euler diagram representing three simple sets over three elements. Try drawing the same with axis-aligned rectangles only.*
 
 
-
 ## Searching for the Best Primitives
-(the search for the right primitives/parameterization)
 
 While *closed shape* in the above definition is a wonderfully general description, applying to circles and rectangles as well as more complex polygonal and curved regions of the plane, this generality is not really helpful when it comes to defining an algorithm that draws actual Euler diagrams.
 
@@ -77,7 +72,9 @@ Consider the simplest case: two equally-sized circles of radius *r*, enclosed in
 
 
 Rectangles are another simple and often used candidate for set boundaries in Euler diagrams. They do pack more efficiently than circles, and can be quite useful in the context of treemaps (see below), but they do not offer much more freedom than circles and do not play too well with gradient-based optimization.
-The three-set example above already demonstrates the limited expressiveness of axis-aligned rectangles. What is more, rectangle-based objectives tend to be rougher than their counterparts with circles and other shapes. This has to do with the intersection area between two rectangles being a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness of the optimization landscape makes gradient-based optimization harder.
+The three-set example above already demonstrates the limited expressiveness of axis-aligned rectangles.
+
+What is more, rectangle-based objectives tend to be rougher than their counterparts with circles and other shapes. This has to do with the intersection area between two rectangles being a piecewise-linear function of position, with kinks wherever an edge crosses another edge. This roughness of the optimization landscape makes gradient-based optimization harder.
 
 
 *Interesting fact 3: Euler diagrams are a superset of treemaps*
@@ -93,7 +90,7 @@ Given the limitations of circles and rectangles we just discussed, I spent a lot
 
 ## Introducing radially convex sets
 
-A region is *radially convex* (or *star-shaped*) if there is a center point from which every point on the boundary is directly visible. Imagine standing at the center of a room: if you can see every wall from that single spot, the room is star-shaped. Every convex shape qualifies, but so do many non-convex ones: a crescent does not, a star polygon does.
+A region is *radially convex* if there is a center point from which every point on the boundary is directly visible. Imagine standing at the center of a room: if you can see every wall from that single spot, the room is star-shaped. Every convex shape qualifies, but so do many non-convex ones, including pointed stars, which is why radially convex sets are also called *star-shaped*.
 
 This relates to the [*art gallery problem*](https://en.wikipedia.org/wiki/Art_gallery_problem), which asks how many guards are needed to watch every point in a room. For a star-shaped room, one guard standing at the center suffices.
 
@@ -116,7 +113,7 @@ The optimizer jointly adjusts two things: the shape of each boundary (its center
 
 **Hard constraints.** 
 
-These constraints are non-negotiable and carry high weights. Violations are penalized both quadratically (very high penalties for large violations) and linearly (already significant penalties for small violations).
+These constraints are non-negotiable and carry high weights. Violations are penalized both linearly (already significant penalties for small violations) and quadratically (harsh penalties for large violations).
 
 * *Enclosure* checks that every member circle is inside its boundary: for each ray angle, it computes the minimum radius that would just graze the circle at that angle, and penalizes any shortfall.
 
@@ -124,13 +121,16 @@ These constraints are non-negotiable and carry high weights. Violations are pena
 
 * *Circle collision* prevents circles from overlapping each other as they move.
 
-*How do the enclosure and exclusion checks work?* For each angle θ, project the vector from the set center to the circle center onto the ray: the along-ray component is *tang* and the perpendicular offset is *perp*. The circle's shadow along that ray spans from *tang* − √(r² − perp²) (near edge) to *tang* + √(r² − perp²) (far edge). Enclosure requires the boundary radius to reach the far edge; exclusion requires it to stop before the near edge.
-For exclusion this is equivalent to checking that the boundary point lies outside the circle (distance d ≥ r): a boundary point outside the circle is exactly one that falls short of the near edge.
+*How do the enclosure and exclusion checks work?* 
+
+In plain terms: enclosure means the boundary of the set must reach past the far side of the circle along each ray; exclusion means it must stop before the near side.
+
+More precisely: for each angle θ, project the vector from the set center to the circle center onto the ray: the along-ray component is *tang* and the perpendicular offset is *perp*. The circle's shadow along that ray spans from *tang* − √(r² − perp²) (near edge) to *tang* + √(r² − perp²) (far edge). Enclosure requires the boundary radius to reach the far edge; exclusion requires it to stop before the near edge.
 
 
 ![Enclosure and exclusion: the circle's shadow along the ray and the two critical radii.](img/enclosure_geometry.svg)
 
-This works cheaply because the moving elements are circles. A star-vs-star intersection has no closed form: it would require comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is thus justified by runtime efficiency. Besides, it visually differentiates elements from sets.
+This works efficiently because the moving elements are circles. A star-vs-star intersection has no closed form: it would require comparing two full polygons, an operation roughly K times heavier per pair. Keeping the circles as circles and only the boundaries as stars is thus justified by runtime efficiency. Besides, it visually differentiates elements from sets.
 
 **Aesthetic objectives.** 
 
@@ -150,7 +150,7 @@ These terms push toward compact shapes.
 
 * A *convexity* term can be used to penalize concavities (*dents* in the shape).
 
-* *Position anchor* can prevent circles from drifting far from their initial positions, which may (e.g. in the case geographic entities) or may not carry meaning.
+* *Position anchor* can prevent circles from drifting far from their initial positions, which may (e.g. in the case of geographic entities) or may not carry meaning.
 
 
 ![Different objective terms...](img/euler_different_objective_terms.svg)
@@ -164,7 +164,6 @@ I have implemented all this in Python using [JAX](https://docs.jax.dev), allowin
 This is available in my `vizopt` package (mathematical optimization for data visualization, still in early stage), so you can also try it at home.
 
 
-
 ## Conclusions
 
 
@@ -173,7 +172,7 @@ This mathematical optimization of radially convex sets does require some effort,
 
 
 After months looking at 
-[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s wonderful tree of bird species in cross section and wondering how the preparation of such beautiful diagrams could be automated, it has been a delight coming closer to that goal. While I previously wrote about developing [*the worst language learning tool in the world*](https://medium.com/language-lab/the-worst-language-learning-tool-in-the-world-41f755649854), I am much more self-congratulatory when it comes to these Euler diagrams.
+[Max Fürbringer](https://en.wikipedia.org/wiki/Max_F%C3%BCrbringer)'s wonderful tree of bird species in cross section and wondering how the preparation of such beautiful diagrams could be automated, it has been a delight coming closer to that goal. 
 
 
 Nevertheless, do not assume an Euler diagram is always the best way to visualize overlapping sets.
@@ -193,8 +192,7 @@ Matrix-based representations, node-link diagrams or overlays on other visualizat
 
 *Interesting fact 5: Overlapping sets are the same as hypergraphs*
 
-...
-
+*Hypergraphs* generalize the concept of a graph, by allowing an edge (*hyperedge*) to connect any number of nodes instead of two nodes for a normal graph. A hyperedge connects nodes just as a set can contain elements. The hypergraph notation can allow useful mathematical tools to be applied, as in Rottmann et al.
 
 ## Appendix
 
@@ -235,3 +233,5 @@ A tight boundary would hug the contents and waste nothing.
  (This is also why rectangles lose: their intersection area is a piecewise-linear function with gradient discontinuities at every edge crossing, making the landscape rough. Star polygons stay smooth throughout.)
 
  Some programming languages are object-oriented, some are statically types, and many are both.
+
+ While I previously wrote about developing [*the worst language learning tool in the world*](https://medium.com/language-lab/the-worst-language-learning-tool-in-the-world-41f755649854), I am much more self-congratulatory when it comes to these Euler diagrams.
