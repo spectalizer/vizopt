@@ -1,6 +1,6 @@
-# Introducing Stars-and-Bubbles Euler diagrams
+# From Circles to Stars: Euler Diagrams with Optimized Radially Convex Boundaries
 
-Smoother, better visualization of overlapping sets using mathematical optimization.
+*Smoother, better visualization of overlapping sets using mathematical optimization.*
 
 TODO Add a nice animation somewhere near the beginning of the article.
 
