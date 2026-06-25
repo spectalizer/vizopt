@@ -2,8 +2,170 @@
 
 Guidance for AI agents working in this repository.
 
-## API Design Principles
+## Project Overview
 
-**Prioritize long-term API quality over short-term convenience.**
+**vizopt** is a mathematical optimization library for data visualization. It provides a general framework for defining and solving layout optimization problems (e.g., star-shaped set boundaries, label placement) using JAX for automatic differentiation and JIT compilation.
+
+## Development Commands
+
+This project uses `uv` as the package manager and build system.
+
+```bash
+# Install dependencies
+uv sync
+
+# Format code with black
+uv run black .
+
+# Run tests (when tests are added)
+uv run pytest
+
+# Run Jupyter notebooks for examples
+uv run jupyter notebook examples/optimize_label_positions.ipynb
+uv run jupyter notebook examples/examples_with_bubbles.ipynb
+```
+
+## Architecture
+
+### Core Components
+
+1. **[base.py](src/vizopt/base.py)** - Core abstractions for the optimization framework
+   - `ObjectiveTerm`: A named, weighted term in a composite loss function (name, compute, multiplier)
+   - `build_objective()`: Combines a list of `ObjectiveTerm`s into a single `fun(optim_vars) -> scalar`
+   - `OptimizationProblemTemplate`: A reusable template for a class of problems — holds terms, an `initialize` function, optional Pydantic `input_params_class` for validation, and optional `plot_configuration`
+   - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.optimize()` which returns an `OptimizationResult` (fields: `optim_vars`, `history`, `final_loss`)
+
+2. **[jaxopt.py](src/vizopt/jaxopt.py)** - Generic gradient descent optimizer
+   - `optimize_gradient_descent()`: Wraps Optax's Adam optimizer with JAX JIT compilation
+   - Low-level entry point; normally called indirectly via `OptimizationProblem.optimize()`
+
+3. **[components.py](src/vizopt/components.py)** - Reusable JAX loss components
+   - `multiple_bbox_intersections()`: Vectorized pairwise bounding-box intersection areas; shape `(n, 2, 2)` inputs, returns `(n, m)` matrix
+
+4. **[animation.py](src/vizopt/animation.py)** - Optimization progress visualization
+   - `SnapshotCallback`: Callback that saves numpy copies of `optim_vars` at regular intervals into `.snapshots`
+   - `animate()`: Renders each snapshot via `problem.plot_configuration` and returns a `FuncAnimation`
+
+5. **[radially_convex.py](src/vizopt/radially_convex.py)** - Star-shaped (radially convex) set optimizer
+   - `optimize_multiple_radially_convex_sets()`: Finds star-shaped boundaries enclosing each set of circles while minimizing area/perimeter and avoiding overlap with other sets
+   - `optimize_multiple_radially_convex_sets_with_movable_circles()`: Same, but circle positions are also optimization variables
+   - Each boundary is represented by a center + K radii at uniformly-spaced angles
+
+6. **[schedules.py](src/vizopt/schedules.py)** - Loss term weight scheduling
+   - `warmup()` / `cooldown()`: JAX-compatible schedule factories that ramp a term's weight up or down over a fraction of the run
+   - `make_term_schedules()`: Builds a `term_schedules` dict from a flat parameter dict for use with `radially_convex` optimizers
+
+### Key Architectural Concepts
+
+#### General Optimization Workflow
+
+The framework separates *problem definition* from *problem instantiation*:
+
+1. Define `ObjectiveTerm`s (loss components with names, compute functions, and multipliers)
+2. Create an `OptimizationProblemTemplate` with those terms, an `initialize` function, optional Pydantic class for input validation, and optional `plot_configuration`
+3. Call `template.instantiate(input_parameters)` → `OptimizationProblem`
+4. Call `problem.optimize(n_iters, learning_rate, callback, track_every)` → `OptimizationResult`
+
+`OptimizationResult` has fields `optim_vars`, `history`, and `final_loss`. `history` is a list of dicts with keys `"iteration"`, `"total"`, and one key per term name (weighted values), recorded every `track_every` iterations.
+
+#### Input Parameters and Validation
+
+Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to loss functions. If `input_params_class` is set on a template, `model_validate` is called at instantiation time for type/shape checking (Pydantic), but the dict itself flows through unmodified.
+
+#### JAX-Specific Design Patterns
+
+- **Pre-processing**: All non-JAX data (e.g., NetworkX graphs) is converted to numpy arrays before optimization to avoid Python loops in JAX-traced functions
+- **Vectorization**: Loss components use fully vectorized array operations rather than loops
+- **JIT compilation**: The composite loss function built by `build_objective()` is JIT-compiled via `jaxopt.optimize_gradient_descent()`
+- **Parameter dictionaries**: `optim_vars` are plain dicts (e.g., `{"rectangle_positions": ...}`)
+
+#### Variable Normalization
+
+High-level functions can pass a `var_scales` dict to `OptimizationProblemTemplate.instantiate()` to normalize optimization variables. The optimizer then works in a scaled space while all loss terms and callbacks always receive physical-space values.
+
+**Mechanism** (all in `base.py`):
+- `build_objective()` wraps the loss: `physical_vars[k] = optim_vars[k] * var_scales[k]` before calling any term
+- `optimize()` divides initial variables by their scales before the optimizer loop, and multiplies the result back afterward
+- The `tracking_callback` un-normalizes before computing per-term history and before forwarding to the user callback — so `SnapshotCallback` and the `optim_vars_panel` always see physical values
+
+**Convention**: scale values may be scalars or arrays. Arrays allow per-axis scaling (e.g. `[scale_x, scale_y]` for 2D position variables, which broadcast over `(N, 2)` arrays). Keys absent from `var_scales` are left unscaled.
+
+**In `stars_vs_circles.py`**: scales are computed from the input circles and applied per variable group:
+- `"centers"` and `"circle_positions"`: `[max(std_x, mean_r), max(std_y, mean_r)]` — the `max` guards against the degenerate single-circle case
+- radii-like variables (`"radii"`, `"fourier_coeffs"`, `"bspline_ctrl"`): `mean(initial_radii)` — detected by iterating `init_vars.keys()` and treating every non-`"centers"` key as radii-scale, so all three representations are handled without naming them explicitly
+
+#### Radially Convex Sets (radially_convex.py)
+
+`radially_convex.py` implements circle-set boundary optimization on top of the general framework:
+
+- Input: N circles (cx, cy, r) and S subsets; each subset gets its own star-shaped boundary
+- Multi-objective loss: enclosure, exclusion (no overlap with non-members), area, perimeter, smoothness, and optional terms (circle collision, position anchor, set attraction, bounding box)
+- Two variants: fixed circle positions or jointly optimized circle positions
+- Boundaries are parametrized as center + K radii at uniformly-spaced angles (star polygon)
+
+### Data Flow
+
+1. Define terms and template (problem class definition)
+2. Call `template.instantiate(input_parameters)` — validates inputs, creates `OptimizationProblem`
+3. Call `problem.optimize()` — initializes vars, JIT-compiles loss, runs Adam, records history
+4. Optionally use `SnapshotCallback` + `animate()` for animated visualization
+
+## Python Environment
+
+- Requires Python 3.13+
+- Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas, pydantic
+- Dev dependencies: black (formatting), pytest (testing), ipykernel (notebooks)
+
+## Documentation
+
+The docs site is built with [Zensical](https://zensical.org) (configured in `zensical.toml`) and the API reference is auto-generated from docstrings via [mkdocstrings](https://mkdocstrings.github.io).
+
+```bash
+# Install docs dependencies
+uv add mkdocstrings-python
+
+# Serve docs locally
+uv run zensical serve
+
+# Build static site
+uv run zensical build
+```
+
+- Docs source lives in `docs/`; `docs/api.md` uses `::: vizopt.module.Symbol` directives — do not write API docs by hand there
+- All public functions and classes must have Google-style docstrings so mkdocstrings can render them
+
+## Graph Conventions
+
+When a NetworkX `DiGraph` encodes a set hierarchy or containment relationship, the project-wide convention is:
+
+- **Edge direction: parent → child** — an edge `(u, v)` means `v` is a member of (contained in) `u`.
+- **Leaves** (`out_degree == 0`): terminal elements with no children.
+- **Internal nodes** (`out_degree > 0`): composite sets or containers.
+- **Membership**: a leaf belongs to a set if it is reachable from the set via `nx.descendants`.
+
+## Style guide
+
+- Google-style docstrings, no double backticks, no repetition of type hints in docstrings
+- No imports inside functions unless genuinely needed (e.g. lazy imports for optional/heavy deps like `matplotlib`)
+
+## General guidelines
+
+### Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+
+### Add unit tests when you add functionality
+
+Unit tests in the `tests` folder, using pytest.
+
+
+### Prioritize long-term API quality over short-term convenience.
 
 This project is in early development. Breaking changes are acceptable — refactor callers when needed rather than compromising the API to preserve backwards compatibility. Named return objects (e.g. `OptimizationResult`) are preferred over positional tuples even when they require migrating many call sites.
