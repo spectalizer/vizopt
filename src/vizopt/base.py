@@ -1,5 +1,6 @@
 """Base classes"""
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
@@ -26,6 +27,7 @@ class OptimConfig:
             loss is returned. Default 1 (single run).
         seed: Base random seed passed to ``initialize``. Restart ``i``
             receives ``seed + i``.
+        track_every: Record per-term history every this many iterations.
     """
 
     n_iters: int = 1000
@@ -35,6 +37,7 @@ class OptimConfig:
     decay_lr_to: float = 0.1
     n_restarts: int = 1
     seed: int = 0
+    track_every: int = 10
 
 
 @dataclass
@@ -255,7 +258,6 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         self,
         optim_config: OptimConfig | None = None,
         callback: Callback | None = None,
-        track_every: int = 10,
     ) -> "OptimizationResult[OptimVars]":
         """Run gradient descent to minimize the objective.
 
@@ -265,10 +267,10 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
 
         Args:
             optim_config: Optimizer settings (iterations, learning rate, seeds,
-                restarts). Uses [OptimConfig][vizopt.base.OptimConfig] defaults when ``None``.
+                restarts, track_every). Uses [OptimConfig][vizopt.base.OptimConfig]
+                defaults when ``None``.
             callback: Optional callback called after each iteration with
                 (iteration, loss, optim_vars, grads).
-            track_every: Record per-term history every this many iterations.
 
         Returns:
             An [OptimizationResult][vizopt.base.OptimizationResult] with the
@@ -322,7 +324,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                     }
                 else:
                     physical_vars = optim_vars
-                if (i_iter % track_every == 0) or i_iter == config.n_iters - 1:
+                if (i_iter % config.track_every == 0) or i_iter == config.n_iters - 1:
                     record: dict = {"iteration": i_iter, "total": float(loss_value)}
                     step = jnp.int32(i_iter)
                     term_values = _compute_all_terms(physical_vars)
@@ -393,3 +395,48 @@ def default_print_callback(i_iter: int, loss_value: Array, *_: Any) -> None:
     """Print the loss value after every nth optimization iteration"""
     if i_iter % 100 == 0:
         print(f"Iteration {i_iter}: loss = {loss_value}")
+
+
+class VizOptimizer(ABC):
+    """Base class for user-facing visualization optimizers.
+
+    Subclasses implement :meth:`_build_problem` to turn stored hyperparameters
+    into a configured :class:`OptimizationProblem`. The base class handles the
+    optimize → plot lifecycle and stores fitted state in ``problem_`` and
+    ``result_`` after :meth:`optimize` is called.
+    """
+
+    @abstractmethod
+    def _build_problem(self) -> OptimizationProblem:
+        """Build an :class:`OptimizationProblem` from stored hyperparameters."""
+        ...
+
+    def optimize(
+        self,
+        optim_config: OptimConfig | None = None,
+        callback: Callback | None = None,
+    ) -> OptimizationResult:
+        """Build the problem and run gradient descent.
+
+        Args:
+            optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults
+                when ``None``.
+            callback: Optional callback ``(iteration, loss, optim_vars, grads)``.
+
+        Returns:
+            An :class:`OptimizationResult` with optimized variables, per-term
+            history, and final loss.
+        """
+        self.problem_: OptimizationProblem = self._build_problem()
+        self.result_: OptimizationResult = self.problem_.optimize(optim_config, callback=callback)
+        return self.result_
+
+    def plot(self, **kwargs) -> None:
+        """Plot the last optimization result.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "problem_"):
+            raise ValueError("No result yet — call optimize() first.")
+        self.problem_.plot(**kwargs)

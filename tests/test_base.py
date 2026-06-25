@@ -177,7 +177,7 @@ def test_optimize_minimizes():
 
 def test_optimize_history_structure():
     result = _simple_problem().optimize(
-        OptimConfig(n_iters=20, learning_rate=0.01), track_every=5, callback=_NO_PRINT
+        OptimConfig(n_iters=20, learning_rate=0.01, track_every=5), callback=_NO_PRINT
     )
     assert len(result.history) == 5  # steps 0, 5, 10, 15, 19 (final)
     for record in result.history:
@@ -188,7 +188,7 @@ def test_optimize_history_structure():
 
 def test_optimize_track_every():
     result = _simple_problem().optimize(
-        OptimConfig(n_iters=100, learning_rate=0.01), track_every=25, callback=_NO_PRINT
+        OptimConfig(n_iters=100, learning_rate=0.01, track_every=25), callback=_NO_PRINT
     )
     assert [r["iteration"] for r in result.history] == [0, 25, 50, 75, 99]
 

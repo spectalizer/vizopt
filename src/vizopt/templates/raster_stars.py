@@ -255,7 +255,6 @@ def optimize_star_domains_raster(
     temperature=0.05,
     optim_config=None,
     callback=None,
-    track_every=100,
 ):
     """Optimise pure star domains using a raster-based collision loss for exclusion.
 
@@ -377,9 +376,7 @@ def optimize_star_domains_raster(
         svg_configuration=representation.make_svg_configuration(),
     ).instantiate(input_parameters)
 
-    result = problem.optimize(
-        optim_config, callback=callback, track_every=track_every
-    )
+    result = problem.optimize(optim_config, callback=callback)
 
     radii_arr = np.array(representation.to_radii(result.optim_vars, angles_jnp))
     results = [
