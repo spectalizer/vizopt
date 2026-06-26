@@ -153,23 +153,62 @@ def draw_panel(ax, title, theta_deg, tang, perp, r, boundary_r):
     rdim = 0.38 * ray_perp
     rdim_ext = 0.47 * ray_perp
     for pt in [np.zeros(2), bp]:
-        ax.plot([pt[0], pt[0] + rdim_ext[0]], [pt[1], pt[1] + rdim_ext[1]],
-                "-", color=ray_col, lw=0.7, alpha=0.4, zorder=4)
-    ax.annotate("", xy=bp + rdim, xytext=rdim,
-                arrowprops={"arrowstyle": "<->", "color": ray_col, "lw": 1.2,
-                            "shrinkA": 0, "shrinkB": 0})
+        ax.plot(
+            [pt[0], pt[0] + rdim_ext[0]],
+            [pt[1], pt[1] + rdim_ext[1]],
+            "-",
+            color=ray_col,
+            lw=0.7,
+            alpha=0.4,
+            zorder=4,
+        )
+    ax.annotate(
+        "",
+        xy=bp + rdim,
+        xytext=rdim,
+        arrowprops={
+            "arrowstyle": "<->",
+            "color": ray_col,
+            "lw": 1.2,
+            "shrinkA": 0,
+            "shrinkB": 0,
+        },
+    )
     rtheta_mid = 0.5 * boundary_r * ray_dir + rdim + 0.15 * ray_perp
-    ax.text(*rtheta_mid, "r(θ)", ha="center", va="bottom", fontsize=fs + 0.5,
-            color=ray_col, style="italic")
+    ax.text(
+        *rtheta_mid,
+        "r(θ)",
+        ha="center",
+        va="bottom",
+        fontsize=fs + 0.5,
+        color=ray_col,
+        style="italic",
+    )
 
     # tang — dimension line offset below the ray, with witness line at foot
     tdim = -0.32 * ray_perp
     tdim_ext = -0.41 * ray_perp
-    ax.plot([foot[0], foot[0] + tdim_ext[0]], [foot[1], foot[1] + tdim_ext[1]],
-            "-", color=dim_col, lw=0.7, alpha=0.4, zorder=4)
-    ax.annotate("", xy=foot + tdim, xytext=tdim,
-                arrowprops={"arrowstyle": "<->", "color": dim_col, "lw": 1.0,
-                            "shrinkA": 0, "shrinkB": 0})
+    ax.plot(
+        [foot[0], foot[0] + tdim_ext[0]],
+        [foot[1], foot[1] + tdim_ext[1]],
+        "-",
+        color=dim_col,
+        lw=0.7,
+        alpha=0.4,
+        zorder=4,
+    )
+    ax.annotate(
+        "",
+        xy=foot + tdim,
+        xytext=tdim,
+        arrowprops={
+            "arrowstyle": "<->",
+            "color": dim_col,
+            "lw": 1.0,
+            "shrinkA": 0,
+            "shrinkB": 0,
+        },
+    )
     tang_mid = 0.5 * tang * ray_dir + tdim - 0.14 * ray_perp
     ax.text(*tang_mid, "tang", ha="center", va="top", fontsize=fs, color=dim_col)
 

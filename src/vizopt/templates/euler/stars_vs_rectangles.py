@@ -14,7 +14,12 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 
-from ...base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+from ...base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from ...components.stars import (
     _build_membership,
     _multi_term_area,
@@ -600,7 +605,9 @@ class EulerDiagramRect(VizOptimizer):
         self.weight_label_top = weight_label_top
         self.term_schedules = term_schedules
         S, N = len(sets), len(self.rectangles)
-        self.set_names = set_names if set_names is not None else [f"Set {s}" for s in range(S)]
+        self.set_names = (
+            set_names if set_names is not None else [f"Set {s}" for s in range(S)]
+        )
         self.leaf_names = leaf_names if leaf_names is not None else list(range(N))
 
     @classmethod
@@ -672,7 +679,9 @@ class EulerDiagramRect(VizOptimizer):
         N = len(rects_array)
         S = len(self.sets)
 
-        angles = np.linspace(0, 2 * np.pi, self.k_angles, endpoint=False).astype(np.float32)
+        angles = np.linspace(0, 2 * np.pi, self.k_angles, endpoint=False).astype(
+            np.float32
+        )
 
         rect_hw = rects_array[:, 2].copy()
         rect_hh = rects_array[:, 3].copy()
@@ -747,25 +756,99 @@ class EulerDiagramRect(VizOptimizer):
         ) or {}
 
         terms = [
-            ObjectiveTerm("enclosure", _term_enclosure_rect, self.weight_enclosure, schedules.get("enclosure")),
-            ObjectiveTerm("exclusion", _term_exclusion_rect, self.weight_exclusion, schedules.get("exclusion")),
-            ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
-            ObjectiveTerm("smoothness", _multi_term_smoothness, self.weight_smoothness, schedules.get("smoothness")),
-            ObjectiveTerm("convexity", _multi_term_convexity, self.weight_convexity, schedules.get("convexity")),
-            ObjectiveTerm("area", _multi_term_area, self.weight_area, schedules.get("area")),
-            ObjectiveTerm("perimeter", _multi_term_perimeter, self.weight_perimeter, schedules.get("perimeter")),
-            ObjectiveTerm("position_anchor", _term_position_anchor_rect, self.weight_position_anchor, schedules.get("position_anchor")),
-            ObjectiveTerm("rect_collision", _term_rect_collision, self.weight_rect_collision, schedules.get("rect_collision")),
-            ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, self.weight_bounding_box, schedules.get("bounding_box")),
-            ObjectiveTerm("set_attraction", _term_set_attraction_rect, self.weight_set_attraction, schedules.get("set_attraction")),
+            ObjectiveTerm(
+                "enclosure",
+                _term_enclosure_rect,
+                self.weight_enclosure,
+                schedules.get("enclosure"),
+            ),
+            ObjectiveTerm(
+                "exclusion",
+                _term_exclusion_rect,
+                self.weight_exclusion,
+                schedules.get("exclusion"),
+            ),
+            ObjectiveTerm(
+                "min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")
+            ),
+            ObjectiveTerm(
+                "smoothness",
+                _multi_term_smoothness,
+                self.weight_smoothness,
+                schedules.get("smoothness"),
+            ),
+            ObjectiveTerm(
+                "convexity",
+                _multi_term_convexity,
+                self.weight_convexity,
+                schedules.get("convexity"),
+            ),
+            ObjectiveTerm(
+                "area", _multi_term_area, self.weight_area, schedules.get("area")
+            ),
+            ObjectiveTerm(
+                "perimeter",
+                _multi_term_perimeter,
+                self.weight_perimeter,
+                schedules.get("perimeter"),
+            ),
+            ObjectiveTerm(
+                "position_anchor",
+                _term_position_anchor_rect,
+                self.weight_position_anchor,
+                schedules.get("position_anchor"),
+            ),
+            ObjectiveTerm(
+                "rect_collision",
+                _term_rect_collision,
+                self.weight_rect_collision,
+                schedules.get("rect_collision"),
+            ),
+            ObjectiveTerm(
+                "bounding_box",
+                _multi_term_total_bounding_box,
+                self.weight_bounding_box,
+                schedules.get("bounding_box"),
+            ),
+            ObjectiveTerm(
+                "set_attraction",
+                _term_set_attraction_rect,
+                self.weight_set_attraction,
+                schedules.get("set_attraction"),
+            ),
         ]
         if label_rect_size is not None:
             terms += [
-                ObjectiveTerm("label_enclosure", _multi_term_label_enclosure, self.weight_label_enclosure, schedules.get("label_enclosure")),
-                ObjectiveTerm("label_element_exclusion", _multi_term_label_element_exclusion_rect, self.weight_label_element_exclusion, schedules.get("label_element_exclusion")),
-                ObjectiveTerm("label_set_exclusion", _multi_term_label_set_exclusion, self.weight_label_set_exclusion, schedules.get("label_set_exclusion")),
-                ObjectiveTerm("label_collision", _multi_term_label_label_collision, self.weight_label_collision, schedules.get("label_collision")),
-                ObjectiveTerm("label_top", _multi_term_label_top_attraction, self.weight_label_top, schedules.get("label_top")),
+                ObjectiveTerm(
+                    "label_enclosure",
+                    _multi_term_label_enclosure,
+                    self.weight_label_enclosure,
+                    schedules.get("label_enclosure"),
+                ),
+                ObjectiveTerm(
+                    "label_element_exclusion",
+                    _multi_term_label_element_exclusion_rect,
+                    self.weight_label_element_exclusion,
+                    schedules.get("label_element_exclusion"),
+                ),
+                ObjectiveTerm(
+                    "label_set_exclusion",
+                    _multi_term_label_set_exclusion,
+                    self.weight_label_set_exclusion,
+                    schedules.get("label_set_exclusion"),
+                ),
+                ObjectiveTerm(
+                    "label_collision",
+                    _multi_term_label_label_collision,
+                    self.weight_label_collision,
+                    schedules.get("label_collision"),
+                ),
+                ObjectiveTerm(
+                    "label_top",
+                    _multi_term_label_top_attraction,
+                    self.weight_label_top,
+                    schedules.get("label_top"),
+                ),
             ]
 
         return OptimizationProblemTemplate(
@@ -795,7 +878,11 @@ class EulerDiagramRect(VizOptimizer):
                 "center": np.array(optim_vars["centers"][s]),
                 "radii": radii_arr[s],
                 "angles": angles,
-                **({"label_center": np.array(optim_vars["label_positions"][s])} if has_label else {}),
+                **(
+                    {"label_center": np.array(optim_vars["label_positions"][s])}
+                    if has_label
+                    else {}
+                ),
             }
             for s in range(len(self.set_names))
         ]
@@ -812,6 +899,10 @@ class EulerDiagramRect(VizOptimizer):
         rect_hw = self.problem_.input_parameters["rect_hw"]
         rect_hh = self.problem_.input_parameters["rect_hh"]
         return np.concatenate(
-            [np.array(self.result_.optim_vars["rect_positions"]), rect_hw[:, None], rect_hh[:, None]],
+            [
+                np.array(self.result_.optim_vars["rect_positions"]),
+                rect_hw[:, None],
+                rect_hh[:, None],
+            ],
             axis=1,
         )

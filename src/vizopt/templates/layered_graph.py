@@ -5,7 +5,12 @@ import numpy as np
 from jax import numpy as jnp
 from matplotlib import pyplot as plt
 
-from ..base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+from ..base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from ..components.common import should_be_positive_activation
 
 # ---------------------------------------------------------------------------
@@ -387,10 +392,22 @@ class LayeredGraphOptimizer(VizOptimizer):
         )
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm("edge_direction", _term_edge_direction, self.weight_edge_direction),
-                ObjectiveTerm("edge_vector", _term_edge_vector, self.weight_edge_vector),
-                ObjectiveTerm("node_separation", _term_node_separation, self.weight_node_separation),
-                ObjectiveTerm("sibling_separation", _term_sibling_separation, self.weight_sibling_separation),
+                ObjectiveTerm(
+                    "edge_direction", _term_edge_direction, self.weight_edge_direction
+                ),
+                ObjectiveTerm(
+                    "edge_vector", _term_edge_vector, self.weight_edge_vector
+                ),
+                ObjectiveTerm(
+                    "node_separation",
+                    _term_node_separation,
+                    self.weight_node_separation,
+                ),
+                ObjectiveTerm(
+                    "sibling_separation",
+                    _term_sibling_separation,
+                    self.weight_sibling_separation,
+                ),
             ],
             initialize=_initialize,
             plot_configuration=_plot_configuration,
@@ -408,4 +425,6 @@ class LayeredGraphOptimizer(VizOptimizer):
             raise ValueError("No result yet — call optimize() first.")
         node_names = self.problem_.input_parameters["node_names"]
         node_xys = np.array(self.result_.optim_vars["node_xys"])
-        return {name: tuple(float(c) for c in xy) for name, xy in zip(node_names, node_xys)}
+        return {
+            name: tuple(float(c) for c in xy) for name, xy in zip(node_names, node_xys)
+        }

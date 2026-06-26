@@ -11,7 +11,14 @@ General star-domain loss terms and helpers live in
 import jax.numpy as jnp
 import numpy as np
 
-from ..base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+from ..base import (
+    Callback,
+    ObjectiveTerm,
+    OptimConfig,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from ..components.stars import (
     Discrete,
     StarRepresentation,
@@ -94,7 +101,9 @@ def _multi_term_star_exclusion(optim_vars, input_params):
     points_flat = points.reshape(n_sets, F * K, 2)  # (n_sets, F*K, 2)
 
     # diff[s, t, p] = points[s, p] - centers[t]
-    diff = points_flat[:, None, :, :] - centers[None, :, None, :]  # (n_sets, n_sets, F*K, 2)
+    diff = (
+        points_flat[:, None, :, :] - centers[None, :, None, :]
+    )  # (n_sets, n_sets, F*K, 2)
 
     # Distance and angle from center_t to each sample point of s
     dist, alpha = _dist_and_angle(diff)  # (n_sets, n_sets, F*K)
@@ -292,7 +301,9 @@ class StarDomainOptimizer(VizOptimizer):
     ):
         self.n_sets = n_sets
         self.initial_centers = initial_centers
-        self.representation = representation if representation is not None else Discrete()
+        self.representation = (
+            representation if representation is not None else Discrete()
+        )
         self.target_areas = target_areas
         self.initial_radius = initial_radius
         self.weight_target_area = weight_target_area
@@ -304,7 +315,9 @@ class StarDomainOptimizer(VizOptimizer):
         self.enclosures = enclosures
         self.exclusion_offset = exclusion_offset
         self.enclosure_offset = enclosure_offset
-        self.exclusion_interior_fracs = exclusion_interior_fracs if exclusion_interior_fracs is not None else [0.5]
+        self.exclusion_interior_fracs = (
+            exclusion_interior_fracs if exclusion_interior_fracs is not None else [0.5]
+        )
 
     def _build_problem(self) -> OptimizationProblem:
         n_sets = self.n_sets
@@ -314,7 +327,9 @@ class StarDomainOptimizer(VizOptimizer):
         angles_jnp = jnp.array(angles)
         initial_centers = np.asarray(self.initial_centers, dtype=np.float32)
 
-        targets_raw = self.target_areas if self.target_areas is not None else [None] * n_sets
+        targets_raw = (
+            self.target_areas if self.target_areas is not None else [None] * n_sets
+        )
         target_arr = np.array(
             [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
         )
@@ -344,7 +359,9 @@ class StarDomainOptimizer(VizOptimizer):
             "exclusion_interior_fracs": self.exclusion_interior_fracs,
         }
 
-        init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
+        init_vars = representation.initialize_vars(
+            n_sets, initial_radii, initial_centers
+        )
 
         def initialize(_, seed):
             return {k: v.copy() for k, v in init_vars.items()}
@@ -354,13 +371,27 @@ class StarDomainOptimizer(VizOptimizer):
 
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm("target_area",  wrap(_multi_term_target_area),    self.weight_target_area),
-                ObjectiveTerm("star_excl",    wrap(_multi_term_star_exclusion), self.weight_exclusion),
-                ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), self.weight_enclosure),
-                ObjectiveTerm("min_radius",   wrap(_multi_term_min_radius),     10.0),
-                ObjectiveTerm("smoothness",   wrap(_multi_term_smoothness),     self.weight_smoothness),
-                ObjectiveTerm("area",         wrap(_multi_term_area),           self.weight_area),
-                ObjectiveTerm("perimeter",    wrap(_multi_term_perimeter),      self.weight_perimeter),
+                ObjectiveTerm(
+                    "target_area",
+                    wrap(_multi_term_target_area),
+                    self.weight_target_area,
+                ),
+                ObjectiveTerm(
+                    "star_excl", wrap(_multi_term_star_exclusion), self.weight_exclusion
+                ),
+                ObjectiveTerm(
+                    "star_enclose",
+                    wrap(_multi_term_star_enclosure),
+                    self.weight_enclosure,
+                ),
+                ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
+                ObjectiveTerm(
+                    "smoothness", wrap(_multi_term_smoothness), self.weight_smoothness
+                ),
+                ObjectiveTerm("area", wrap(_multi_term_area), self.weight_area),
+                ObjectiveTerm(
+                    "perimeter", wrap(_multi_term_perimeter), self.weight_perimeter
+                ),
             ],
             initialize=initialize,
             svg_configuration=representation.make_svg_configuration(),
@@ -436,7 +467,9 @@ class StarVsStarOptimizer(VizOptimizer):
         if self.circles.ndim == 1:
             self.circles = self.circles[None, :]
         self.sets = sets
-        self.representation = representation if representation is not None else Discrete()
+        self.representation = (
+            representation if representation is not None else Discrete()
+        )
         self.weight_area = weight_area
         self.weight_perimeter = weight_perimeter
         self.weight_smoothness = weight_smoothness
@@ -450,11 +483,15 @@ class StarVsStarOptimizer(VizOptimizer):
         representation = self.representation
         N = len(circles_array)
         n_sets = len(self.sets)
-        angles = np.linspace(0, 2 * np.pi, representation.k_angles, endpoint=False).astype(np.float32)
+        angles = np.linspace(
+            0, 2 * np.pi, representation.k_angles, endpoint=False
+        ).astype(np.float32)
         angles_jnp = jnp.array(angles)
 
         membership = _build_membership(n_sets, N, self.sets)
-        initial_centers, initial_radii = _init_centers_and_radii(circles_array, self.sets, angles)
+        initial_centers, initial_radii = _init_centers_and_radii(
+            circles_array, self.sets, angles
+        )
         offsets_array = np.broadcast_to(
             np.asarray(self.offsets, dtype=np.float32), (n_sets, N)
         ).copy()
@@ -474,7 +511,9 @@ class StarVsStarOptimizer(VizOptimizer):
             "exclusion_mask": exclusion_mask,
         }
 
-        init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
+        init_vars = representation.initialize_vars(
+            n_sets, initial_radii, initial_centers
+        )
 
         def initialize(_, seed):
             return {k: v.copy() for k, v in init_vars.items()}
@@ -484,16 +523,28 @@ class StarVsStarOptimizer(VizOptimizer):
 
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm("enclosure",    wrap(_multi_term_enclosure),      10.0),
-                ObjectiveTerm("star_excl",    wrap(_multi_term_star_exclusion), self.weight_exclusion),
-                ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), self.weight_enclosure),
-                ObjectiveTerm("min_radius",   wrap(_multi_term_min_radius),     10.0),
-                ObjectiveTerm("smoothness",   wrap(_multi_term_smoothness),     self.weight_smoothness),
-                ObjectiveTerm("area",         wrap(_multi_term_area),           self.weight_area),
-                ObjectiveTerm("perimeter",    wrap(_multi_term_perimeter),      self.weight_perimeter),
+                ObjectiveTerm("enclosure", wrap(_multi_term_enclosure), 10.0),
+                ObjectiveTerm(
+                    "star_excl", wrap(_multi_term_star_exclusion), self.weight_exclusion
+                ),
+                ObjectiveTerm(
+                    "star_enclose",
+                    wrap(_multi_term_star_enclosure),
+                    self.weight_enclosure,
+                ),
+                ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
+                ObjectiveTerm(
+                    "smoothness", wrap(_multi_term_smoothness), self.weight_smoothness
+                ),
+                ObjectiveTerm("area", wrap(_multi_term_area), self.weight_area),
+                ObjectiveTerm(
+                    "perimeter", wrap(_multi_term_perimeter), self.weight_perimeter
+                ),
             ],
             initialize=initialize,
-            svg_configuration=representation.make_svg_configuration(_svg_configuration_fixed),
+            svg_configuration=representation.make_svg_configuration(
+                _svg_configuration_fixed
+            ),
         ).instantiate(input_parameters)
 
     @property

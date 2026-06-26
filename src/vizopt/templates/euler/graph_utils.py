@@ -45,7 +45,9 @@ def offsets_from_graph(
     roots = [n for n in inclusion_graph.nodes if inclusion_graph.in_degree(n) == 0]
     depth = {}
     for root in roots:
-        for node, d in nx.single_source_shortest_path_length(inclusion_graph, root).items():
+        for node, d in nx.single_source_shortest_path_length(
+            inclusion_graph, root
+        ).items():
             if node not in depth or d < depth[node]:
                 depth[node] = d
 
@@ -62,7 +64,9 @@ def offsets_from_graph(
             [s for s in set_names if depth[s] == d], key=lambda s: n_leaves[s]
         )
         for rank, s in enumerate(group):
-            offset_dict[s] = (max_set_depth - d) * offset_step + rank * sub_step + min_offset
+            offset_dict[s] = (
+                (max_set_depth - d) * offset_step + rank * sub_step + min_offset
+            )
 
     if exclusion_offset is None:
         exclusion_offset = offset_step * (max_set_depth + 1)

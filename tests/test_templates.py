@@ -14,6 +14,8 @@ from vizopt.examples.sets import (
 from vizopt.templates.euler.stars_vs_circles import EulerDiagram
 
 _FAST = OptimConfig(n_iters=5, learning_rate=1e-2)
+
+
 def _NO_PRINT(*_):
     pass
 
@@ -101,11 +103,14 @@ def test_optimize_discrete_no_extra_results():
 
 def test_convexity_alpha_reduces_concavity():
     """convexity_alpha=1 should produce a more convex boundary than alpha=0."""
-    circles = np.array([[-2.0, 0.0, 0.4], [0.0, 2.0, 0.4], [2.0, 0.0, 0.4]], dtype=np.float32)
+    circles = np.array(
+        [[-2.0, 0.0, 0.4], [0.0, 2.0, 0.4], [2.0, 0.0, 0.4]], dtype=np.float32
+    )
     sets = [[0, 1, 2]]
 
     def _run(alpha):
         import jax.numpy as jnp
+
         diagram = EulerDiagram(
             circles,
             sets,
@@ -116,7 +121,9 @@ def test_convexity_alpha_reduces_concavity():
             weight_smoothness=0.1,
             representation=Discrete(k_angles=32),
         )
-        diagram.optimize(OptimConfig(n_iters=200, learning_rate=5e-3), callback=_NO_PRINT)
+        diagram.optimize(
+            OptimConfig(n_iters=200, learning_rate=5e-3), callback=_NO_PRINT
+        )
         radii = jnp.array(diagram.sets_[0]["radii"])
         angles = jnp.array(diagram.sets_[0]["angles"])
         center = jnp.array(diagram.sets_[0]["center"])

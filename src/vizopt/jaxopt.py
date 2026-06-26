@@ -40,7 +40,9 @@ def optimize_gradient_descent(
         decay_steps=n_iters,
         alpha=decay_lr_to,
     )
-    optimizer = optax.chain(optax.scale_by_adam(b1=b1, b2=b2), optax.scale_by_learning_rate(schedule))
+    optimizer = optax.chain(
+        optax.scale_by_adam(b1=b1, b2=b2), optax.scale_by_learning_rate(schedule)
+    )
     opt_state = optimizer.init(params)
 
     @jax.jit

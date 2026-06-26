@@ -236,7 +236,9 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
     var_scales: dict | None = None
-    result: "OptimizationResult[OptimVars] | None" = field(default=None, init=False, repr=False)
+    result: "OptimizationResult[OptimVars] | None" = field(
+        default=None, init=False, repr=False
+    )
 
     def plot(self, **kwargs) -> None:
         """Plot the last optimization result using `plot_configuration`.
@@ -428,7 +430,9 @@ class VizOptimizer(ABC):
             history, and final loss.
         """
         self.problem_: OptimizationProblem = self._build_problem()
-        self.result_: OptimizationResult = self.problem_.optimize(optim_config, callback=callback)
+        self.result_: OptimizationResult = self.problem_.optimize(
+            optim_config, callback=callback
+        )
         return self.result_
 
     def plot(self, **kwargs) -> None:

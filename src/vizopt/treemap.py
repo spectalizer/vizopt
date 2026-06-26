@@ -60,7 +60,7 @@ def _squarify_recursive(items, rect, out):
             out[name] = (x_cursor, y0, x_cursor + tile_w, y0 + strip_h)
             x_cursor += tile_w
         remaining_rect = (x0, y0 + strip_h, x1, y1)
-    _squarify_recursive(items[len(row):], remaining_rect, out)
+    _squarify_recursive(items[len(row) :], remaining_rect, out)
 
 
 def squarify_layout(items, rect):

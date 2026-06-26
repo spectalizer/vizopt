@@ -13,6 +13,7 @@ from vizopt.base import (
     build_objective,
 )
 
+
 def _NO_PRINT(*_):
     pass
 
@@ -84,6 +85,7 @@ def test_build_objective_uses_input_parameters():
 
 def test_build_objective_schedule_applied():
     """Schedule modulates the effective weight at each step."""
+
     def schedule(step):
         return jnp.where(step == 0, 0.0, 1.0)
 

@@ -109,4 +109,8 @@ def make_term_schedules(params: dict, n_iters: int) -> TermSchedules:
                 "Keys must end with '_delay', '_peak', or '_ramp'."
             )
 
-    return TermSchedules(schedules=schedules, quality_terms=quality_terms, relaxation_terms=relaxation_terms)
+    return TermSchedules(
+        schedules=schedules,
+        quality_terms=quality_terms,
+        relaxation_terms=relaxation_terms,
+    )

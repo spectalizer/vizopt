@@ -6,7 +6,13 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from vizopt.base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, OptimConfig, VizOptimizer
+from vizopt.base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    OptimConfig,
+    VizOptimizer,
+)
 
 
 def oklab_to_rgb(Lab):
@@ -346,9 +352,17 @@ class ColorPaletteOptimizer(VizOptimizer):
         )
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm(name="stress", compute=_stress, multiplier=self.stress_weight),
-                ObjectiveTerm(name="coverage", compute=_coverage, multiplier=self.coverage_weight),
-                ObjectiveTerm(name="luminosity", compute=_luminosity, multiplier=self.luminosity_weight),
+                ObjectiveTerm(
+                    name="stress", compute=_stress, multiplier=self.stress_weight
+                ),
+                ObjectiveTerm(
+                    name="coverage", compute=_coverage, multiplier=self.coverage_weight
+                ),
+                ObjectiveTerm(
+                    name="luminosity",
+                    compute=_luminosity,
+                    multiplier=self.luminosity_weight,
+                ),
             ],
             initialize=lambda params, _seed: {"logit_rgb": params["logit_init"]},
             plot_configuration=plot_colored_words,
@@ -364,4 +378,6 @@ class ColorPaletteOptimizer(VizOptimizer):
         """
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
-        return np.array(_build_rgb(self.result_.optim_vars, self.problem_.input_parameters))
+        return np.array(
+            _build_rgb(self.result_.optim_vars, self.problem_.input_parameters)
+        )

@@ -299,9 +299,7 @@ def _loss_curve_svg_lines(
         return cumulative[idx]
 
     # stroke-dashoffset per frame: total_len - d means only the first d px are drawn
-    dashoffsets = [
-        f"{total_len - _cum_len_at(sit):.1f}" for sit, _ in snapshots
-    ]
+    dashoffsets = [f"{total_len - _cum_len_at(sit):.1f}" for sit, _ in snapshots]
 
     # Animated marker x positions — one per snapshot frame
     snapshot_iters = [it for it, _ in snapshots]

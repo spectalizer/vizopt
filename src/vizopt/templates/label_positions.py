@@ -5,7 +5,12 @@ from jax import numpy as jnp
 from matplotlib import pyplot as plt
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from ..base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+from ..base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from ..components import common
 
 
@@ -122,8 +127,16 @@ class LabelPositionOptimizer(VizOptimizer):
         }
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm("intersection_loss", _calculate_intersection_loss, self.weight_intersection),
-                ObjectiveTerm("point_label_distance", _calculate_point_label_distance_loss, self.weight_distance),
+                ObjectiveTerm(
+                    "intersection_loss",
+                    _calculate_intersection_loss,
+                    self.weight_intersection,
+                ),
+                ObjectiveTerm(
+                    "point_label_distance",
+                    _calculate_point_label_distance_loss,
+                    self.weight_distance,
+                ),
             ],
             initialize=_initialize,
             input_params_class=LabelPositionParams,

@@ -2,7 +2,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vizopt.base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+from vizopt.base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from vizopt.components.bspline_stars import (
     raster_collision_loss_bspline,
 )
@@ -292,7 +297,9 @@ class RasterStarOptimizer(VizOptimizer):
     ):
         self.n_sets = n_sets
         self.initial_centers = initial_centers
-        self.representation = representation if representation is not None else Discrete()
+        self.representation = (
+            representation if representation is not None else Discrete()
+        )
         self.target_areas = target_areas
         self.initial_radius = initial_radius
         self.weight_target_area = weight_target_area
@@ -316,7 +323,9 @@ class RasterStarOptimizer(VizOptimizer):
         angles_jnp = jnp.array(angles)
         initial_centers = np.asarray(self.initial_centers, dtype=np.float32)
 
-        targets_raw = self.target_areas if self.target_areas is not None else [None] * n_sets
+        targets_raw = (
+            self.target_areas if self.target_areas is not None else [None] * n_sets
+        )
         target_arr = np.array(
             [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
         )
@@ -335,7 +344,9 @@ class RasterStarOptimizer(VizOptimizer):
         x_max = float(initial_centers[:, 0].max()) + max_r + self.grid_margin
         y_min = float(initial_centers[:, 1].min()) - max_r - self.grid_margin
         y_max = float(initial_centers[:, 1].max()) + max_r + self.grid_margin
-        grid_xy, pixel_area = make_pixel_grid(x_min, x_max, y_min, y_max, self.grid_resolution)
+        grid_xy, pixel_area = make_pixel_grid(
+            x_min, x_max, y_min, y_max, self.grid_resolution
+        )
         print(
             f"Pixel grid: {grid_xy.shape[0]}x{grid_xy.shape[1]}, pixel_area={pixel_area:.4f}"
         )
@@ -357,7 +368,9 @@ class RasterStarOptimizer(VizOptimizer):
             "exclusion_offset": float(self.exclusion_offset),
         }
 
-        init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
+        init_vars = representation.initialize_vars(
+            n_sets, initial_radii, initial_centers
+        )
 
         def initialize(*_):
             return {k: v.copy() for k, v in init_vars.items()}
@@ -367,13 +380,29 @@ class RasterStarOptimizer(VizOptimizer):
 
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm("target_area", wrap(_multi_term_target_area), self.weight_target_area),
-                ObjectiveTerm("raster_excl", _RASTER_COLLISION[type(representation)], self.weight_exclusion),
-                ObjectiveTerm("star_enclose", wrap(_multi_term_star_enclosure), self.weight_enclosure),
+                ObjectiveTerm(
+                    "target_area",
+                    wrap(_multi_term_target_area),
+                    self.weight_target_area,
+                ),
+                ObjectiveTerm(
+                    "raster_excl",
+                    _RASTER_COLLISION[type(representation)],
+                    self.weight_exclusion,
+                ),
+                ObjectiveTerm(
+                    "star_enclose",
+                    wrap(_multi_term_star_enclosure),
+                    self.weight_enclosure,
+                ),
                 ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
-                ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), self.weight_smoothness),
+                ObjectiveTerm(
+                    "smoothness", wrap(_multi_term_smoothness), self.weight_smoothness
+                ),
                 ObjectiveTerm("area", wrap(_multi_term_area), self.weight_area),
-                ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), self.weight_perimeter),
+                ObjectiveTerm(
+                    "perimeter", wrap(_multi_term_perimeter), self.weight_perimeter
+                ),
             ],
             initialize=initialize,
             svg_configuration=representation.make_svg_configuration(),

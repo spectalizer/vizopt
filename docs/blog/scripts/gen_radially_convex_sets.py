@@ -63,7 +63,9 @@ r_out, r_in = 1.0, 0.45
 x_c = np.concatenate([r_out * np.cos(theta_out), r_in * np.cos(theta_in)])
 y_c = np.concatenate([r_out * np.sin(theta_out), r_in * np.sin(theta_in)])
 ax.fill(x_c, y_c, color=fill_color, zorder=1)
-ax.plot(np.append(x_c, x_c[0]), np.append(y_c, y_c[0]), color=edge_color, lw=1.5, zorder=2)
+ax.plot(
+    np.append(x_c, x_c[0]), np.append(y_c, y_c[0]), color=edge_color, lw=1.5, zorder=2
+)
 for t in [theta_out[0], theta_out[-1]]:
     ax.plot(
         [r_in * np.cos(t), r_out * np.cos(t)],

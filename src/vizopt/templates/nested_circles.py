@@ -22,7 +22,13 @@ import networkx as nx
 import numpy as np
 from jax import numpy as jnp
 
-from ..base import ObjectiveTerm, OptimConfig, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+from ..base import (
+    ObjectiveTerm,
+    OptimConfig,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
@@ -405,8 +411,11 @@ def _term_edge_length(optim_vars, input_params):
 # ---------------------------------------------------------------------------
 
 
-def _build_nested_circles_input(inclusion_tree, leaf_nodes, non_leaf_nodes, all_node_names):
+def _build_nested_circles_input(
+    inclusion_tree, leaf_nodes, non_leaf_nodes, all_node_names
+):
     """Shared preprocessing for both nested circles optimizers."""
+
     def _node_size(node):
         if "size" in inclusion_tree.nodes[node]:
             return inclusion_tree.nodes[node]["size"]
@@ -476,8 +485,16 @@ class NestedCirclesOptimizer(VizOptimizer):
         self.weight_non_inclusion = weight_non_inclusion
 
     def _build_problem(self) -> OptimizationProblem:
-        leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) == 0]
-        non_leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) > 0]
+        leaf_nodes = [
+            n
+            for n in self.inclusion_tree.nodes
+            if self.inclusion_tree.out_degree(n) == 0
+        ]
+        non_leaf_nodes = [
+            n
+            for n in self.inclusion_tree.nodes
+            if self.inclusion_tree.out_degree(n) > 0
+        ]
         all_node_names = leaf_nodes + non_leaf_nodes
 
         (
@@ -506,7 +523,9 @@ class NestedCirclesOptimizer(VizOptimizer):
             terms=[
                 ObjectiveTerm("total_size", _term_total_size, self.weight_total_size),
                 ObjectiveTerm("collision", _term_collision, self.weight_collision),
-                ObjectiveTerm("non_inclusion", _term_non_inclusion, self.weight_non_inclusion),
+                ObjectiveTerm(
+                    "non_inclusion", _term_non_inclusion, self.weight_non_inclusion
+                ),
             ],
             initialize=initialize,
         ).instantiate(input_parameters)
@@ -520,11 +539,22 @@ class NestedCirclesOptimizer(VizOptimizer):
         """
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
-        leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) == 0]
-        non_leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) > 0]
+        leaf_nodes = [
+            n
+            for n in self.inclusion_tree.nodes
+            if self.inclusion_tree.out_degree(n) == 0
+        ]
+        non_leaf_nodes = [
+            n
+            for n in self.inclusion_tree.nodes
+            if self.inclusion_tree.out_degree(n) > 0
+        ]
         all_node_names = leaf_nodes + non_leaf_nodes
         node_xys = np.array(self.result_.optim_vars["node_xys"])
-        return {node: tuple(float(c) for c in xy) for node, xy in zip(all_node_names, node_xys)}
+        return {
+            node: tuple(float(c) for c in xy)
+            for node, xy in zip(all_node_names, node_xys)
+        }
 
     @property
     def radii_(self) -> dict:
@@ -535,7 +565,11 @@ class NestedCirclesOptimizer(VizOptimizer):
         """
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
-        non_leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) > 0]
+        non_leaf_nodes = [
+            n
+            for n in self.inclusion_tree.nodes
+            if self.inclusion_tree.out_degree(n) > 0
+        ]
         return dict(zip(non_leaf_nodes, self.result_.optim_vars["variable_node_radii"]))
 
 
@@ -586,12 +620,16 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
             return 1.0
 
         graph_node_names = list(self.graph.nodes)
-        enclosing_node_names = sorted(list(set(self.inclusion_tree.nodes) - set(self.graph.nodes)))
+        enclosing_node_names = sorted(
+            list(set(self.inclusion_tree.nodes) - set(self.graph.nodes))
+        )
         all_node_names = graph_node_names + enclosing_node_names
         node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
 
         fixed_node_radii = np.array([_node_size(n) for n in graph_node_names])
-        total_scale = float(sum(fixed_node_radii)) if len(fixed_node_radii) > 0 else 10.0
+        total_scale = (
+            float(sum(fixed_node_radii)) if len(fixed_node_radii) > 0 else 10.0
+        )
 
         initial_pos = get_random_node_positions(self.graph, scale=total_scale)
         for n in enclosing_node_names:
@@ -605,7 +643,9 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
             float(fixed_node_radii.max()) if len(fixed_node_radii) > 0 else 1.0,
         )
 
-        edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in self.graph.edges]
+        edges_list = [
+            (node_name_to_id[u], node_name_to_id[v]) for u, v in self.graph.edges
+        ]
         edge_indices = (
             np.array(edges_list, dtype=np.int32)
             if edges_list
@@ -613,7 +653,8 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
         )
 
         inclusion_edges_list = [
-            (node_name_to_id[u], node_name_to_id[v]) for u, v in self.inclusion_tree.edges
+            (node_name_to_id[u], node_name_to_id[v])
+            for u, v in self.inclusion_tree.edges
         ]
         inclusion_edge_indices = (
             np.array(inclusion_edges_list, dtype=np.int32)
@@ -638,10 +679,14 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
 
         return OptimizationProblemTemplate(
             terms=[
-                ObjectiveTerm("edge_length", _term_edge_length, self.weight_edge_length),
+                ObjectiveTerm(
+                    "edge_length", _term_edge_length, self.weight_edge_length
+                ),
                 ObjectiveTerm("total_size", _term_total_size, self.weight_total_size),
                 ObjectiveTerm("collision", _term_collision, self.weight_collision),
-                ObjectiveTerm("non_inclusion", _term_non_inclusion, self.weight_non_inclusion),
+                ObjectiveTerm(
+                    "non_inclusion", _term_non_inclusion, self.weight_non_inclusion
+                ),
             ],
             initialize=initialize,
         ).instantiate(input_parameters)
@@ -656,10 +701,15 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
         graph_node_names = list(self.graph.nodes)
-        enclosing_node_names = sorted(list(set(self.inclusion_tree.nodes) - set(self.graph.nodes)))
+        enclosing_node_names = sorted(
+            list(set(self.inclusion_tree.nodes) - set(self.graph.nodes))
+        )
         all_node_names = graph_node_names + enclosing_node_names
         node_xys = np.array(self.result_.optim_vars["node_xys"])
-        return {node: tuple(float(c) for c in xy) for node, xy in zip(all_node_names, node_xys)}
+        return {
+            node: tuple(float(c) for c in xy)
+            for node, xy in zip(all_node_names, node_xys)
+        }
 
     @property
     def radii_(self) -> dict:
@@ -670,5 +720,9 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
         """
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
-        enclosing_node_names = sorted(list(set(self.inclusion_tree.nodes) - set(self.graph.nodes)))
-        return dict(zip(enclosing_node_names, self.result_.optim_vars["variable_node_radii"]))
+        enclosing_node_names = sorted(
+            list(set(self.inclusion_tree.nodes) - set(self.graph.nodes))
+        )
+        return dict(
+            zip(enclosing_node_names, self.result_.optim_vars["variable_node_radii"])
+        )

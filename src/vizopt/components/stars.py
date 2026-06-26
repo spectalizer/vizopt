@@ -216,23 +216,27 @@ def _multi_term_convexity(optim_vars, input_params):
     alpha = input_params["convexity_alpha"]
 
     directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)  # (K, 2)
-    points = centers[:, None, :] + radii[:, :, None] * directions[None, :, :]  # (S, K, 2)
+    points = (
+        centers[:, None, :] + radii[:, :, None] * directions[None, :, :]
+    )  # (S, K, 2)
 
     edges = jnp.roll(points, -1, axis=1) - points  # (S, K, 2)
     edges_next = jnp.roll(edges, -1, axis=1)  # (S, K, 2)
 
-    cross = edges[:, :, 0] * edges_next[:, :, 1] - edges[:, :, 1] * edges_next[:, :, 0]  # (S, K)
+    cross = (
+        edges[:, :, 0] * edges_next[:, :, 1] - edges[:, :, 1] * edges_next[:, :, 0]
+    )  # (S, K)
 
     # Normalise by product of edge lengths → sin(turning_angle) ∈ [-1, 1].
     # Clamp denominator so near-zero edges (degenerate radii during optimisation)
     # don't blow up the ratio.
-    edge_len = jnp.sqrt(jnp.sum(edges ** 2, axis=-1))  # (S, K)
+    edge_len = jnp.sqrt(jnp.sum(edges**2, axis=-1))  # (S, K)
     edge_len_next = jnp.roll(edge_len, -1, axis=1)  # (S, K)
     norms = jnp.maximum(edge_len * edge_len_next, 1e-6)
     sin_alpha = cross / norms  # (S, K)
 
     violations = jnp.maximum(0.0, -sin_alpha)
-    return jnp.sum(violations ** 2 + alpha * violations)
+    return jnp.sum(violations**2 + alpha * violations)
 
 
 # ---------------------------------------------------------------------------
@@ -363,15 +367,17 @@ def _multi_term_label_enclosure(optim_vars, input_params):
     Returns:
         Scalar penalty.
     """
-    centers = optim_vars["centers"]                  # (S, 2)
-    radii = optim_vars["radii"]                      # (S, K)
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
     label_positions = optim_vars["label_positions"]  # (S, 2)
-    angles = input_params["angles"]                  # (K,)
-    hw = input_params["label_rect_hw"]               # (S,)
-    hh = input_params["label_rect_hh"]               # (S,)
+    angles = input_params["angles"]  # (K,)
+    hw = input_params["label_rect_hw"]  # (S,)
+    hh = input_params["label_rect_hh"]  # (S,)
     S = hw.shape[0]
 
-    label_membership = input_params.get("label_membership", jnp.eye(S, dtype=bool))  # (S, S)
+    label_membership = input_params.get(
+        "label_membership", jnp.eye(S, dtype=bool)
+    )  # (S, S)
 
     # dx[s, l]: displacement from center of boundary s to label rect l
     dx = label_positions[None, :, 0] - centers[:, None, 0]  # (S, S)
@@ -380,11 +386,11 @@ def _multi_term_label_enclosure(optim_vars, input_params):
     cos_a = jnp.cos(angles)  # (K,)
     sin_a = jnp.sin(angles)
 
-    dx_ = dx[:, None, :]        # (S, 1, S)
+    dx_ = dx[:, None, :]  # (S, 1, S)
     dy_ = dy[:, None, :]
     ca_ = cos_a[None, :, None]  # (1, K, 1)
     sa_ = sin_a[None, :, None]
-    hw_ = hw[None, None, :]     # (1, 1, S)
+    hw_ = hw[None, None, :]  # (1, 1, S)
     hh_ = hh[None, None, :]
 
     near_cos = jnp.abs(ca_) < _SLAB_EPS
@@ -395,14 +401,22 @@ def _multi_term_label_enclosure(optim_vars, input_params):
     t_x1 = (dx_ - hw_) / safe_cos  # (S, K, S)
     t_x2 = (dx_ + hw_) / safe_cos
     x_in_range = jnp.abs(dx_) <= hw_
-    tx_lo = jnp.where(near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2))
-    tx_hi = jnp.where(near_cos, jnp.where(x_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2))
+    tx_lo = jnp.where(
+        near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2)
+    )
+    tx_hi = jnp.where(
+        near_cos, jnp.where(x_in_range, _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2)
+    )
 
     t_y1 = (dy_ - hh_) / safe_sin
     t_y2 = (dy_ + hh_) / safe_sin
     y_in_range = jnp.abs(dy_) <= hh_
-    ty_lo = jnp.where(near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2))
-    ty_hi = jnp.where(near_sin, jnp.where(y_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2))
+    ty_lo = jnp.where(
+        near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2)
+    )
+    ty_hi = jnp.where(
+        near_sin, jnp.where(y_in_range, _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2)
+    )
 
     t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K, S)
     t_exit = jnp.minimum(tx_hi, ty_hi)
@@ -433,12 +447,12 @@ def _multi_term_label_set_exclusion(optim_vars, input_params):
     Returns:
         Scalar penalty.
     """
-    centers = optim_vars["centers"]                  # (S, 2)
-    radii = optim_vars["radii"]                      # (S, K)
+    centers = optim_vars["centers"]  # (S, 2)
+    radii = optim_vars["radii"]  # (S, K)
     label_positions = optim_vars["label_positions"]  # (S, 2)
-    angles = input_params["angles"]                  # (K,)
-    hw = input_params["label_rect_hw"]               # (S,)
-    hh = input_params["label_rect_hh"]               # (S,)
+    angles = input_params["angles"]  # (K,)
+    hw = input_params["label_rect_hw"]  # (S,)
+    hh = input_params["label_rect_hh"]  # (S,)
     label_membership = input_params["label_membership"]  # (S, S)
 
     dx = label_positions[None, :, 0] - centers[:, None, 0]  # (S, S)
@@ -447,11 +461,11 @@ def _multi_term_label_set_exclusion(optim_vars, input_params):
     cos_a = jnp.cos(angles)
     sin_a = jnp.sin(angles)
 
-    dx_ = dx[:, None, :]        # (S, 1, S)
+    dx_ = dx[:, None, :]  # (S, 1, S)
     dy_ = dy[:, None, :]
     ca_ = cos_a[None, :, None]  # (1, K, 1)
     sa_ = sin_a[None, :, None]
-    hw_ = hw[None, None, :]     # (1, 1, S)
+    hw_ = hw[None, None, :]  # (1, 1, S)
     hh_ = hh[None, None, :]
 
     near_cos = jnp.abs(ca_) < _SLAB_EPS
@@ -462,14 +476,22 @@ def _multi_term_label_set_exclusion(optim_vars, input_params):
     t_x1 = (dx_ - hw_) / safe_cos  # (S, K, S)
     t_x2 = (dx_ + hw_) / safe_cos
     x_in_range = jnp.abs(dx_) <= hw_
-    tx_lo = jnp.where(near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2))
-    tx_hi = jnp.where(near_cos, jnp.where(x_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2))
+    tx_lo = jnp.where(
+        near_cos, jnp.where(x_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_x1, t_x2)
+    )
+    tx_hi = jnp.where(
+        near_cos, jnp.where(x_in_range, _SLAB_INF, -_SLAB_INF), jnp.maximum(t_x1, t_x2)
+    )
 
     t_y1 = (dy_ - hh_) / safe_sin
     t_y2 = (dy_ + hh_) / safe_sin
     y_in_range = jnp.abs(dy_) <= hh_
-    ty_lo = jnp.where(near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2))
-    ty_hi = jnp.where(near_sin, jnp.where(y_in_range,  _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2))
+    ty_lo = jnp.where(
+        near_sin, jnp.where(y_in_range, -_SLAB_INF, _SLAB_INF), jnp.minimum(t_y1, t_y2)
+    )
+    ty_hi = jnp.where(
+        near_sin, jnp.where(y_in_range, _SLAB_INF, -_SLAB_INF), jnp.maximum(t_y1, t_y2)
+    )
 
     t_enter = jnp.maximum(tx_lo, ty_lo)  # (S, K, S)
     t_exit = jnp.minimum(tx_hi, ty_hi)
@@ -500,17 +522,17 @@ def _multi_term_label_element_exclusion(optim_vars, input_params):
     Returns:
         Scalar penalty.
     """
-    label_positions = optim_vars["label_positions"]   # (S, 2)
+    label_positions = optim_vars["label_positions"]  # (S, 2)
     circle_positions = optim_vars["circle_positions"]  # (N, 2)
-    circle_radii = input_params["circle_radii"]        # (N,)
-    hw = input_params["label_rect_hw"][:, None]        # (S, 1)
-    hh = input_params["label_rect_hh"][:, None]        # (S, 1)
+    circle_radii = input_params["circle_radii"]  # (N,)
+    hw = input_params["label_rect_hw"][:, None]  # (S, 1)
+    hh = input_params["label_rect_hh"][:, None]  # (S, 1)
 
-    lx = label_positions[:, None, 0]   # (S, 1)
-    ly = label_positions[:, None, 1]   # (S, 1)
+    lx = label_positions[:, None, 0]  # (S, 1)
+    ly = label_positions[:, None, 1]  # (S, 1)
     cx = circle_positions[None, :, 0]  # (1, N)
     cy = circle_positions[None, :, 1]  # (1, N)
-    r = circle_radii[None, :]          # (1, N)
+    r = circle_radii[None, :]  # (1, N)
 
     nx = jnp.clip(cx, lx - hw, lx + hw)  # (S, N)
     ny = jnp.clip(cy, ly - hh, ly + hh)
@@ -533,8 +555,8 @@ def _multi_term_label_label_collision(optim_vars, input_params):
         Scalar penalty.
     """
     positions = optim_vars["label_positions"]  # (S, 2)
-    hw = input_params["label_rect_hw"]         # (S,)
-    hh = input_params["label_rect_hh"]         # (S,)
+    hw = input_params["label_rect_hw"]  # (S,)
+    hh = input_params["label_rect_hh"]  # (S,)
     alpha = input_params.get("rect_collision_alpha", 0.0)
     S = hw.shape[0]
 
@@ -564,11 +586,11 @@ def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
         Scalar penalty.
     """
     label_positions = optim_vars["label_positions"]  # (S, 2)
-    rect_positions = optim_vars["rect_positions"]    # (N, 2)
-    label_hw = input_params["label_rect_hw"]         # (S,)
-    label_hh = input_params["label_rect_hh"]         # (S,)
-    rect_hw = input_params["rect_hw"]                # (N,)
-    rect_hh = input_params["rect_hh"]                # (N,)
+    rect_positions = optim_vars["rect_positions"]  # (N, 2)
+    label_hw = input_params["label_rect_hw"]  # (S,)
+    label_hh = input_params["label_rect_hh"]  # (S,)
+    rect_hw = input_params["rect_hw"]  # (N,)
+    rect_hh = input_params["rect_hh"]  # (N,)
     alpha = input_params.get("rect_collision_alpha", 0.0)
 
     dx = jnp.abs(label_positions[:, None, 0] - rect_positions[None, :, 0])  # (S, N)
@@ -719,16 +741,18 @@ def _svg_configuration_fixed(snapshots, input_params, size):
     for i in range(N):
         cx, cy, r = float(circles[i, 0]), float(circles[i, 1]), float(circles[i, 2])
         sx, sy = to_svg(cx, cy)
-        elements.append({
-            "tag": "circle",
-            "cx": f"{sx:.1f}",
-            "cy": f"{sy:.1f}",
-            "r": f"{r_to_svg(r):.1f}",
-            "fill": "#4472c4",
-            "fill-opacity": "0.45",
-            "stroke": "#2a52a0",
-            "stroke-width": "1",
-        })
+        elements.append(
+            {
+                "tag": "circle",
+                "cx": f"{sx:.1f}",
+                "cy": f"{sy:.1f}",
+                "r": f"{r_to_svg(r):.1f}",
+                "fill": "#4472c4",
+                "fill-opacity": "0.45",
+                "stroke": "#2a52a0",
+                "stroke-width": "1",
+            }
+        )
 
     # Animated star-shaped boundaries (one polygon per set)
     for s in range(S):
@@ -744,15 +768,17 @@ def _svg_configuration_fixed(snapshots, input_params, size):
                 px, py = to_svg(bx, by)
                 pts.append(f"{px:.1f},{py:.1f}")
             points_frames.append(" ".join(pts))
-        elements.append({
-            "tag": "polygon",
-            "fill": color,
-            "fill-opacity": "0.12",
-            "stroke": color,
-            "stroke-width": "1.5",
-            "stroke-linejoin": "round",
-            "points": points_frames,
-        })
+        elements.append(
+            {
+                "tag": "polygon",
+                "fill": color,
+                "fill-opacity": "0.12",
+                "stroke": color,
+                "stroke-width": "1.5",
+                "stroke-linejoin": "round",
+                "points": points_frames,
+            }
+        )
 
     return elements
 
@@ -760,10 +786,12 @@ def _svg_configuration_fixed(snapshots, input_params, size):
 def _svg_configuration_movable(snapshots, input_params, size):
     """SVG configuration for movable-circles radially convex sets."""
     circle_radii = input_params["circle_radii"]
-    circles_array = np.column_stack([
-        input_params["initial_circle_positions"],
-        circle_radii,
-    ])
+    circles_array = np.column_stack(
+        [
+            input_params["initial_circle_positions"],
+            circle_radii,
+        ]
+    )
     angles = input_params["angles"]
     S = input_params["membership"].shape[0]
     N = len(circle_radii)
@@ -785,35 +813,41 @@ def _svg_configuration_movable(snapshots, input_params, size):
                 px, py = to_svg(bx, by)
                 pts.append(f"{px:.1f},{py:.1f}")
             points_frames.append(" ".join(pts))
-        elements.append({
-            "tag": "polygon",
-            "fill": color,
-            "fill-opacity": "0.12",
-            "stroke": color,
-            "stroke-width": "1.5",
-            "stroke-linejoin": "round",
-            "points": points_frames,
-        })
+        elements.append(
+            {
+                "tag": "polygon",
+                "fill": color,
+                "fill-opacity": "0.12",
+                "stroke": color,
+                "stroke-width": "1.5",
+                "stroke-linejoin": "round",
+                "points": points_frames,
+            }
+        )
 
     # Animated circles
     for i in range(N):
         r = float(circle_radii[i])
         cx_frames, cy_frames = [], []
         for _, v in snapshots:
-            px, py = float(v["circle_positions"][i, 0]), float(v["circle_positions"][i, 1])
+            px, py = float(v["circle_positions"][i, 0]), float(
+                v["circle_positions"][i, 1]
+            )
             sx, sy = to_svg(px, py)
             cx_frames.append(f"{sx:.1f}")
             cy_frames.append(f"{sy:.1f}")
-        elements.append({
-            "tag": "circle",
-            "r": f"{r_to_svg(r):.1f}",
-            "fill": "#4472c4",
-            "fill-opacity": "0.45",
-            "stroke": "#2a52a0",
-            "stroke-width": "1",
-            "cx": cx_frames,
-            "cy": cy_frames,
-        })
+        elements.append(
+            {
+                "tag": "circle",
+                "r": f"{r_to_svg(r):.1f}",
+                "fill": "#4472c4",
+                "fill-opacity": "0.45",
+                "stroke": "#2a52a0",
+                "stroke-width": "1",
+                "cx": cx_frames,
+                "cy": cy_frames,
+            }
+        )
 
     return elements
 
@@ -840,7 +874,7 @@ def fourier_to_radii(coeffs, angles):
         (n_sets, K) radius values.
     """
     M = (coeffs.shape[-1] - 1) // 2
-    ks = jnp.arange(1, M + 1)             # (M,)
+    ks = jnp.arange(1, M + 1)  # (M,)
     theta = ks[:, None] * angles[None, :]  # (M, K)
     return (
         coeffs[:, 0:1]
@@ -1065,10 +1099,12 @@ class BSpline(StarRepresentation):
 
     def wrap(self, fn, angles_jnp):
         from vizopt.components.bspline_stars import _wrap_bspline_term
+
         return _wrap_bspline_term(fn, angles_jnp)
 
     def to_radii(self, optim_vars, angles_jnp):
         from vizopt.components.bspline_stars import bspline_to_radii
+
         return bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp)
 
     def extra_results(self, s, optim_vars):

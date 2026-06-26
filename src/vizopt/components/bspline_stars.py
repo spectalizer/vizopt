@@ -15,7 +15,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vizopt.base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from vizopt.base import (
+    Callback,
+    ObjectiveTerm,
+    OptimConfig,
+    OptimizationProblemTemplate,
+)
 from vizopt.components.stars import (
     _build_membership,
     _init_centers_and_radii,
@@ -34,7 +39,6 @@ from vizopt.components.stars import (
     _svg_configuration_fixed,
     _svg_configuration_movable,
 )
-
 
 # ---------------------------------------------------------------------------
 # Core B-spline math
@@ -95,9 +99,11 @@ def _wrap_bspline_term(fn, angles):
         Wrapped function with the same signature that reads
         `optim_vars["bspline_ctrl"]` instead.
     """
+
     def wrapped(optim_vars, input_params):
         radii = bspline_to_radii(optim_vars["bspline_ctrl"], angles)
         return fn({**optim_vars, "radii": radii}, input_params)
+
     return wrapped
 
 
@@ -158,7 +164,9 @@ def raster_collision_loss_bspline(optim_vars, input_params):
     temperature = input_params.get("temperature", 0.05)
     exclusion_offset = input_params.get("exclusion_offset", 0.0)
 
-    masks = soft_rasterize_star_bspline(centers, ctrl_pts, grid_xy, temperature, exclusion_offset)
+    masks = soft_rasterize_star_bspline(
+        centers, ctrl_pts, grid_xy, temperature, exclusion_offset
+    )
     HW = grid_xy.shape[0] * grid_xy.shape[1]
     masks_flat = masks.reshape(masks.shape[0], HW)
     overlap = pixel_area * (masks_flat @ masks_flat.T)
@@ -266,7 +274,9 @@ def optimize_multiple_radially_convex_sets_bspline(
     angles_jnp = jnp.array(angles)
 
     membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(circles_array, sets, angles)
+    initial_centers, initial_radii = _init_centers_and_radii(
+        circles_array, sets, angles
+    )
     offsets_array = np.broadcast_to(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
@@ -293,12 +303,36 @@ def optimize_multiple_radially_convex_sets_bspline(
 
     schedules = term_schedules or {}
     terms = [
-        ObjectiveTerm("enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", wrap(_multi_term_exclusion), weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("area", wrap(_multi_term_area), weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter, schedules.get("perimeter")),
+        ObjectiveTerm(
+            "enclosure", wrap(_multi_term_enclosure), 10.0, schedules.get("enclosure")
+        ),
+        ObjectiveTerm(
+            "exclusion",
+            wrap(_multi_term_exclusion),
+            weight_exclusion,
+            schedules.get("exclusion"),
+        ),
+        ObjectiveTerm(
+            "min_radius",
+            wrap(_multi_term_min_radius),
+            10.0,
+            schedules.get("min_radius"),
+        ),
+        ObjectiveTerm(
+            "smoothness",
+            wrap(_multi_term_smoothness),
+            weight_smoothness,
+            schedules.get("smoothness"),
+        ),
+        ObjectiveTerm(
+            "area", wrap(_multi_term_area), weight_area, schedules.get("area")
+        ),
+        ObjectiveTerm(
+            "perimeter",
+            wrap(_multi_term_perimeter),
+            weight_perimeter,
+            schedules.get("perimeter"),
+        ),
     ]
 
     problem = OptimizationProblemTemplate(
@@ -308,7 +342,9 @@ def optimize_multiple_radially_convex_sets_bspline(
     ).instantiate(input_parameters)
     result = problem.optimize(optim_config, callback=callback)
 
-    radii_arr = np.array(bspline_to_radii(result.optim_vars["bspline_ctrl"], angles_jnp))
+    radii_arr = np.array(
+        bspline_to_radii(result.optim_vars["bspline_ctrl"], angles_jnp)
+    )
     results = [
         {
             "center": np.array(result.optim_vars["centers"][s]),
@@ -387,7 +423,9 @@ def optimize_multiple_radially_convex_sets_bspline_with_movable_circles(
     circle_radii = circles_array[:, 2].copy()
 
     membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii(circles_array, sets, angles)
+    initial_centers, initial_radii = _init_centers_and_radii(
+        circles_array, sets, angles
+    )
     offsets_array = np.broadcast_to(
         np.asarray(offsets, dtype=np.float32), (S, N)
     ).copy()
@@ -417,16 +455,63 @@ def optimize_multiple_radially_convex_sets_bspline_with_movable_circles(
 
     schedules = term_schedules or {}
     terms = [
-        ObjectiveTerm("enclosure", wrap(_multi_term_enclosure_movable), 10.0, schedules.get("enclosure")),
-        ObjectiveTerm("exclusion", wrap(_multi_term_exclusion_movable), weight_exclusion, schedules.get("exclusion")),
-        ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0, schedules.get("min_radius")),
-        ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness, schedules.get("smoothness")),
-        ObjectiveTerm("area", wrap(_multi_term_area), weight_area, schedules.get("area")),
-        ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter, schedules.get("perimeter")),
-        ObjectiveTerm("position_anchor", _multi_term_position_anchor, weight_position_anchor, schedules.get("position_anchor")),
-        ObjectiveTerm("circle_collision", _multi_term_circle_collision, weight_circle_collision, schedules.get("circle_collision")),
-        ObjectiveTerm("bounding_box", wrap(_multi_term_total_bounding_box), weight_bounding_box, schedules.get("bounding_box")),
-        ObjectiveTerm("set_attraction", _multi_term_set_attraction, weight_set_attraction, schedules.get("set_attraction")),
+        ObjectiveTerm(
+            "enclosure",
+            wrap(_multi_term_enclosure_movable),
+            10.0,
+            schedules.get("enclosure"),
+        ),
+        ObjectiveTerm(
+            "exclusion",
+            wrap(_multi_term_exclusion_movable),
+            weight_exclusion,
+            schedules.get("exclusion"),
+        ),
+        ObjectiveTerm(
+            "min_radius",
+            wrap(_multi_term_min_radius),
+            10.0,
+            schedules.get("min_radius"),
+        ),
+        ObjectiveTerm(
+            "smoothness",
+            wrap(_multi_term_smoothness),
+            weight_smoothness,
+            schedules.get("smoothness"),
+        ),
+        ObjectiveTerm(
+            "area", wrap(_multi_term_area), weight_area, schedules.get("area")
+        ),
+        ObjectiveTerm(
+            "perimeter",
+            wrap(_multi_term_perimeter),
+            weight_perimeter,
+            schedules.get("perimeter"),
+        ),
+        ObjectiveTerm(
+            "position_anchor",
+            _multi_term_position_anchor,
+            weight_position_anchor,
+            schedules.get("position_anchor"),
+        ),
+        ObjectiveTerm(
+            "circle_collision",
+            _multi_term_circle_collision,
+            weight_circle_collision,
+            schedules.get("circle_collision"),
+        ),
+        ObjectiveTerm(
+            "bounding_box",
+            wrap(_multi_term_total_bounding_box),
+            weight_bounding_box,
+            schedules.get("bounding_box"),
+        ),
+        ObjectiveTerm(
+            "set_attraction",
+            _multi_term_set_attraction,
+            weight_set_attraction,
+            schedules.get("set_attraction"),
+        ),
     ]
 
     problem = OptimizationProblemTemplate(
@@ -439,7 +524,9 @@ def optimize_multiple_radially_convex_sets_bspline_with_movable_circles(
     circles_out = np.concatenate(
         [np.array(result.optim_vars["circle_positions"]), circle_radii[:, None]], axis=1
     )
-    radii_arr = np.array(bspline_to_radii(result.optim_vars["bspline_ctrl"], angles_jnp))
+    radii_arr = np.array(
+        bspline_to_radii(result.optim_vars["bspline_ctrl"], angles_jnp)
+    )
     results = [
         {
             "center": np.array(result.optim_vars["centers"][s]),

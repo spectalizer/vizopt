@@ -70,8 +70,12 @@ def plot_circles(positions, radii):
             )
         )
     margin = float(max(radii))
-    ax.set_xlim(float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin)
-    ax.set_ylim(float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin)
+    ax.set_xlim(
+        float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin
+    )
+    ax.set_ylim(
+        float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin
+    )
     ax.set_aspect("equal")
     ax.set_title(f"Circle packing: {n} circles")
     plt.axis("off")
@@ -206,4 +210,6 @@ class CirclePackingOptimizer(VizOptimizer):
         """
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
-        return [tuple(float(c) for c in xy) for xy in self.result_.optim_vars["node_xys"]]
+        return [
+            tuple(float(c) for c in xy) for xy in self.result_.optim_vars["node_xys"]
+        ]
