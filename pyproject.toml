@@ -34,6 +34,7 @@ dev = [
     "pandas-stubs>=3.0.0.260204",
     "pyright>=1.1.410",
     "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
     "ruff>=0.15.16",
     "types-networkx>=3.6.1.20260210",
     "zensical>=0.0.40",
@@ -46,6 +47,20 @@ ignore_missing_imports = true
 [build-system]
 requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+addopts = "--cov=vizopt --cov-report=html --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["src/vizopt"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.pyright]
 reportPrivateImportUsage = "none"
