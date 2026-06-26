@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$f = ([Console]::In.ReadToEnd() | ConvertFrom-Json).tool_input.file_path; if ($f -and $f -match '\\.py$') { uv run black $f } 2>$null",
+            "statusMessage": "Formatting with black..."
+          }
+        ]
+      }
+    ]
+  }
+}
