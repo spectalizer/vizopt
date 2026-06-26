@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate, OptimConfig
+from vizopt.base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, OptimConfig, VizOptimizer
 
 
 def oklab_to_rgb(Lab):
@@ -208,7 +208,6 @@ def _color_svg_configuration(snapshots, input_parameters, size):
     return elements
 
 
-
 def build_color_input_parameters(
     distances,
     fixed_colors=None,
@@ -237,7 +236,8 @@ def build_color_input_parameters(
 
     Returns:
         Dict of input parameters suitable for
-        ``color_palette_template.instantiate()``.
+        :class:`ColorPaletteOptimizer` or direct use with
+        :class:`~vizopt.base.OptimizationProblemTemplate`.
     """
     if isinstance(distances, pd.DataFrame):
         labels = list(distances.index)
@@ -291,97 +291,77 @@ def build_color_input_parameters(
     }
 
 
-def build_color_problem(
-    input_parameters,
-    *,
-    stress_weight=1.0,
-    coverage_weight=0.5,
-    luminosity_weight=1.0,
-):
-    """Instantiate an :class:`~vizopt.base.OptimizationProblem` for color palette optimization.
-
-    Useful when you need the problem object directly, e.g. to pass to
-    :func:`~vizopt.animation.snapshots_to_animated_svg`.
-
-    Args:
-        input_parameters: Dict returned by :func:`build_color_input_parameters`.
-        stress_weight: Multiplier for the stress term (default 1.0).
-        coverage_weight: Multiplier for the coverage term (default 0.5).
-        luminosity_weight: Multiplier for the luminosity term (default 1.0).
-
-    Returns:
-        :class:`~vizopt.base.OptimizationProblem` ready to call ``.optimize()`` on.
-    """
-    template = OptimizationProblemTemplate(
-        terms=[
-            ObjectiveTerm(name="stress", compute=_stress, multiplier=stress_weight),
-            ObjectiveTerm(name="coverage", compute=_coverage, multiplier=coverage_weight),
-            ObjectiveTerm(name="luminosity", compute=_luminosity, multiplier=luminosity_weight),
-        ],
-        initialize=lambda params, _seed: {"logit_rgb": params["logit_init"]},
-        plot_configuration=plot_colored_words,
-        svg_configuration=_color_svg_configuration,
-    )
-    return template.instantiate(input_parameters)
-
-
-def optimize_colors(
-    distances,
-    fixed_colors=None,
-    *,
-    target_max_delta_e=0.3,
-    target_L=None,
-    init_seed=None,
-    optim_config: OptimConfig | None = None,
-    callback=None,
-    stress_weight=1.0,
-    coverage_weight=0.5,
-    luminosity_weight=1.0,
-    coverage_temperature=0.05,
-):
-    """Optimize a palette so pairwise OKLAB ΔE distances match ``distances``.
+class ColorPaletteOptimizer(VizOptimizer):
+    """Optimize a color palette so pairwise OKLAB ΔE distances match a distance matrix.
 
     Args:
         distances: Symmetric pairwise distance matrix of shape (n, n). If a
             DataFrame, its index is used as labels for ``fixed_colors`` keys.
         fixed_colors: Map from label (DataFrame index value) or integer position
-            to an sRGB tuple/array in [0, 1]. Those colors are held fixed during
-            optimization.
+            to an sRGB tuple/array in [0, 1]. Those colors are held fixed.
         target_max_delta_e: The largest pairwise distance maps to this OKLAB ΔE
-            value. OKLAB distances are in [0, ~0.4] for typical sRGB colors.
-        target_L: Target OKLAB/OKLCH lightness for all colors, in [0, 1].
+            value. Default 0.3.
+        target_L: Target OKLAB/OKLCH lightness for all colors in [0, 1].
             ``None`` disables the luminosity term. Typical values: ~0.75 for
             light-mode palettes, ~0.85 for dark-mode palettes.
         init_seed: Integer random seed for initialization. When ``None``
-            (default), uses an MDS warm-start. Pass an integer to use random
-            initialization instead.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`OptimConfig` defaults when ``None``.
-        callback: Called as ``callback(i, loss, params, grads)`` after each step.
-        stress_weight: Multiplier for the stress term (default 1.0).
-        coverage_weight: Multiplier for the coverage term (default 0.5).
-        luminosity_weight: Multiplier for the luminosity term (default 1.0).
-        coverage_temperature: Temperature for the soft-min coverage term (default 0.05).
-
-    Returns:
-        Tuple of (colors, history) where colors is an sRGB array of shape (n, 3)
-        in [0, 1] and history is a list of dicts recorded every 10 iterations
-        with keys ``"iteration"``, ``"total"``, ``"stress"``, ``"coverage"``,
-        and ``"luminosity"``.
+            (default), uses an MDS warm-start.
+        stress_weight: Multiplier for the stress term.
+        coverage_weight: Multiplier for the coverage term.
+        luminosity_weight: Multiplier for the luminosity term.
+        coverage_temperature: Temperature for the soft-min coverage term.
     """
-    input_parameters = build_color_input_parameters(
+
+    def __init__(
+        self,
         distances,
-        fixed_colors,
-        target_max_delta_e=target_max_delta_e,
-        target_L=target_L,
-        coverage_temperature=coverage_temperature,
-        seed=init_seed,
-    )
-    problem = build_color_problem(
-        input_parameters,
-        stress_weight=stress_weight,
-        coverage_weight=coverage_weight,
-        luminosity_weight=luminosity_weight,
-    )
-    result = problem.optimize(optim_config, callback=callback)
-    return np.array(_build_rgb(result.optim_vars, input_parameters)), result.history
+        fixed_colors=None,
+        *,
+        target_max_delta_e: float = 0.3,
+        target_L=None,
+        init_seed=None,
+        stress_weight: float = 1.0,
+        coverage_weight: float = 0.5,
+        luminosity_weight: float = 1.0,
+        coverage_temperature: float = 0.05,
+    ):
+        self.distances = distances
+        self.fixed_colors = fixed_colors
+        self.target_max_delta_e = target_max_delta_e
+        self.target_L = target_L
+        self.init_seed = init_seed
+        self.stress_weight = stress_weight
+        self.coverage_weight = coverage_weight
+        self.luminosity_weight = luminosity_weight
+        self.coverage_temperature = coverage_temperature
+
+    def _build_problem(self) -> OptimizationProblem:
+        input_parameters = build_color_input_parameters(
+            self.distances,
+            self.fixed_colors,
+            target_max_delta_e=self.target_max_delta_e,
+            target_L=self.target_L,
+            coverage_temperature=self.coverage_temperature,
+            seed=self.init_seed,
+        )
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm(name="stress", compute=_stress, multiplier=self.stress_weight),
+                ObjectiveTerm(name="coverage", compute=_coverage, multiplier=self.coverage_weight),
+                ObjectiveTerm(name="luminosity", compute=_luminosity, multiplier=self.luminosity_weight),
+            ],
+            initialize=lambda params, _seed: {"logit_rgb": params["logit_init"]},
+            plot_configuration=plot_colored_words,
+            svg_configuration=_color_svg_configuration,
+        ).instantiate(input_parameters)
+
+    @property
+    def colors_(self) -> np.ndarray:
+        """Optimized sRGB palette, shape ``(n, 3)`` with values in ``[0, 1]``.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        return np.array(_build_rgb(self.result_.optim_vars, self.problem_.input_parameters))

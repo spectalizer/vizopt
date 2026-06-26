@@ -5,8 +5,8 @@ from jax import numpy as jnp
 from matplotlib import pyplot as plt
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from ..base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
 from ..components import common
-from ..base import ObjectiveTerm, OptimizationProblemTemplate
 
 
 class LabelPositionParams(BaseModel):
@@ -33,11 +33,11 @@ class LabelPositionParams(BaseModel):
         return self
 
 
-def initialize(input_parameters, _seed):
+def _initialize(input_parameters, _seed):
     return {"rectangle_positions": input_parameters["point_positions"].copy()}
 
 
-def calculate_intersection_loss(optim_vars, input_parameters):
+def _calculate_intersection_loss(optim_vars, input_parameters):
     """Pairwise intersections between label bounding boxes"""
     bbox_matrix = jnp.stack(
         [
@@ -56,14 +56,14 @@ def calculate_intersection_loss(optim_vars, input_parameters):
     return jnp.sum(interlabel_inters_array)
 
 
-def calculate_point_label_distance_loss(optim_vars, input_parameters):
+def _calculate_point_label_distance_loss(optim_vars, input_parameters):
     """Distances between points and the respective labels"""
     return jnp.sum(
         (optim_vars["rectangle_positions"] - input_parameters["point_positions"]) ** 2
     )
 
 
-def plot_rectangles(optim_vars, input_parameters):
+def _plot_rectangles(optim_vars, input_parameters):
     """Plot label rectangles and points"""
     _, ax = plt.subplots(figsize=(4, 3))
     n_rect = optim_vars["rectangle_positions"].shape[0]
@@ -92,18 +92,51 @@ def plot_rectangles(optim_vars, input_parameters):
     )
 
 
-label_position_template = OptimizationProblemTemplate(
-    terms=[
-        ObjectiveTerm(
-            name="intersection_loss",
-            compute=calculate_intersection_loss,
-            multiplier=5.0,
-        ),
-        ObjectiveTerm(
-            name="point_label_distance", compute=calculate_point_label_distance_loss
-        ),
-    ],
-    initialize=initialize,
-    input_params_class=LabelPositionParams,
-    plot_configuration=plot_rectangles,
-)
+class LabelPositionOptimizer(VizOptimizer):
+    """Optimize label rectangle positions to avoid overlap while staying near points.
+
+    Args:
+        point_positions: Array of shape ``(n, 2)`` with the anchor point coordinates.
+        rectangle_sizes: Array of shape ``(n, 2)`` with ``(width, height)`` of each label.
+        weight_intersection: Weight for the pairwise bounding-box intersection loss.
+        weight_distance: Weight for the point-to-label distance loss.
+    """
+
+    def __init__(
+        self,
+        point_positions,
+        rectangle_sizes,
+        *,
+        weight_intersection: float = 5.0,
+        weight_distance: float = 1.0,
+    ):
+        self.point_positions = np.asarray(point_positions, dtype=np.float32)
+        self.rectangle_sizes = np.asarray(rectangle_sizes, dtype=np.float32)
+        self.weight_intersection = weight_intersection
+        self.weight_distance = weight_distance
+
+    def _build_problem(self) -> OptimizationProblem:
+        input_parameters = {
+            "point_positions": self.point_positions,
+            "rectangle_sizes": self.rectangle_sizes,
+        }
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm("intersection_loss", _calculate_intersection_loss, self.weight_intersection),
+                ObjectiveTerm("point_label_distance", _calculate_point_label_distance_loss, self.weight_distance),
+            ],
+            initialize=_initialize,
+            input_params_class=LabelPositionParams,
+            plot_configuration=_plot_rectangles,
+        ).instantiate(input_parameters)
+
+    @property
+    def label_positions_(self) -> np.ndarray:
+        """Optimized label rectangle positions, shape ``(n, 2)``.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        return np.array(self.result_.optim_vars["rectangle_positions"])

@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 
-from ...base import Callback, ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from ...base import ObjectiveTerm, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
 from ...components.stars import (
     _build_membership,
     _multi_term_area,
@@ -488,432 +488,330 @@ def _sets_from_graph(inclusion_graph, leaf_names, name_to_idx):
 
 
 # ---------------------------------------------------------------------------
-# Main public functions
+# Public API
 # ---------------------------------------------------------------------------
 
 
-def optimize_radially_convex_sets_and_rectangles(
-    rectangles,
-    sets,
-    weight_area=1.0,
-    weight_perimeter=1.0,
-    weight_exclusion=10.0,
-    weight_smoothness=1.0,
-    weight_convexity=10.0,
-    weight_position_anchor=1.0,
-    weight_rect_collision=10.0,
-    weight_bounding_box=0.0,
-    weight_set_attraction=0.0,
-    rect_collision_alpha=0.1,
-    convexity_alpha=1.0,
-    k_angles: int = 64,
-    offsets: float | np.ndarray = 0.1,
-    label_rect_size: tuple[float, float] | None = None,
-    label_membership: np.ndarray | None = None,
-    weight_label_enclosure: float = 10.0,
-    weight_label_element_exclusion: float = 10.0,
-    weight_label_set_exclusion: float = 10.0,
-    weight_label_collision: float = 10.0,
-    weight_label_top: float = 1.0,
-    term_schedules=None,
-    optim_config: OptimConfig | None = None,
-    callback: Callback | None = None,
-):
-    """Optimize convex star-shaped boundaries enclosing sets of axis-aligned rectangles.
+class EulerDiagramRect(VizOptimizer):
+    """Star-shaped boundary optimizer for sets of axis-aligned rectangles.
 
-    Rectangle positions (cx, cy) are optimization variables; half-widths and
-    half-heights remain fixed.  A convexity penalty keeps the star polygon convex,
-    which lets enclosure be checked via slab (ray-AABB) intersection.
+    Rectangle positions are optimization variables alongside the star boundaries.
+    Construct directly from arrays or via :meth:`from_graph`.
 
     Args:
-        rectangles: array of shape (N, 4) with columns [cx, cy, hw, hh], or a
-            sequence of (cx, cy, hw, hh) tuples.
-        sets: list of S subsets, each a collection of integer indices into
+        rectangles: Array of shape ``(N, 4)`` with columns ``[cx, cy, hw, hh]``.
+        sets: List of S subsets, each a collection of integer indices into
             ``rectangles``.
-        weight_area: weight for the area objective.
-        weight_perimeter: weight for the perimeter objective.
-        weight_exclusion: weight for the exclusion penalty.
-        weight_smoothness: weight for the smoothness penalty.
-        weight_convexity: weight for the convexity penalty (penalises non-convex
-            turns in the star polygon).  Set to 0 to disable.
-        weight_position_anchor: weight for penalising rectangle positions
-            deviating from their initial positions.
-        weight_rect_collision: weight for penalising overlapping rectangles.
-        weight_bounding_box: weight for minimising total width + height of all
-            set boundaries.  Default 0.0 (disabled).
-        weight_set_attraction: weight for pulling rectangles toward their set
-            centers.  Default 0.0 (disabled).
-        rect_collision_alpha: coefficient for the linear term in the rectangle
-            collision penalty: ``overlap² + alpha * overlap``.  The linear term
-            gives a constant non-zero gradient for any overlap, preventing tiny
-            violations from persisting.  Default 0.0 (pure quadratic).
-        convexity_alpha: coefficient for the linear term in the convexity
-            penalty: ``violation² + alpha * violation``.  The linear term gives
-            a non-zero gradient for any concavity, preventing mild violations
-            from stalling.  Default 0.5.
-        k_angles: angular resolution (number of uniformly-spaced rays).
-        offsets: padding added to each rectangle's half-extents in the enclosure
-            and exclusion terms.  Scalar, shape (N,), or shape (S, N).
-        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle to
-            reserve at the top of each set boundary.  When ``None`` (default)
-            no label rectangle is used.  When set, each star boundary is forced
-            to enclose a floating label rect whose position (``label_positions``,
-            one per set) is an optimization variable.
-        label_membership: bool array of shape (S, S) where entry [s, l] is True
-            when boundary ``s`` must enclose label rect ``l``.  When ``None``
-            (default) each boundary encloses only its own label rect.  Pass a
-            matrix derived from the set hierarchy to enforce that outer set
-            boundaries also enclose the label rects of all nested sets.
-        weight_label_enclosure: weight for the label enclosure term.  Default 10.0.
-        weight_label_element_exclusion: weight for keeping label rects away from
-            leaf rectangles.  Default 10.0.
-        weight_label_collision: weight for keeping label rects from overlapping
-            each other.  Default 10.0.
-        weight_label_top: weight for the upward-attraction term.  Default 1.0.
-        term_schedules: optional dict mapping term name to a JAX-compatible
-            callable ``(step: Array) -> Array`` that scales the term's weight.
-            Valid keys: ``"enclosure"``, ``"exclusion"``, ``"min_radius"``,
-            ``"smoothness"``, ``"convexity"``, ``"area"``, ``"perimeter"``,
-            ``"position_anchor"``, ``"rect_collision"``, ``"bounding_box"``,
-            ``"set_attraction"``, ``"label_enclosure"``,
-            ``"label_element_exclusion"``, ``"label_collision"``,
-            ``"label_top"``.
-        optim_config: optimizer settings.  Uses :class:`OptimConfig` defaults
-            when ``None``.
-        callback: optional callback called after each iteration with
-            ``(iteration, loss, optim_vars, grads)``.
-
-    Returns:
-        Tuple of ``(results, rects_out, history, problem)`` where ``results``
-        is a list of S dicts each with keys ``"center"``, ``"radii"``,
-        ``"angles"``, and (when ``label_rect_size`` is set) ``"label_center"``;
-        ``rects_out`` is an array of shape (N, 4) with optimised
-        ``[cx, cy, hw, hh]``; ``history`` is the list of per-iteration loss
-        dicts; and ``problem`` is the
-        :class:`~vizopt.base.OptimizationProblem` instance.
+        weight_area: Weight for the area objective.
+        weight_perimeter: Weight for the perimeter objective.
+        weight_enclosure: Weight for the enclosure penalty.
+        weight_exclusion: Weight for the exclusion penalty.
+        weight_smoothness: Weight for the smoothness penalty.
+        weight_convexity: Weight for the convexity penalty (penalises non-convex
+            turns). Set to 0 to disable.
+        weight_position_anchor: Weight for penalising rectangle positions
+            deviating from initial positions.
+        weight_rect_collision: Weight for penalising overlapping rectangles.
+        weight_bounding_box: Weight for minimising total bounding box extent.
+            Default 0.0 (disabled).
+        weight_set_attraction: Weight for pulling rectangles toward set centers.
+            Default 0.0 (disabled).
+        rect_collision_alpha: Coefficient for the linear term in the rectangle
+            collision penalty. Default 0.1.
+        convexity_alpha: Coefficient for the linear term in the convexity
+            penalty. Default 1.0.
+        k_angles: Angular resolution (number of uniformly-spaced rays).
+        offsets: Padding added to each rectangle's half-extents. Scalar,
+            shape ``(N,)``, or shape ``(S, N)``.
+        label_rect_size: ``(hw, hh)`` half-extents of a label rectangle to
+            reserve at the top of each set boundary. When set, each star
+            boundary encloses a floating label rect whose position is an
+            optimization variable.
+        label_membership: Bool array of shape ``(S, S)`` where ``[s, l]`` is
+            True when boundary ``s`` must enclose label rect ``l``. When
+            ``None``, each boundary encloses only its own label rect.
+        weight_label_enclosure: Weight for the label enclosure term.
+        weight_label_element_exclusion: Weight for keeping label rects away
+            from leaf rectangles.
+        weight_label_set_exclusion: Weight for keeping label rects away from
+            other set boundaries.
+        weight_label_collision: Weight for keeping label rects from overlapping.
+        weight_label_top: Weight for the upward-attraction term on labels.
+        term_schedules: Optional dict or :class:`~vizopt.schedules.TermSchedules`
+            mapping term name to a JAX-compatible schedule callable.
+        set_names: Display names for the S sets.
+        leaf_names: Display names for the N rectangles.
     """
-    rects_array = np.asarray(rectangles, dtype=np.float32)
-    if rects_array.ndim == 1:
-        rects_array = rects_array[None, :]
-    N = len(rects_array)
-    S = len(sets)
 
-    angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
+    def __init__(
+        self,
+        rectangles,
+        sets,
+        *,
+        weight_area: float = 1.0,
+        weight_perimeter: float = 1.0,
+        weight_enclosure: float = 10.0,
+        weight_exclusion: float = 10.0,
+        weight_smoothness: float = 1.0,
+        weight_convexity: float = 10.0,
+        weight_position_anchor: float = 1.0,
+        weight_rect_collision: float = 10.0,
+        weight_bounding_box: float = 0.0,
+        weight_set_attraction: float = 0.0,
+        rect_collision_alpha: float = 0.1,
+        convexity_alpha: float = 1.0,
+        k_angles: int = 64,
+        offsets: float | np.ndarray = 0.1,
+        label_rect_size: tuple[float, float] | None = None,
+        label_membership: np.ndarray | None = None,
+        weight_label_enclosure: float = 10.0,
+        weight_label_element_exclusion: float = 10.0,
+        weight_label_set_exclusion: float = 10.0,
+        weight_label_collision: float = 10.0,
+        weight_label_top: float = 1.0,
+        term_schedules=None,
+        set_names: list[str] | None = None,
+        leaf_names: list | None = None,
+    ):
+        self.rectangles = np.asarray(rectangles, dtype=np.float32)
+        if self.rectangles.ndim == 1:
+            self.rectangles = self.rectangles[None, :]
+        self.sets = sets
+        self.weight_area = weight_area
+        self.weight_perimeter = weight_perimeter
+        self.weight_enclosure = weight_enclosure
+        self.weight_exclusion = weight_exclusion
+        self.weight_smoothness = weight_smoothness
+        self.weight_convexity = weight_convexity
+        self.weight_position_anchor = weight_position_anchor
+        self.weight_rect_collision = weight_rect_collision
+        self.weight_bounding_box = weight_bounding_box
+        self.weight_set_attraction = weight_set_attraction
+        self.rect_collision_alpha = rect_collision_alpha
+        self.convexity_alpha = convexity_alpha
+        self.k_angles = k_angles
+        self.offsets = offsets
+        self.label_rect_size = label_rect_size
+        self.label_membership = label_membership
+        self.weight_label_enclosure = weight_label_enclosure
+        self.weight_label_element_exclusion = weight_label_element_exclusion
+        self.weight_label_set_exclusion = weight_label_set_exclusion
+        self.weight_label_collision = weight_label_collision
+        self.weight_label_top = weight_label_top
+        self.term_schedules = term_schedules
+        S, N = len(sets), len(self.rectangles)
+        self.set_names = set_names if set_names is not None else [f"Set {s}" for s in range(S)]
+        self.leaf_names = leaf_names if leaf_names is not None else list(range(N))
 
-    rect_hw = rects_array[:, 2].copy()
-    rect_hh = rects_array[:, 3].copy()
-    initial_rect_positions = rects_array[:, :2].copy()
+    @classmethod
+    def from_graph(
+        cls,
+        inclusion_graph: nx.DiGraph,
+        *,
+        offsets=None,
+        label_rect_size=None,
+        **kwargs,
+    ) -> "EulerDiagramRect":
+        """Construct from a DiGraph where leaves are rectangles and internal nodes are sets.
 
-    membership = _build_membership(S, N, sets)
-    initial_centers, initial_radii = _init_centers_and_radii_from_rects(
-        rects_array, sets, angles
-    )
-    offsets_array = np.broadcast_to(
-        np.asarray(offsets, dtype=np.float32), (S, N)
-    ).copy()
+        Leaf nodes (out-degree 0) become rectangles; internal nodes (out-degree > 0)
+        become sets. A leaf belongs to a set if it is a descendant of that set.
 
-    has_label = label_rect_size is not None
-    if has_label:
-        label_hw = np.full(S, label_rect_size[0], dtype=np.float32)
-        label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
-        initial_label_positions = initial_centers.copy()
-        initial_label_positions[:, 1] += np.max(initial_radii, axis=1) - label_hh
-        label_membership_arr = (
-            np.eye(S, dtype=bool)
-            if label_membership is None
-            else np.asarray(label_membership, dtype=bool)
-        )
+        Args:
+            inclusion_graph: DiGraph with parent→child edges (edge ``(u, v)`` means
+                ``v ⊂ u``). Leaf nodes must carry ``center`` (``[x, y]``), ``hw``
+                (half-width), and ``hh`` (half-height) attributes.
+            offsets: Padding added to each rectangle's half-extents. When ``None``
+                (default), computed automatically from the graph hierarchy via
+                :func:`~vizopt.templates.euler.graph_utils.offsets_from_graph`.
+            label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
+                When set, ``label_membership`` is derived from the hierarchy so
+                that outer set boundaries also enclose nested labels.
+            **kwargs: Forwarded to :meth:`__init__`.
 
-    input_parameters = {
-        "rect_hw": rect_hw,
-        "rect_hh": rect_hh,
-        "initial_rect_positions": initial_rect_positions,
-        "angles": angles,
-        "membership": membership,
-        "offsets": offsets_array,
-        "rect_collision_alpha": np.float32(rect_collision_alpha),
-        "convexity_alpha": np.float32(convexity_alpha),
-    }
-    if has_label:
-        input_parameters["label_rect_hw"] = label_hw
-        input_parameters["label_rect_hh"] = label_hh
-        input_parameters["label_membership"] = label_membership_arr
+        Returns:
+            A configured :class:`EulerDiagramRect` ready to call :meth:`optimize`.
+        """
+        leaf_names, rects, name_to_idx = _leaf_rects_from_graph(inclusion_graph)
+        set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
 
-    mean_size = float(np.mean(np.concatenate([rect_hw, rect_hh])))
-    pos_scale_x = max(float(np.std(rects_array[:, 0])), mean_size)
-    pos_scale_y = max(float(np.std(rects_array[:, 1])), mean_size)
-    rad_scale = float(initial_radii.mean())
-    pos_scale_arr = np.array([pos_scale_x, pos_scale_y], dtype=np.float32)
-    var_scales = {
-        "centers": pos_scale_arr,
-        "rect_positions": pos_scale_arr,
-        "radii": np.float32(rad_scale),
-    }
-    if has_label:
-        var_scales["label_positions"] = pos_scale_arr
+        if offsets is None:
+            mean_halfsize = float(np.mean(rects[:, 2:4]))
+            offsets = offsets_from_graph(
+                inclusion_graph,
+                set_names,
+                leaf_names,
+                offset_step=mean_halfsize * 0.3,
+                sub_step=mean_halfsize * 0.1,
+                min_offset=mean_halfsize * 0.1,
+            )
 
-    def initialize(_, seed):
-        d = {
-            "centers": initial_centers.copy(),
-            "radii": initial_radii.copy(),
-            "rect_positions": initial_rect_positions.copy(),
-        }
-        if has_label:
-            d["label_positions"] = initial_label_positions.copy()
-        return d
+        label_membership = None
+        if label_rect_size is not None:
+            S = len(set_names)
+            label_membership = np.eye(S, dtype=bool)
+            for i, s1 in enumerate(set_names):
+                descendants = nx.descendants(inclusion_graph, s1)
+                for j, s2 in enumerate(set_names):
+                    if s2 in descendants:
+                        label_membership[i, j] = True
 
-    schedules = (
-        term_schedules.schedules
-        if isinstance(term_schedules, TermSchedules)
-        else term_schedules
-    ) or {}
-
-    terms = [
-        ObjectiveTerm(
-            "enclosure", _term_enclosure_rect, 10.0, schedules.get("enclosure")
-        ),
-        ObjectiveTerm(
-            "exclusion",
-            _term_exclusion_rect,
-            weight_exclusion,
-            schedules.get("exclusion"),
-        ),
-        ObjectiveTerm(
-            "min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")
-        ),
-        ObjectiveTerm(
-            "smoothness",
-            _multi_term_smoothness,
-            weight_smoothness,
-            schedules.get("smoothness"),
-        ),
-        ObjectiveTerm(
-            "convexity",
-            _multi_term_convexity,
-            weight_convexity,
-            schedules.get("convexity"),
-        ),
-        ObjectiveTerm("area", _multi_term_area, weight_area, schedules.get("area")),
-        ObjectiveTerm(
-            "perimeter",
-            _multi_term_perimeter,
-            weight_perimeter,
-            schedules.get("perimeter"),
-        ),
-        ObjectiveTerm(
-            "position_anchor",
-            _term_position_anchor_rect,
-            weight_position_anchor,
-            schedules.get("position_anchor"),
-        ),
-        ObjectiveTerm(
-            "rect_collision",
-            _term_rect_collision,
-            weight_rect_collision,
-            schedules.get("rect_collision"),
-        ),
-        ObjectiveTerm(
-            "bounding_box",
-            _multi_term_total_bounding_box,
-            weight_bounding_box,
-            schedules.get("bounding_box"),
-        ),
-        ObjectiveTerm(
-            "set_attraction",
-            _term_set_attraction_rect,
-            weight_set_attraction,
-            schedules.get("set_attraction"),
-        ),
-    ]
-    if has_label:
-        terms += [
-            ObjectiveTerm(
-                "label_enclosure",
-                _multi_term_label_enclosure,
-                weight_label_enclosure,
-                schedules.get("label_enclosure"),
-            ),
-            ObjectiveTerm(
-                "label_element_exclusion",
-                _multi_term_label_element_exclusion_rect,
-                weight_label_element_exclusion,
-                schedules.get("label_element_exclusion"),
-            ),
-            ObjectiveTerm(
-                "label_set_exclusion",
-                _multi_term_label_set_exclusion,
-                weight_label_set_exclusion,
-                schedules.get("label_set_exclusion"),
-            ),
-            ObjectiveTerm(
-                "label_collision",
-                _multi_term_label_label_collision,
-                weight_label_collision,
-                schedules.get("label_collision"),
-            ),
-            ObjectiveTerm(
-                "label_top",
-                _multi_term_label_top_attraction,
-                weight_label_top,
-                schedules.get("label_top"),
-            ),
-        ]
-
-    problem = OptimizationProblemTemplate(
-        terms=terms,
-        initialize=initialize,
-        svg_configuration=_svg_configuration_rect,
-    ).instantiate(input_parameters, var_scales=var_scales)
-    result = problem.optimize(optim_config, callback=callback)
-
-    rects_out = np.concatenate(
-        [np.array(result.optim_vars["rect_positions"]), rect_hw[:, None], rect_hh[:, None]],
-        axis=1,
-    )
-    radii_arr = np.array(result.optim_vars["radii"])
-
-    results = [
-        {
-            "center": np.array(result.optim_vars["centers"][s]),
-            "radii": radii_arr[s],
-            "angles": angles,
-            **(
-                {"label_center": np.array(result.optim_vars["label_positions"][s])}
-                if has_label
-                else {}
-            ),
-        }
-        for s in range(S)
-    ]
-    return results, rects_out, result.history, problem
-
-
-def optimize_radially_convex_sets_and_rectangles_from_graph(
-    inclusion_graph: nx.DiGraph,
-    weight_area=1.0,
-    weight_perimeter=1.0,
-    weight_exclusion=10.0,
-    weight_smoothness=1.0,
-    weight_convexity=10.0,
-    weight_position_anchor=1.0,
-    weight_rect_collision=10.0,
-    weight_bounding_box=0.0,
-    weight_set_attraction=0.0,
-    rect_collision_alpha=0.1,
-    convexity_alpha=1.0,
-    k_angles: int = 64,
-    offsets=None,
-    label_rect_size: tuple[float, float] | None = None,
-    weight_label_enclosure: float = 10.0,
-    weight_label_element_exclusion: float = 10.0,
-    weight_label_set_exclusion: float = 10.0,
-    weight_label_collision: float = 10.0,
-    weight_label_top: float = 1.0,
-    term_schedules=None,
-    optim_config: OptimConfig | None = None,
-    callback: Callback | None = None,
-):
-    """Like optimize_radially_convex_sets_and_rectangles, but takes a DiGraph.
-
-    Leaf nodes (out-degree 0) become rectangles; internal nodes become sets.
-    A leaf belongs to a set if it is a descendant of that set.
-
-    Args:
-        inclusion_graph: DiGraph with parent→child edges (edge (u, v) means
-            v ⊂ u).  Leaf nodes must carry ``center`` ([x, y]), ``hw``
-            (half-width), and ``hh`` (half-height) attributes.
-        weight_area: weight for the area objective.
-        weight_perimeter: weight for the perimeter objective.
-        weight_exclusion: weight for the exclusion penalty.
-        weight_smoothness: weight for the smoothness penalty.
-        weight_convexity: weight for the convexity penalty.
-        weight_position_anchor: weight for the position anchor penalty.
-        weight_rect_collision: weight for the rectangle collision penalty.
-        weight_bounding_box: weight for the bounding-box objective.
-        weight_set_attraction: weight for the set-attraction term.
-        rect_collision_alpha: coefficient for the linear term in the rectangle
-            collision penalty.  Default 0.0 (pure quadratic).
-        convexity_alpha: coefficient for the linear term in the convexity
-            penalty.  Default 0.5.
-        k_angles: angular resolution.
-        offsets: padding added to each rectangle's half-extents in the enclosure
-            and exclusion terms.  Scalar, shape ``(N,)``, or shape ``(S, N)``.
-            When ``None`` (default), computed automatically from the graph
-            hierarchy via :func:`~vizopt.templates.euler.graph_utils.offsets_from_graph`:
-            outer sets get larger offsets so that nested boundaries are visually
-            distinguishable, scaled to mean rectangle half-size.
-        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
-            See :func:`optimize_radially_convex_sets_and_rectangles`.
-        weight_label_enclosure: weight for the label enclosure term.
-        weight_label_element_exclusion: weight for label-rect exclusion.
-        weight_label_collision: weight for label-label collision.
-        weight_label_top: weight for the upward-attraction term.
-        term_schedules: optional term schedule dict.
-        optim_config: optimizer settings.
-        callback: optional per-iteration callback.
-
-    Returns:
-        Tuple of ``(results, rects_out, history, problem)`` where ``results``
-        maps set node name → dict with ``"center"``, ``"radii"``, ``"angles"``,
-        and (when ``label_rect_size`` is set) ``"label_center"``;
-        ``rects_out`` maps leaf node name → array of shape (4,) with optimised
-        ``[cx, cy, hw, hh]``; ``history`` is the per-iteration loss list; and
-        ``problem`` is the :class:`~vizopt.base.OptimizationProblem` instance.
-    """
-    leaf_names, rects, name_to_idx = _leaf_rects_from_graph(inclusion_graph)
-    set_names, sets = _sets_from_graph(inclusion_graph, leaf_names, name_to_idx)
-
-    if offsets is None:
-        mean_halfsize = float(np.mean(rects[:, 2:4]))
-        offsets = offsets_from_graph(
-            inclusion_graph,
-            set_names,
-            leaf_names,
-            offset_step=mean_halfsize * 0.3,
-            sub_step=mean_halfsize * 0.1,
-            min_offset=mean_halfsize * 0.1,
-        )
-
-    label_membership = None
-    if label_rect_size is not None:
-        S = len(set_names)
-        label_membership = np.eye(S, dtype=bool)
-        for i, s1 in enumerate(set_names):
-            descendants = nx.descendants(inclusion_graph, s1)
-            for j, s2 in enumerate(set_names):
-                if s2 in descendants:
-                    label_membership[i, j] = True
-
-    results_list, rects_out_arr, history, problem = (
-        optimize_radially_convex_sets_and_rectangles(
-            rectangles=rects,
-            sets=sets,
-            weight_area=weight_area,
-            weight_perimeter=weight_perimeter,
-            weight_exclusion=weight_exclusion,
-            weight_smoothness=weight_smoothness,
-            weight_convexity=weight_convexity,
-            weight_position_anchor=weight_position_anchor,
-            weight_rect_collision=weight_rect_collision,
-            weight_bounding_box=weight_bounding_box,
-            weight_set_attraction=weight_set_attraction,
-            rect_collision_alpha=rect_collision_alpha,
-            convexity_alpha=convexity_alpha,
-            k_angles=k_angles,
+        return cls(
+            rects,
+            sets,
             offsets=offsets,
             label_rect_size=label_rect_size,
             label_membership=label_membership,
-            weight_label_enclosure=weight_label_enclosure,
-            weight_label_element_exclusion=weight_label_element_exclusion,
-            weight_label_set_exclusion=weight_label_set_exclusion,
-            weight_label_collision=weight_label_collision,
-            weight_label_top=weight_label_top,
-            term_schedules=term_schedules,
-            optim_config=optim_config,
-            callback=callback,
+            set_names=set_names,
+            leaf_names=leaf_names,
+            **kwargs,
         )
-    )
 
-    named_results = {set_names[s]: results_list[s] for s in range(len(set_names))}
-    named_rects_out = {leaf_names[i]: rects_out_arr[i] for i in range(len(leaf_names))}
-    return named_results, named_rects_out, history, problem
+    def _build_problem(self) -> OptimizationProblem:
+        rects_array = self.rectangles
+        N = len(rects_array)
+        S = len(self.sets)
+
+        angles = np.linspace(0, 2 * np.pi, self.k_angles, endpoint=False).astype(np.float32)
+
+        rect_hw = rects_array[:, 2].copy()
+        rect_hh = rects_array[:, 3].copy()
+        initial_rect_positions = rects_array[:, :2].copy()
+
+        membership = _build_membership(S, N, self.sets)
+        initial_centers, initial_radii = _init_centers_and_radii_from_rects(
+            rects_array, self.sets, angles
+        )
+        offsets_array = np.broadcast_to(
+            np.asarray(self.offsets, dtype=np.float32), (S, N)
+        ).copy()
+
+        label_rect_size = self.label_rect_size  # local alias for type narrowing
+        label_hw: np.ndarray = np.empty(0, dtype=np.float32)
+        label_hh: np.ndarray = np.empty(0, dtype=np.float32)
+        label_membership_arr: np.ndarray = np.empty(0, dtype=bool)
+        initial_label_positions: np.ndarray = np.empty(0, dtype=np.float32)
+        if label_rect_size is not None:
+            label_hw = np.full(S, label_rect_size[0], dtype=np.float32)
+            label_hh = np.full(S, label_rect_size[1], dtype=np.float32)
+            initial_label_positions = initial_centers.copy()
+            initial_label_positions[:, 1] += np.max(initial_radii, axis=1) - label_hh
+            label_membership_arr = (
+                np.eye(S, dtype=bool)
+                if self.label_membership is None
+                else np.asarray(self.label_membership, dtype=bool)
+            )
+
+        input_parameters = {
+            "rect_hw": rect_hw,
+            "rect_hh": rect_hh,
+            "initial_rect_positions": initial_rect_positions,
+            "angles": angles,
+            "membership": membership,
+            "offsets": offsets_array,
+            "rect_collision_alpha": np.float32(self.rect_collision_alpha),
+            "convexity_alpha": np.float32(self.convexity_alpha),
+        }
+        if label_rect_size is not None:
+            input_parameters["label_rect_hw"] = label_hw
+            input_parameters["label_rect_hh"] = label_hh
+            input_parameters["label_membership"] = label_membership_arr
+
+        mean_size = float(np.mean(np.concatenate([rect_hw, rect_hh])))
+        pos_scale_x = max(float(np.std(rects_array[:, 0])), mean_size)
+        pos_scale_y = max(float(np.std(rects_array[:, 1])), mean_size)
+        rad_scale = float(initial_radii.mean())
+        pos_scale_arr = np.array([pos_scale_x, pos_scale_y], dtype=np.float32)
+        var_scales = {
+            "centers": pos_scale_arr,
+            "rect_positions": pos_scale_arr,
+            "radii": np.float32(rad_scale),
+        }
+        if label_rect_size is not None:
+            var_scales["label_positions"] = pos_scale_arr
+
+        def initialize(_, _seed):
+            d = {
+                "centers": initial_centers.copy(),
+                "radii": initial_radii.copy(),
+                "rect_positions": initial_rect_positions.copy(),
+            }
+            if label_rect_size is not None:
+                d["label_positions"] = initial_label_positions.copy()
+            return d
+
+        schedules = (
+            self.term_schedules.schedules
+            if isinstance(self.term_schedules, TermSchedules)
+            else self.term_schedules
+        ) or {}
+
+        terms = [
+            ObjectiveTerm("enclosure", _term_enclosure_rect, self.weight_enclosure, schedules.get("enclosure")),
+            ObjectiveTerm("exclusion", _term_exclusion_rect, self.weight_exclusion, schedules.get("exclusion")),
+            ObjectiveTerm("min_radius", _multi_term_min_radius, 10.0, schedules.get("min_radius")),
+            ObjectiveTerm("smoothness", _multi_term_smoothness, self.weight_smoothness, schedules.get("smoothness")),
+            ObjectiveTerm("convexity", _multi_term_convexity, self.weight_convexity, schedules.get("convexity")),
+            ObjectiveTerm("area", _multi_term_area, self.weight_area, schedules.get("area")),
+            ObjectiveTerm("perimeter", _multi_term_perimeter, self.weight_perimeter, schedules.get("perimeter")),
+            ObjectiveTerm("position_anchor", _term_position_anchor_rect, self.weight_position_anchor, schedules.get("position_anchor")),
+            ObjectiveTerm("rect_collision", _term_rect_collision, self.weight_rect_collision, schedules.get("rect_collision")),
+            ObjectiveTerm("bounding_box", _multi_term_total_bounding_box, self.weight_bounding_box, schedules.get("bounding_box")),
+            ObjectiveTerm("set_attraction", _term_set_attraction_rect, self.weight_set_attraction, schedules.get("set_attraction")),
+        ]
+        if label_rect_size is not None:
+            terms += [
+                ObjectiveTerm("label_enclosure", _multi_term_label_enclosure, self.weight_label_enclosure, schedules.get("label_enclosure")),
+                ObjectiveTerm("label_element_exclusion", _multi_term_label_element_exclusion_rect, self.weight_label_element_exclusion, schedules.get("label_element_exclusion")),
+                ObjectiveTerm("label_set_exclusion", _multi_term_label_set_exclusion, self.weight_label_set_exclusion, schedules.get("label_set_exclusion")),
+                ObjectiveTerm("label_collision", _multi_term_label_label_collision, self.weight_label_collision, schedules.get("label_collision")),
+                ObjectiveTerm("label_top", _multi_term_label_top_attraction, self.weight_label_top, schedules.get("label_top")),
+            ]
+
+        return OptimizationProblemTemplate(
+            terms=terms,
+            initialize=initialize,
+            svg_configuration=_svg_configuration_rect,
+        ).instantiate(input_parameters, var_scales=var_scales)
+
+    @property
+    def sets_(self) -> list[dict]:
+        """Star boundary dicts from the last optimization result.
+
+        Each dict has ``"center"``, ``"radii"``, ``"angles"``, and (when a label
+        rect was used) ``"label_center"``.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        optim_vars = self.result_.optim_vars
+        angles = self.problem_.input_parameters["angles"]
+        radii_arr = np.array(optim_vars["radii"])
+        has_label = "label_positions" in optim_vars
+        return [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": radii_arr[s],
+                "angles": angles,
+                **({"label_center": np.array(optim_vars["label_positions"][s])} if has_label else {}),
+            }
+            for s in range(len(self.set_names))
+        ]
+
+    @property
+    def rects_(self) -> np.ndarray:
+        """Optimized rectangle positions as an ``(N, 4)`` array of ``[cx, cy, hw, hh]``.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        rect_hw = self.problem_.input_parameters["rect_hw"]
+        rect_hh = self.problem_.input_parameters["rect_hh"]
+        return np.concatenate(
+            [np.array(self.result_.optim_vars["rect_positions"]), rect_hw[:, None], rect_hh[:, None]],
+            axis=1,
+        )

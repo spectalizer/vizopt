@@ -3,13 +3,13 @@
 Provides two high-level optimizers for laying out graphs where some nodes are
 visually enclosed by others (e.g. set membership diagrams, containment hierarchies):
 
-- :func:`optimize_circular_layout_with_enclosed_nodes`: pure inclusion tree, no edges.
-- :func:`optimize_circular_layout_with_enclosed_and_linked_nodes`: inclusion tree plus
-  an ordinary graph whose edges should be drawn short.
+- :class:`NestedCirclesOptimizer`: pure inclusion tree, no edges.
+- :class:`LinkedNestedCirclesOptimizer`: inclusion tree plus an ordinary graph
+  whose edges should be drawn short.
 
-Both functions return ``(pos, radii)`` dicts suitable for direct use with matplotlib
-or NetworkX drawing routines. Leaf node radii are fixed (from ``"size"`` attributes);
-non-leaf / enclosing node radii are optimization variables.
+Both optimizers store fitted positions and radii in ``positions_`` and ``radii_``
+after :meth:`optimize` is called. Leaf node radii are fixed (from ``"size"``
+attributes); non-leaf / enclosing node radii are optimization variables.
 
 Initialization helpers (:func:`treemap_node_positions`,
 :func:`greedy_bottomup_node_positions`) are also public and can be used standalone to
@@ -22,7 +22,7 @@ import networkx as nx
 import numpy as np
 from jax import numpy as jnp
 
-from ..base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
+from ..base import ObjectiveTerm, OptimConfig, OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
 from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
@@ -376,7 +376,6 @@ def _get_node_radii(optim_vars, input_params):
 
 
 def _term_total_size(optim_vars, input_params):
-    # return calculate_total_width_penalty_ignoring_radii(optim_vars["node_xys"])
     node_radii = _get_node_radii(optim_vars, input_params)
     return calculate_total_width_penalty_for_circular_layout(
         optim_vars["node_xys"], node_radii
@@ -406,37 +405,8 @@ def _term_edge_length(optim_vars, input_params):
 # ---------------------------------------------------------------------------
 
 
-def optimize_circular_layout_with_enclosed_nodes(
-    inclusion_tree: nx.DiGraph,
-    weight_total_size=2.0,
-    optim_config: OptimConfig | None = None,
-):
-    """Optimize drawing of a tree with circular nodes and inclusion constraints.
-
-    Minimizes a weighted sum of:
-        - total width/height: compact layouts with low overall dimensions are better
-        - collision penalty: nodes not in inclusion relationships shouldn't overlap
-        - non-inclusion penalty: child nodes must stay inside parent nodes
-
-    Args:
-        inclusion_tree: a networkx DiGraph with an edge (u, v) if v is contained in u.
-            Leaf nodes must have a "size" attribute (fixed radius).
-            Non-leaf nodes will have optimizable radii.
-        weight_total_size: weight for the total width/height objective.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`~vizopt.base.OptimConfig` defaults when ``None``.
-
-    Returns:
-        Tuple of (pos, non_leaf_node_radius_dict) where pos maps node names to
-        (x, y) tuples and non_leaf_node_radius_dict maps non-leaf node names to
-        their optimized radii.
-    """
-    leaf_nodes = [n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) == 0]
-    non_leaf_nodes = [
-        n for n in inclusion_tree.nodes if inclusion_tree.out_degree(n) > 0
-    ]
-    all_node_names = leaf_nodes + non_leaf_nodes
-
+def _build_nested_circles_input(inclusion_tree, leaf_nodes, non_leaf_nodes, all_node_names):
+    """Shared preprocessing for both nested circles optimizers."""
     def _node_size(node):
         if "size" in inclusion_tree.nodes[node]:
             return inclusion_tree.nodes[node]["size"]
@@ -451,7 +421,6 @@ def optimize_circular_layout_with_enclosed_nodes(
         len(non_leaf_nodes),
         float(fixed_node_radii.max()) if len(fixed_node_radii) > 0 else 1.0,
     )
-
     node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
     edges_list = [
         (node_name_to_id[u], node_name_to_id[v]) for u, v in inclusion_tree.edges
@@ -462,146 +431,244 @@ def optimize_circular_layout_with_enclosed_nodes(
         else np.zeros((0, 2), dtype=np.int32)
     )
     collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
+    return (
+        fixed_node_radii,
+        initial_node_xys,
+        initial_variable_radii,
+        inclusion_edge_indices,
+        collision_pairs,
+    )
 
-    input_parameters = {
-        "fixed_node_radii": fixed_node_radii,
-        "collision_pairs": collision_pairs,
-        "inclusion_edge_indices": inclusion_edge_indices,
-    }
 
-    def initialize(_, _seed):
-        return {
-            "node_xys": initial_node_xys,
-            "variable_node_radii": initial_variable_radii,
+class NestedCirclesOptimizer(VizOptimizer):
+    """Optimize drawing of an inclusion tree with circular nodes.
+
+    Minimizes a weighted sum of:
+
+    - ``total_size``: compact layouts with low overall dimensions.
+    - ``collision``: non-related nodes should not overlap.
+    - ``non_inclusion``: child nodes must stay inside parent nodes.
+
+    Leaf nodes (out-degree 0) have fixed radii from their ``"size"`` attribute.
+    Non-leaf nodes have optimizable radii.
+
+    Args:
+        inclusion_tree: DiGraph with an edge ``(u, v)`` if v is contained in u.
+            Leaf nodes must have a ``"size"`` attribute (fixed radius).
+        weight_total_size: Weight for the total width/height objective.
+        weight_collision: Weight for the collision penalty.
+        weight_non_inclusion: Weight for the non-inclusion penalty.
+        optim_config: Optimizer settings. Uses :class:`~vizopt.base.OptimConfig`
+            defaults when ``None``.
+    """
+
+    def __init__(
+        self,
+        inclusion_tree: nx.DiGraph,
+        *,
+        weight_total_size: float = 2.0,
+        weight_collision: float = 1.0,
+        weight_non_inclusion: float = 1.0,
+    ):
+        self.inclusion_tree = inclusion_tree
+        self.weight_total_size = weight_total_size
+        self.weight_collision = weight_collision
+        self.weight_non_inclusion = weight_non_inclusion
+
+    def _build_problem(self) -> OptimizationProblem:
+        leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) == 0]
+        non_leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) > 0]
+        all_node_names = leaf_nodes + non_leaf_nodes
+
+        (
+            fixed_node_radii,
+            initial_node_xys,
+            initial_variable_radii,
+            inclusion_edge_indices,
+            collision_pairs,
+        ) = _build_nested_circles_input(
+            self.inclusion_tree, leaf_nodes, non_leaf_nodes, all_node_names
+        )
+
+        input_parameters = {
+            "fixed_node_radii": fixed_node_radii,
+            "collision_pairs": collision_pairs,
+            "inclusion_edge_indices": inclusion_edge_indices,
         }
 
-    terms = [
-        ObjectiveTerm("total_size", _term_total_size, weight_total_size),
-        ObjectiveTerm("collision", _term_collision),
-        ObjectiveTerm("non_inclusion", _term_non_inclusion),
-    ]
+        def initialize(_, _seed):
+            return {
+                "node_xys": initial_node_xys,
+                "variable_node_radii": initial_variable_radii,
+            }
 
-    problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize
-    ).instantiate(input_parameters)
-    result = problem.optimize(optim_config)
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm("total_size", _term_total_size, self.weight_total_size),
+                ObjectiveTerm("collision", _term_collision, self.weight_collision),
+                ObjectiveTerm("non_inclusion", _term_non_inclusion, self.weight_non_inclusion),
+            ],
+            initialize=initialize,
+        ).instantiate(input_parameters)
 
-    pos = {
-        node: tuple(float(c) for c in xy)
-        for node, xy in zip(all_node_names, result.optim_vars["node_xys"])
-    }
-    non_leaf_node_radius_dict = dict(
-        zip(non_leaf_nodes, result.optim_vars["variable_node_radii"])
-    )
-    return pos, non_leaf_node_radius_dict
+    @property
+    def positions_(self) -> dict:
+        """Optimized node positions as a dict mapping node name to ``(x, y)``.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) == 0]
+        non_leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) > 0]
+        all_node_names = leaf_nodes + non_leaf_nodes
+        node_xys = np.array(self.result_.optim_vars["node_xys"])
+        return {node: tuple(float(c) for c in xy) for node, xy in zip(all_node_names, node_xys)}
+
+    @property
+    def radii_(self) -> dict:
+        """Optimized radii for non-leaf nodes as a dict mapping node name to float.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        non_leaf_nodes = [n for n in self.inclusion_tree.nodes if self.inclusion_tree.out_degree(n) > 0]
+        return dict(zip(non_leaf_nodes, self.result_.optim_vars["variable_node_radii"]))
 
 
-def optimize_circular_layout_with_enclosed_and_linked_nodes(
-    graph: nx.Graph,
-    inclusion_tree: nx.DiGraph,
-    weight_edge_length=1.0,
-    weight_total_size=2.0,
-    optim_config: OptimConfig | None = None,
-):
+class LinkedNestedCirclesOptimizer(VizOptimizer):
     """Optimize drawing of a graph with circular nodes and inclusion constraints.
 
     Minimizes a weighted sum of:
-        - edge lengths: shorter edges make the graph more readable
-        - total width/height: compact layouts with low overall dimensions are better
-        - collision penalty: nodes not in inclusion relationships shouldn't overlap
-        - non-inclusion penalty: child nodes must stay inside parent nodes
+
+    - ``edge_length``: shorter edges make the graph more readable.
+    - ``total_size``: compact layouts with low overall dimensions.
+    - ``collision``: non-related nodes should not overlap.
+    - ``non_inclusion``: child nodes must stay inside parent nodes.
+
+    Graph nodes have fixed radii from their ``"size"`` attribute. Enclosing
+    nodes (present in ``inclusion_tree`` but not in ``graph``) have optimizable radii.
 
     Args:
-        graph: a networkx Graph with node "size" attributes.
-        inclusion_tree: a networkx DiGraph with an edge (u, v) if v is contained in u.
-        weight_edge_length: weight for the edge length objective.
-        weight_total_size: weight for the total width/height objective.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`~vizopt.base.OptimConfig` defaults when ``None``.
-            (e.g. n_iters, learning_rate).
-
-    Returns:
-        Tuple of (pos, enclosing_node_radius_dict) where pos maps node names to
-        (x, y) tuples and enclosing_node_radius_dict maps enclosing node names to
-        their optimized radii.
+        graph: NetworkX Graph with node ``"size"`` attributes.
+        inclusion_tree: DiGraph with an edge ``(u, v)`` if v is contained in u.
+        weight_edge_length: Weight for the edge length objective.
+        weight_total_size: Weight for the total width/height objective.
+        weight_collision: Weight for the collision penalty.
+        weight_non_inclusion: Weight for the non-inclusion penalty.
     """
 
-    def _node_size(node):
-        if "size" in graph.nodes[node]:
-            return graph.nodes[node]["size"]
-        print(f"node {node} has no size")
-        return 1.0
+    def __init__(
+        self,
+        graph: nx.Graph,
+        inclusion_tree: nx.DiGraph,
+        *,
+        weight_edge_length: float = 1.0,
+        weight_total_size: float = 2.0,
+        weight_collision: float = 1.0,
+        weight_non_inclusion: float = 1.0,
+    ):
+        self.graph = graph
+        self.inclusion_tree = inclusion_tree
+        self.weight_edge_length = weight_edge_length
+        self.weight_total_size = weight_total_size
+        self.weight_collision = weight_collision
+        self.weight_non_inclusion = weight_non_inclusion
 
-    graph_node_names = list(graph.nodes)
-    enclosing_node_names = sorted(list(set(inclusion_tree.nodes) - set(graph.nodes)))
-    all_node_names = graph_node_names + enclosing_node_names
-    node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
+    def _build_problem(self) -> OptimizationProblem:
+        def _node_size(node):
+            if "size" in self.graph.nodes[node]:
+                return self.graph.nodes[node]["size"]
+            print(f"node {node} has no size")
+            return 1.0
 
-    fixed_node_radii = np.array([_node_size(n) for n in graph_node_names])
-    total_scale = float(sum(fixed_node_radii)) if len(fixed_node_radii) > 0 else 10.0
+        graph_node_names = list(self.graph.nodes)
+        enclosing_node_names = sorted(list(set(self.inclusion_tree.nodes) - set(self.graph.nodes)))
+        all_node_names = graph_node_names + enclosing_node_names
+        node_name_to_id = {name: i for i, name in enumerate(all_node_names)}
 
-    # Generate positions for graph nodes and enclosing nodes separately to avoid
-    # graph nodes having their positions overwritten by the inclusion tree positions.
-    initial_pos = get_random_node_positions(graph, scale=total_scale)
-    for n in enclosing_node_names:
-        initial_pos[n] = (
-            total_scale * np.random.rand(),
-            total_scale * np.random.rand(),
+        fixed_node_radii = np.array([_node_size(n) for n in graph_node_names])
+        total_scale = float(sum(fixed_node_radii)) if len(fixed_node_radii) > 0 else 10.0
+
+        initial_pos = get_random_node_positions(self.graph, scale=total_scale)
+        for n in enclosing_node_names:
+            initial_pos[n] = (
+                total_scale * np.random.rand(),
+                total_scale * np.random.rand(),
+            )
+        initial_node_xys = np.stack([initial_pos[n] for n in all_node_names])
+        initial_variable_radii = np.full(
+            len(enclosing_node_names),
+            float(fixed_node_radii.max()) if len(fixed_node_radii) > 0 else 1.0,
         )
-    initial_node_xys = np.stack([initial_pos[n] for n in all_node_names])
-    initial_variable_radii = np.full(
-        len(enclosing_node_names),
-        float(fixed_node_radii.max()) if len(fixed_node_radii) > 0 else 1.0,
-    )
 
-    edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in graph.edges]
-    edge_indices = (
-        np.array(edges_list, dtype=np.int32)
-        if edges_list
-        else np.zeros((0, 2), dtype=np.int32)
-    )
+        edges_list = [(node_name_to_id[u], node_name_to_id[v]) for u, v in self.graph.edges]
+        edge_indices = (
+            np.array(edges_list, dtype=np.int32)
+            if edges_list
+            else np.zeros((0, 2), dtype=np.int32)
+        )
 
-    inclusion_edges_list = [
-        (node_name_to_id[u], node_name_to_id[v]) for u, v in inclusion_tree.edges
-    ]
-    inclusion_edge_indices = (
-        np.array(inclusion_edges_list, dtype=np.int32)
-        if inclusion_edges_list
-        else np.zeros((0, 2), dtype=np.int32)
-    )
+        inclusion_edges_list = [
+            (node_name_to_id[u], node_name_to_id[v]) for u, v in self.inclusion_tree.edges
+        ]
+        inclusion_edge_indices = (
+            np.array(inclusion_edges_list, dtype=np.int32)
+            if inclusion_edges_list
+            else np.zeros((0, 2), dtype=np.int32)
+        )
 
-    collision_pairs = _compute_collision_pairs(all_node_names, inclusion_tree)
+        collision_pairs = _compute_collision_pairs(all_node_names, self.inclusion_tree)
 
-    input_parameters = {
-        "fixed_node_radii": fixed_node_radii,
-        "edge_indices": edge_indices,
-        "collision_pairs": collision_pairs,
-        "inclusion_edge_indices": inclusion_edge_indices,
-    }
-
-    def initialize(_, _seed):
-        return {
-            "node_xys": initial_node_xys,
-            "variable_node_radii": initial_variable_radii,
+        input_parameters = {
+            "fixed_node_radii": fixed_node_radii,
+            "edge_indices": edge_indices,
+            "collision_pairs": collision_pairs,
+            "inclusion_edge_indices": inclusion_edge_indices,
         }
 
-    terms = [
-        ObjectiveTerm("edge_length", _term_edge_length, weight_edge_length),
-        ObjectiveTerm("total_size", _term_total_size, weight_total_size),
-        ObjectiveTerm("collision", _term_collision),
-        ObjectiveTerm("non_inclusion", _term_non_inclusion),
-    ]
+        def initialize(_, _seed):
+            return {
+                "node_xys": initial_node_xys,
+                "variable_node_radii": initial_variable_radii,
+            }
 
-    problem = OptimizationProblemTemplate(
-        terms=terms, initialize=initialize
-    ).instantiate(input_parameters)
-    result = problem.optimize(optim_config)
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm("edge_length", _term_edge_length, self.weight_edge_length),
+                ObjectiveTerm("total_size", _term_total_size, self.weight_total_size),
+                ObjectiveTerm("collision", _term_collision, self.weight_collision),
+                ObjectiveTerm("non_inclusion", _term_non_inclusion, self.weight_non_inclusion),
+            ],
+            initialize=initialize,
+        ).instantiate(input_parameters)
 
-    pos = {
-        node: tuple(float(c) for c in xy)
-        for node, xy in zip(all_node_names, result.optim_vars["node_xys"])
-    }
-    enclosing_node_radius_dict = dict(
-        zip(enclosing_node_names, result.optim_vars["variable_node_radii"])
-    )
-    return pos, enclosing_node_radius_dict
+    @property
+    def positions_(self) -> dict:
+        """Optimized node positions as a dict mapping node name to ``(x, y)``.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        graph_node_names = list(self.graph.nodes)
+        enclosing_node_names = sorted(list(set(self.inclusion_tree.nodes) - set(self.graph.nodes)))
+        all_node_names = graph_node_names + enclosing_node_names
+        node_xys = np.array(self.result_.optim_vars["node_xys"])
+        return {node: tuple(float(c) for c in xy) for node, xy in zip(all_node_names, node_xys)}
+
+    @property
+    def radii_(self) -> dict:
+        """Optimized radii for enclosing nodes as a dict mapping node name to float.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        enclosing_node_names = sorted(list(set(self.inclusion_tree.nodes) - set(self.graph.nodes)))
+        return dict(zip(enclosing_node_names, self.result_.optim_vars["variable_node_radii"]))
