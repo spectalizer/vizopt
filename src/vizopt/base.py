@@ -444,3 +444,34 @@ class VizOptimizer(ABC):
         if not hasattr(self, "problem_"):
             raise ValueError("No result yet — call optimize() first.")
         self.problem_.plot(**kwargs)
+
+    def animate_svg(self, callback, **kwargs) -> str:
+        """Create an animated SVG from a SnapshotCallback.
+
+        Convenience wrapper around
+        :func:`~vizopt.animation.snapshots_to_animated_svg` that uses this
+        optimizer's built problem and defaults `history` to the result from
+        the last :meth:`optimize` call.
+
+        Args:
+            callback: A :class:`~vizopt.animation.SnapshotCallback` passed to
+                :meth:`optimize`, or a raw list of `(iteration, optim_vars)`
+                tuples.
+            **kwargs: Forwarded to
+                :func:`~vizopt.animation.snapshots_to_animated_svg`.
+                `history` defaults to `self.result_.history`.
+
+        Returns:
+            An SVG string suitable for saving or displaying with
+            `IPython.display.SVG`.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "problem_"):
+            raise ValueError("No result yet — call optimize() first.")
+        from .animation import snapshots_to_animated_svg
+
+        snapshots = callback.snapshots if hasattr(callback, "snapshots") else callback
+        kwargs.setdefault("history", self.result_.history)
+        return snapshots_to_animated_svg(self.problem_, snapshots, **kwargs)
