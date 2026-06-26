@@ -107,7 +107,7 @@ A concrete runnable instance created via `template.instantiate(input_parameters)
 
 ```python
 result = problem.optimize(
-    OptimConfig(n_iters=1000, learning_rate=0.001, track_every=10),
+    OptimConfig(n_iters=1000, learning_rate=0.001),
 )
 ```
 
