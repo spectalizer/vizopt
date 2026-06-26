@@ -237,7 +237,7 @@ def _term_rect_collision(optim_vars, input_params):
     overlap_y = jnp.maximum(0.0, hh[:, None] + hh[None, :] - dy)
     overlap = jnp.minimum(overlap_x, overlap_y)
     mask = jnp.triu(jnp.ones((N, N), dtype=bool), k=1)
-    return jnp.sum(jnp.where(mask, overlap**2 + alpha * overlap, 0.0))
+    return jnp.sum((overlap**2 + alpha * overlap) * mask)
 
 
 def _term_set_attraction_rect(optim_vars, input_params):
