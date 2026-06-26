@@ -251,12 +251,12 @@ class StarDomainOptimizer(VizOptimizer):
 
     Args:
         n_sets: Number of star domains.
-        initial_centers: ``(n_sets, 2)`` starting centers for each domain.
+        initial_centers: `(n_sets, 2)` starting centers for each domain.
         representation: Star domain parametrization. One of :class:`~vizopt.components.stars.Discrete`
             (default), :class:`~vizopt.components.stars.Fourier`, or
             :class:`~vizopt.components.stars.BSpline`.
         target_areas: List of n_sets values (float or None). None means no area
-            target for that set; its area is then minimised by ``weight_area``.
+            target for that set; its area is then minimised by `weight_area`.
         initial_radius: Fallback starting radius for sets without a target area.
         weight_target_area: Weight for the target-area penalty.
         weight_area: Weight for the area-minimisation regulariser.
@@ -265,7 +265,7 @@ class StarDomainOptimizer(VizOptimizer):
             Set to 0 for purely nested layouts.
         weight_enclosure: Weight for star-vs-star enclosure constraints.
         weight_smoothness: Weight for adjacent-radii smoothness penalty.
-        enclosures: List of ``(inner_idx, outer_idx)`` pairs.
+        enclosures: List of `(inner_idx, outer_idx)` pairs.
         exclusion_offset: Minimum gap enforced between non-nested boundaries.
         enclosure_offset: Minimum inset enforced for enclosure constraints.
         exclusion_interior_fracs: Interior fractions for the exclusion term.
@@ -370,7 +370,7 @@ class StarDomainOptimizer(VizOptimizer):
     def sets_(self) -> list[dict]:
         """Star boundary dicts from the last optimization result.
 
-        Each dict has ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,),
+        Each dict has `"center"` (2,), `"radii"` (K,), `"angles"` (K,),
         plus any representation-specific extras.
 
         Raises:
@@ -401,8 +401,8 @@ class StarVsStarOptimizer(VizOptimizer):
     optional star-vs-star enclosure term for nested-set constraints.
 
     Args:
-        circles: ``(N, 3)`` array ``[cx, cy, r]``.
-        sets: List of n_sets index subsets into ``circles``.
+        circles: `(N, 3)` array `[cx, cy, r]`.
+        sets: List of n_sets index subsets into `circles`.
         representation: Star domain parametrization. One of
             :class:`~vizopt.components.stars.Discrete` (default),
             :class:`~vizopt.components.stars.Fourier`, or
@@ -413,9 +413,9 @@ class StarVsStarOptimizer(VizOptimizer):
         weight_exclusion: Weight for the star-vs-star exclusion penalty.
         weight_enclosure: Weight for the star-vs-star enclosure penalty.
         offsets: Padding added to circle radii in the enclosure term.
-            Scalar, shape ``(N,)``, or shape ``(S, N)``.
-        enclosures: List of ``(inner_idx, outer_idx)`` pairs. Each pair means
-            "the boundary of ``sets[inner_idx]`` must lie inside ``sets[outer_idx]``."
+            Scalar, shape `(N,)`, or shape `(S, N)`.
+        enclosures: List of `(inner_idx, outer_idx)` pairs. Each pair means
+            "the boundary of `sets[inner_idx]` must lie inside `sets[outer_idx]`."
     """
 
     def __init__(
@@ -500,7 +500,7 @@ class StarVsStarOptimizer(VizOptimizer):
     def sets_(self) -> list[dict]:
         """Star boundary dicts from the last optimization result.
 
-        Each dict has ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,),
+        Each dict has `"center"` (2,), `"radii"` (K,), `"angles"` (K,),
         plus any representation-specific extras.
 
         Raises:

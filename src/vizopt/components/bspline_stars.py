@@ -3,12 +3,12 @@
 Uniform periodic cubic B-splines give C² smooth boundaries at O(1) per-pixel
 evaluation cost (no trig). This module provides:
 
-- Core math: ``_interp_bspline``, ``bspline_to_radii``, ``_wrap_bspline_term``
-- Raster soft-membership: ``soft_rasterize_star_bspline``,
-  ``raster_collision_loss_bspline``
-- SVG helpers: ``_svg_configuration_bspline_star_only``,
-  ``_svg_configuration_bspline_fixed``, ``_svg_configuration_bspline_movable``
-- Optimizer: ``optimize_multiple_radially_convex_sets_bspline``
+- Core math: `_interp_bspline`, `bspline_to_radii`, `_wrap_bspline_term`
+- Raster soft-membership: `soft_rasterize_star_bspline`,
+  `raster_collision_loss_bspline`
+- SVG helpers: `_svg_configuration_bspline_star_only`,
+  `_svg_configuration_bspline_fixed`, `_svg_configuration_bspline_movable`
+- Optimizer: `optimize_multiple_radially_convex_sets_bspline`
 """
 
 import jax
@@ -87,13 +87,13 @@ def _wrap_bspline_term(fn, angles):
     """Adapt a loss term that reads optim_vars["radii"] to accept bspline_ctrl.
 
     Args:
-        fn: loss function with signature ``(optim_vars, input_params) -> scalar``
-            that reads ``optim_vars["radii"]``.
+        fn: loss function with signature `(optim_vars, input_params) -> scalar`
+            that reads `optim_vars["radii"]`.
         angles: (K,) evaluation angles used to convert ctrl pts → radii.
 
     Returns:
         Wrapped function with the same signature that reads
-        ``optim_vars["bspline_ctrl"]`` instead.
+        `optim_vars["bspline_ctrl"]` instead.
     """
     def wrapped(optim_vars, input_params):
         radii = bspline_to_radii(optim_vars["bspline_ctrl"], angles)
@@ -115,7 +115,7 @@ def soft_rasterize_star_bspline(
 ):
     """Soft-rasterize n_sets star domains using a B-spline boundary.
 
-    Like ``soft_rasterize_star`` but r(θ) is a uniform periodic cubic B-spline,
+    Like `soft_rasterize_star` but r(θ) is a uniform periodic cubic B-spline,
     giving C² smooth boundaries at O(1) per-pixel cost (no trig evaluations).
 
     Args:
@@ -142,13 +142,13 @@ def soft_rasterize_star_bspline(
 def raster_collision_loss_bspline(optim_vars, input_params):
     """Raster-based pairwise collision loss using a B-spline boundary.
 
-    Same semantics as ``raster_collision_loss`` but reads ``bspline_ctrl`` from
-    *optim_vars* instead of ``radii``.
+    Same semantics as `raster_collision_loss` but reads `bspline_ctrl` from
+    *optim_vars* instead of `radii`.
 
     optim_vars keys:
         "centers":      (n_sets, 2)
         "bspline_ctrl": (n_sets, P)
-    input_params keys: same as ``raster_collision_loss``.
+    input_params keys: same as `raster_collision_loss`.
     """
     centers = optim_vars["centers"]
     ctrl_pts = optim_vars["bspline_ctrl"]
@@ -240,11 +240,11 @@ def optimize_multiple_radially_convex_sets_bspline(
         offsets: padding added to each circle's radius in the enclosure term,
             per (set, circle) pair. Scalar, shape (N,), or shape (S, N).
         term_schedules: optional dict mapping term name to a JAX-compatible
-            callable ``(step: Array) -> Array`` that scales the term's weight
+            callable `(step: Array) -> Array` that scales the term's weight
             over iterations. Valid keys: "enclosure", "exclusion", "min_radius",
             "smoothness", "area", "perimeter".
         optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults
-            when ``None``.
+            when `None`.
         callback: Optional iteration callback.
 
     Returns:

@@ -198,8 +198,8 @@ def soft_rasterize_star_fourier(
 def raster_collision_loss_fourier(optim_vars, input_params):
     """Raster-based pairwise collision loss using a Fourier boundary representation.
 
-    Same semantics as `raster_collision_loss` but reads ``fourier_coeffs`` from
-    *optim_vars* instead of ``radii``.
+    Same semantics as `raster_collision_loss` but reads `fourier_coeffs` from
+    *optim_vars* instead of `radii`.
 
     optim_vars keys:
         "centers":        (n_sets, 2)
@@ -239,7 +239,7 @@ class RasterStarOptimizer(VizOptimizer):
     """Optimise pure star domains using a raster-based collision loss for exclusion.
 
     Drop-in replacement for :class:`~vizopt.templates.star_vs_star.StarDomainOptimizer`
-    that swaps the analytical ``star_excl`` term for a pixel-wise raster overlap
+    that swaps the analytical `star_excl` term for a pixel-wise raster overlap
     loss, giving well-defined gradients even for complete overlaps.
 
     The enclosure constraint remains analytical (:func:`_multi_term_star_enclosure`
@@ -248,10 +248,10 @@ class RasterStarOptimizer(VizOptimizer):
 
     Args:
         n_sets: Number of star domains.
-        initial_centers: ``(n_sets, 2)`` starting centers.
+        initial_centers: `(n_sets, 2)` starting centers.
         representation: A :class:`~vizopt.components.stars.StarRepresentation`
-            instance (``Discrete``, ``Fourier``, or ``BSpline``) that controls
-            the boundary parametrisation. Defaults to ``Discrete(k_angles=64)``.
+            instance (`Discrete`, `Fourier`, or `BSpline`) that controls
+            the boundary parametrisation. Defaults to `Discrete(k_angles=64)`.
         target_areas: List of n_sets values (float or None).
         initial_radius: Fallback starting radius for sets without a target area.
         weight_target_area: Weight for target-area penalty.
@@ -260,7 +260,7 @@ class RasterStarOptimizer(VizOptimizer):
         weight_exclusion: Weight for raster collision loss.
         weight_enclosure: Weight for analytical star-vs-star enclosure.
         weight_smoothness: Weight for adjacent-radii smoothness penalty.
-        enclosures: List of ``(inner_idx, outer_idx)`` pairs.
+        enclosures: List of `(inner_idx, outer_idx)` pairs.
         enclosure_offset: Minimum inset for enclosure constraints.
         exclusion_offset: Outward boundary shift for raster collision; positive
             values inflate each domain's soft mask, enforcing a minimum gap.
@@ -383,7 +383,7 @@ class RasterStarOptimizer(VizOptimizer):
     def sets_(self) -> list[dict]:
         """Star boundary dicts from the last optimization result.
 
-        Each dict has ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,),
+        Each dict has `"center"` (2,), `"radii"` (K,), `"angles"` (K,),
         plus any representation-specific extras.
 
         Raises:

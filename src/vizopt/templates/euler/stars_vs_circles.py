@@ -84,8 +84,8 @@ class EulerDiagram(VizOptimizer):
     Construct directly from arrays or via :meth:`from_graph`.
 
     Args:
-        circles: array of shape ``(N, 3)`` with columns ``[cx, cy, r]``.
-        sets: list of S subsets, each a collection of integer indices into ``circles``.
+        circles: array of shape `(N, 3)` with columns `[cx, cy, r]`.
+        sets: list of S subsets, each a collection of integer indices into `circles`.
         weight_area: weight for the area objective.
         weight_perimeter: weight for the perimeter objective.
         weight_enclosure: weight for the enclosure penalty.
@@ -103,9 +103,9 @@ class EulerDiagram(VizOptimizer):
             penalty. Default 0.0 (pure quadratic).
         convexity_alpha: linear term coefficient in the convexity penalty.
             Default 1.0.
-        offsets: padding per ``(set, circle)`` pair. Scalar, shape ``(N,)``,
-            or shape ``(S, N)``.
-        label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
+        offsets: padding per `(set, circle)` pair. Scalar, shape `(N,)`,
+            or shape `(S, N)`.
+        label_rect_size: `(hw, hh)` half-extents of the label rectangle.
             When set, each star boundary encloses a floating label rect whose
             position is an optimization variable.
         weight_label_enclosure: weight for the label enclosure term.
@@ -116,8 +116,8 @@ class EulerDiagram(VizOptimizer):
             (default), :class:`Fourier`, or :class:`BSpline`.
         term_schedules: optional dict or :class:`~vizopt.schedules.TermSchedules`
             mapping term name to a JAX-compatible schedule callable.
-        set_names: display names for the S sets. Defaults to ``["Set 0", ...]``.
-        leaf_names: display names for the N circles. Defaults to ``[0, 1, ...]``.
+        set_names: display names for the S sets. Defaults to `["Set 0", ...]`.
+        leaf_names: display names for the N circles. Defaults to `[0, 1, ...]`.
         set_colors: colors for the S sets used in plot/SVG output.
     """
 
@@ -193,11 +193,11 @@ class EulerDiagram(VizOptimizer):
         become sets. A leaf belongs to a set if it is a descendant of that set.
 
         Args:
-            inclusion_graph: DiGraph with parent→child edges (edge ``(u, v)`` means
-                ``v ⊂ u``). Leaf nodes must carry ``center`` (``[x, y]``) and
-                ``r`` (float) attributes. Internal nodes may carry a ``color``
+            inclusion_graph: DiGraph with parent→child edges (edge `(u, v)` means
+                `v ⊂ u`). Leaf nodes must carry `center` (`[x, y]`) and
+                `r` (float) attributes. Internal nodes may carry a `color`
                 attribute used in plot output.
-            offsets: padding per ``(set, circle)`` pair. When ``None`` (default),
+            offsets: padding per `(set, circle)` pair. When `None` (default),
                 computed automatically from the graph hierarchy via
                 :func:`~vizopt.templates.euler.graph_utils.offsets_from_graph`.
             **kwargs: forwarded to :meth:`__init__`.
@@ -333,8 +333,8 @@ class EulerDiagram(VizOptimizer):
     def sets_(self) -> list[dict]:
         """Star boundary dicts from the last optimization result.
 
-        Each dict has ``"center"``, ``"radii"``, ``"angles"``, and (when a label
-        rect was used) ``"label_center"``.
+        Each dict has `"center"`, `"radii"`, `"angles"`, and (when a label
+        rect was used) `"label_center"`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.
@@ -358,7 +358,7 @@ class EulerDiagram(VizOptimizer):
 
     @property
     def circles_(self) -> np.ndarray:
-        """Optimized circle positions as an ``(N, 3)`` array of ``[cx, cy, r]``.
+        """Optimized circle positions as an `(N, 3)` array of `[cx, cy, r]`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.

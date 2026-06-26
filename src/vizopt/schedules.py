@@ -1,8 +1,8 @@
 """Schedule factory functions for loss term weight scheduling.
 
-Schedules are JAX-compatible callables ``(step: Array) -> Array`` that scale
+Schedules are JAX-compatible callables `(step: Array) -> Array` that scale
 a term's effective weight over the course of optimization. They must use JAX
-ops (e.g. ``jnp.clip``) so they can be traced through without recompilation.
+ops (e.g. `jnp.clip`) so they can be traced through without recompilation.
 """
 
 from dataclasses import dataclass, field
@@ -19,7 +19,7 @@ def warmup(delay_frac: float, ramp_frac: float, n_iters: int):
         n_iters: Total number of optimization iterations.
 
     Returns:
-        JAX-compatible callable ``(step: Array) -> Array``.
+        JAX-compatible callable `(step: Array) -> Array`.
     """
     delay = delay_frac * n_iters
     duration = max(ramp_frac * n_iters, 1.0)
@@ -39,7 +39,7 @@ def cooldown(peak_frac: float, ramp_frac: float, n_iters: int):
         n_iters: Total number of optimization iterations.
 
     Returns:
-        JAX-compatible callable ``(step: Array) -> Array``.
+        JAX-compatible callable `(step: Array) -> Array`.
     """
     peak = peak_frac * n_iters
     duration = max(ramp_frac * n_iters, 1.0)
@@ -56,7 +56,7 @@ class TermSchedules:
 
     Attributes:
         schedules: Dict mapping term name to a JAX-compatible schedule callable,
-            ready to pass as ``term_schedules`` to any optimizer.
+            ready to pass as `term_schedules` to any optimizer.
         quality_terms: Term names whose schedules end at 1 (warmup). Use these
             when computing a quality score from the final loss history.
         relaxation_terms: Term names whose schedules end at 0 (cooldown). These
@@ -73,18 +73,18 @@ def make_term_schedules(params: dict, n_iters: int) -> TermSchedules:
 
     Term names and schedule types are inferred from param key suffixes:
 
-    - ``{term}_delay`` + ``{term}_ramp`` → :func:`warmup` for ``term``
-    - ``{term}_peak``  + ``{term}_ramp`` → :func:`cooldown` for ``term``
+    - `{term}_delay` + `{term}_ramp` → :func:`warmup` for `term`
+    - `{term}_peak`  + `{term}_ramp` → :func:`cooldown` for `term`
 
     Args:
         params: Flat dict whose keys follow the naming convention above.
-            All values are fractions of ``n_iters`` in ``[0, 1]``.
+            All values are fractions of `n_iters` in `[0, 1]`.
         n_iters: Total number of optimization iterations. Schedules scale
             automatically — the same params work for any run length.
 
     Returns:
-        :class:`TermSchedules` with ``schedules``, ``quality_terms``, and
-        ``relaxation_terms`` populated from ``params``.
+        :class:`TermSchedules` with `schedules`, `quality_terms`, and
+        `relaxation_terms` populated from `params`.
     """
     schedules: dict = {}
     quality_terms: set = set()

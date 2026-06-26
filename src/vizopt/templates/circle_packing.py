@@ -134,15 +134,15 @@ class CirclePackingOptimizer(VizOptimizer):
 
     Minimizes a weighted sum of:
 
-    - ``total_size``: compact bounding box of all circles.
-    - ``collision``: circles should not overlap (with optional gap).
+    - `total_size`: compact bounding box of all circles.
+    - `collision`: circles should not overlap (with optional gap).
 
     Args:
         radii: List of circle radii.
         weight_total_size: Weight for the total width/height objective.
         collision_offset: Minimum required gap between circle boundaries.
-        initial_node_xys: Optional initial ``(x, y)`` positions, shape ``(n, 2)``.
-            If ``None``, positions are randomly initialized.
+        initial_node_xys: Optional initial `(x, y)` positions, shape `(n, 2)`.
+            If `None`, positions are randomly initialized.
     """
 
     def __init__(
@@ -199,7 +199,7 @@ class CirclePackingOptimizer(VizOptimizer):
 
     @property
     def positions_(self) -> list[tuple[float, float]]:
-        """Optimized circle positions as a list of ``(x, y)`` tuples.
+        """Optimized circle positions as a list of `(x, y)` tuples.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.

@@ -25,8 +25,8 @@ class OptimConfig:
         b2: Adam exponential decay rate for the second moment. Default 0.999.
         n_restarts: Number of random restarts. The run with the lowest final
             loss is returned. Default 1 (single run).
-        seed: Base random seed passed to ``initialize``. Restart ``i``
-            receives ``seed + i``.
+        seed: Base random seed passed to `initialize`. Restart `i`
+            receives `seed + i`.
         track_every: Record per-term history every this many iterations.
     """
 
@@ -46,10 +46,10 @@ class OptimizationResult(Generic[OptimVars]):
 
     Attributes:
         optim_vars: Optimized variables in physical (un-scaled) space.
-        history: Per-iteration records. Each dict has keys ``"iteration"``,
-            ``"total"``, one key per term name (schedule-weighted value), one
-            per term name suffixed ``_unscheduled`` (end-weighted), and one per
-            term name suffixed ``_unweighted`` (raw, un-multiplied value).
+        history: Per-iteration records. Each dict has keys `"iteration"`,
+            `"total"`, one key per term name (schedule-weighted value), one
+            per term name suffixed `_unscheduled` (end-weighted), and one per
+            term name suffixed `_unweighted` (raw, un-multiplied value).
         final_loss: Scalar loss of the best run at the last iteration.
     """
 
@@ -67,12 +67,12 @@ class ObjectiveTerm:
         compute: A function that computes the value of the term
             with arguments optim_vars, input_parameters
         multiplier: A multiplicative factor for the term.
-        schedule: Optional JAX-compatible callable ``(step: Array) -> Array``
+        schedule: Optional JAX-compatible callable `(step: Array) -> Array`
             that returns a scalar multiplier for the given iteration step.
-            The effective weight is ``multiplier * schedule(step)``.
-            Must use JAX ops (e.g. ``jnp.minimum``, ``jnp.where``) so that
+            The effective weight is `multiplier * schedule(step)`.
+            Must use JAX ops (e.g. `jnp.minimum`, `jnp.where`) so that
             it can be traced through without recompilation.
-            ``None`` means constant 1.0 (no scheduling).
+            `None` means constant 1.0 (no scheduling).
     """
 
     name: str
@@ -92,17 +92,17 @@ def build_objective(
         terms: Objective terms to sum, each weighted by its multiplier.
         input_parameters: Fixed data passed to each term's compute function.
         var_scales: Optional per-variable scale factors. When provided, each
-            ``optim_vars[k]`` is multiplied by ``var_scales[k]`` before being
-            passed to any term's ``compute`` function, so the optimizer works
+            `optim_vars[k]` is multiplied by `var_scales[k]` before being
+            passed to any term's `compute` function, so the optimizer works
             in a normalised space while loss terms always receive physical
             values. Values may be scalars or arrays (broadcast over the
-            variable's shape). Keys absent from ``var_scales`` are left
+            variable's shape). Keys absent from `var_scales` are left
             unscaled.
 
     Returns:
-        A callable ``fun(optim_vars, step) -> scalar`` suitable for gradient
-        descent. ``step`` is the current iteration as a JAX int32 array and
-        is passed to each term's ``schedule`` (if any).
+        A callable `fun(optim_vars, step) -> scalar` suitable for gradient
+        descent. `step` is the current iteration as a JAX int32 array and
+        is passed to each term's `schedule` (if any).
     """
 
     active_terms = [t for t in terms if t.multiplier != 0.0]
@@ -132,8 +132,8 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
     input data. Call :meth:`instantiate` with concrete input parameters
     to obtain a runnable :class:`OptimizationProblem`.
 
-    If ``input_params_class`` is provided, it must be a Pydantic model class.
-    ``instantiate`` will call ``model_validate`` on the supplied parameters,
+    If `input_params_class` is provided, it must be a Pydantic model class.
+    `instantiate` will call `model_validate` on the supplied parameters,
     triggering Pydantic validation and coercion before the problem is created.
 
     Attributes:
@@ -143,11 +143,11 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
         input_params_class: Optional Pydantic model class for input parameters.
             When set, validation is performed at instantiation time.
         plot_configuration: Optional callable to visualize a configuration.
-            Signature: ``plot_configuration(optim_vars, input_parameters)``.
+            Signature: `plot_configuration(optim_vars, input_parameters)`.
         svg_configuration: Optional callable to produce SVG element specs for
             animation. Signature:
-            ``svg_configuration(snapshots, input_parameters, size) -> list[dict]``
-            where each dict has a ``"tag"`` key and SVG attribute keys; list
+            `svg_configuration(snapshots, input_parameters, size) -> list[dict]`
+            where each dict has a `"tag"` key and SVG attribute keys; list
             values are animated per-frame, scalar values are static.
     """
 
@@ -165,26 +165,26 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
     ) -> "OptimizationProblem[InputParams, OptimVars]":
         """Create a runnable problem instance from concrete input parameters.
 
-        If ``input_params_class`` is set, validates ``input_parameters`` via
-        ``model_validate`` before creating the problem. The plain dict is passed
+        If `input_params_class` is set, validates `input_parameters` via
+        `model_validate` before creating the problem. The plain dict is passed
         through to the problem unchanged (Pydantic is used for validation only,
-        so that ``input_parameters`` remains a JAX-compatible pytree).
+        so that `input_parameters` remains a JAX-compatible pytree).
 
         Args:
             input_parameters: Fixed data for this problem instance.
             weight_overrides: Optional mapping of term name to multiplier.
                 Overrides the default multiplier for the named terms.
-                Unknown names raise ``KeyError``.
+                Unknown names raise `KeyError`.
             var_scales: Optional per-variable scale factors used to normalise
-                ``optim_vars`` during optimisation. See :func:`build_objective`
+                `optim_vars` during optimisation. See :func:`build_objective`
                 for details. Values may be scalars or arrays.
 
         Returns:
             An :class:`OptimizationProblem` ready to optimize.
 
         Raises:
-            KeyError: If a name in ``weight_overrides`` does not match any term.
-            pydantic.ValidationError: If ``input_params_class`` is set and
+            KeyError: If a name in `weight_overrides` does not match any term.
+            pydantic.ValidationError: If `input_params_class` is set and
                 validation fails.
         """
         if self.input_params_class is not None:
@@ -222,10 +222,10 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         initialize: Callable that produces initial optimization variables
             from input_parameters.
         plot_configuration: Optional callable to visualize a configuration.
-            Signature: ``plot_configuration(optim_vars, input_parameters)``.
+            Signature: `plot_configuration(optim_vars, input_parameters)`.
         svg_configuration: Optional callable to produce SVG element specs for
             animation. Signature:
-            ``svg_configuration(snapshots, input_parameters, size) -> list[dict]``.
+            `svg_configuration(snapshots, input_parameters, size) -> list[dict]`.
         var_scales: Optional per-variable scale factors. See
             :func:`build_objective` for details.
     """
@@ -239,13 +239,13 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     result: "OptimizationResult[OptimVars] | None" = field(default=None, init=False, repr=False)
 
     def plot(self, **kwargs) -> None:
-        """Plot the last optimization result using ``plot_configuration``.
+        """Plot the last optimization result using `plot_configuration`.
 
-        Keyword arguments are forwarded to ``plot_configuration``, allowing
-        optional display flags (e.g. ``show_arrows=True``).
+        Keyword arguments are forwarded to `plot_configuration`, allowing
+        optional display flags (e.g. `show_arrows=True`).
 
         Raises:
-            ValueError: If ``plot_configuration`` is not set or ``optimize()``
+            ValueError: If `plot_configuration` is not set or `optimize()`
                 has not been called yet.
         """
         if self.plot_configuration is None:
@@ -261,14 +261,14 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     ) -> "OptimizationResult[OptimVars]":
         """Run gradient descent to minimize the objective.
 
-        When ``optim_config.n_restarts > 1``, the optimization is run that
-        many times with seeds ``seed``, ``seed + 1``, …. The result with the
+        When `optim_config.n_restarts > 1`, the optimization is run that
+        many times with seeds `seed`, `seed + 1`, …. The result with the
         lowest final loss is returned.
 
         Args:
             optim_config: Optimizer settings (iterations, learning rate, seeds,
                 restarts, track_every). Uses [OptimConfig][vizopt.base.OptimConfig]
-                defaults when ``None``.
+                defaults when `None`.
             callback: Optional callback called after each iteration with
                 (iteration, loss, optim_vars, grads).
 
@@ -402,8 +402,8 @@ class VizOptimizer(ABC):
 
     Subclasses implement :meth:`_build_problem` to turn stored hyperparameters
     into a configured :class:`OptimizationProblem`. The base class handles the
-    optimize → plot lifecycle and stores fitted state in ``problem_`` and
-    ``result_`` after :meth:`optimize` is called.
+    optimize → plot lifecycle and stores fitted state in `problem_` and
+    `result_` after :meth:`optimize` is called.
     """
 
     @abstractmethod
@@ -420,8 +420,8 @@ class VizOptimizer(ABC):
 
         Args:
             optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults
-                when ``None``.
-            callback: Optional callback ``(iteration, loss, optim_vars, grads)``.
+                when `None`.
+            callback: Optional callback `(iteration, loss, optim_vars, grads)`.
 
         Returns:
             An :class:`OptimizationResult` with optimized variables, per-term

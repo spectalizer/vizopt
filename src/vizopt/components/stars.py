@@ -200,14 +200,14 @@ def _multi_term_convexity(optim_vars, input_params):
 
     At each vertex, computes the sine of the turning angle (cross product
     normalised by edge lengths).  A negative value (right turn) indicates a
-    concavity.  Penalizes ``max(0, -sin_α)² + alpha * max(0, -sin_α)`` summed
+    concavity.  Penalizes `max(0, -sin_α)² + alpha * max(0, -sin_α)` summed
     over all sets and angles.
 
     Normalising by edge lengths makes the penalty scale-invariant and keeps
     the magnitude comparable to area/perimeter regardless of K or shape size.
 
-    The linear ``alpha`` term gives a non-zero gradient even for mild
-    concavities, preventing stalling near zero.  ``alpha=0`` recovers the pure
+    The linear `alpha` term gives a non-zero gradient even for mild
+    concavities, preventing stalling near zero.  `alpha=0` recovers the pure
     quadratic penalty.
     """
     centers = optim_vars["centers"]  # (S, 2)
@@ -350,7 +350,7 @@ def _multi_term_label_enclosure(optim_vars, input_params):
     """Each star boundary must enclose all label rects of sets it contains.
 
     Uses slab (ray-AABB) intersection over all (outer_set, label_rect) pairs
-    selected by ``input_params["label_membership"]`` (S, S) bool: entry [s, l]
+    selected by `input_params["label_membership"]` (S, S) bool: entry [s, l]
     is True when boundary s must enclose label rect l.  When the key is absent,
     each boundary encloses only its own label rect (diagonal).
 
@@ -420,7 +420,7 @@ def _multi_term_label_enclosure(optim_vars, input_params):
 def _multi_term_label_set_exclusion(optim_vars, input_params):
     """Set boundaries must not enclose label rects of sets they don't contain.
 
-    For each (s, l) pair where ``label_membership[s, l]`` is False, penalises
+    For each (s, l) pair where `label_membership[s, l]` is False, penalises
     boundary s reaching the near edge of label rect l.  This is the label-rect
     counterpart of the leaf-element exclusion term.
 
@@ -489,7 +489,7 @@ def _multi_term_label_element_exclusion(optim_vars, input_params):
 
     Uses the rect-circle nearest-point distance: for each (set, circle) pair,
     finds the closest point on the label rect to the circle center and
-    penalises the squared overlap ``max(0, r - dist)^2``.
+    penalises the squared overlap `max(0, r - dist)^2`.
 
     Args:
         optim_vars: must contain "label_positions" (S, 2),
@@ -523,7 +523,7 @@ def _multi_term_label_label_collision(optim_vars, input_params):
     """Penalty for overlapping label rectangles.
 
     Uses the minimum axis-wise penetration depth between each pair of AABBs:
-    ``violation = max(0, min(overlap_x, overlap_y))``.
+    `violation = max(0, min(overlap_x, overlap_y))`.
 
     Args:
         optim_vars: must contain "label_positions" (S, 2).
@@ -551,8 +551,8 @@ def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
     """Label rectangles must not overlap leaf rectangles.
 
     For each (set s, rect n) pair, penalises the squared min-axis AABB
-    penetration depth between the label rect at ``label_positions[s]`` and
-    the leaf rect at ``rect_positions[n]``.
+    penetration depth between the label rect at `label_positions[s]` and
+    the leaf rect at `rect_positions[n]`.
 
     Args:
         optim_vars: must contain "label_positions" (S, 2),
@@ -582,7 +582,7 @@ def _multi_term_label_element_exclusion_rect(optim_vars, input_params):
 def _multi_term_label_top_attraction(optim_vars, input_params):
     """Pull label positions upward (toward the top of each shape).
 
-    Minimises ``-sum(label_y)``, pushing each label rectangle up until
+    Minimises `-sum(label_y)`, pushing each label rectangle up until
     balanced by the enclosure and element-exclusion penalties.
 
     Args:
@@ -830,7 +830,7 @@ def fourier_to_radii(coeffs, angles):
 
         r(θ) = a₀ + Σ_{k=1}^{M} (aₖ cos(kθ) + bₖ sin(kθ))
 
-    with coefficients stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+    with coefficients stored as `[a₀, a₁, b₁, a₂, b₂, …]`.
 
     Args:
         coeffs: (n_sets, 2M+1) Fourier coefficients.
@@ -933,7 +933,7 @@ class StarRepresentation(ABC):
     Attributes:
         k_angles: Angular resolution — number of uniformly-spaced angles used
             to sample the boundary for analytical loss terms. For
-            ``Discrete`` this is also the number of optimised radii.
+            `Discrete` this is also the number of optimised radii.
     """
 
     k_angles: int = 64
@@ -954,9 +954,9 @@ class StarRepresentation(ABC):
         """
 
     def wrap(self, fn, angles_jnp):
-        """Adapt a loss term expecting ``optim_vars["radii"]`` to this representation.
+        """Adapt a loss term expecting `optim_vars["radii"]` to this representation.
 
-        The default identity is correct for ``Discrete``, which already stores
+        The default identity is correct for `Discrete`, which already stores
         radii directly. Subclasses override to insert a radii-conversion step.
         """
         return fn
@@ -968,20 +968,20 @@ class StarRepresentation(ABC):
     def extra_results(self, s: int, optim_vars: dict) -> dict:
         """Representation-specific extras added to the result dict of set *s*.
 
-        Empty by default (``Discrete`` has no extras).
+        Empty by default (`Discrete` has no extras).
         """
         return {}
 
     def make_svg_configuration(self, base_svg_fn=None):
-        """Return an ``svg_configuration`` function compatible with the animation helper.
+        """Return an `svg_configuration` function compatible with the animation helper.
 
         Converts representation-specific vars to radii on each snapshot so any
-        base SVG renderer that reads ``optim_vars["radii"]`` can be reused for
+        base SVG renderer that reads `optim_vars["radii"]` can be reused for
         all representations.
 
         Args:
-            base_svg_fn: the underlying ``(snapshots, input_params, size) →
-                elements`` function to delegate to after radii conversion.
+            base_svg_fn: the underlying `(snapshots, input_params, size) →
+                elements` function to delegate to after radii conversion.
                 Defaults to :func:`_svg_configuration_star_only` (pure star
                 domains). Pass :func:`_svg_configuration_fixed` or
                 :func:`_svg_configuration_movable` when circles are present.
@@ -1004,7 +1004,7 @@ class StarRepresentation(ABC):
 class Discrete(StarRepresentation):
     """One radius per angle, linearly interpolated.
 
-    The optimisation variable is ``radii`` of shape ``(n_sets, k_angles)``.
+    The optimisation variable is `radii` of shape `(n_sets, k_angles)`.
     This is the simplest representation and the default.
     """
 
@@ -1019,8 +1019,8 @@ class Discrete(StarRepresentation):
 class Fourier(StarRepresentation):
     """Fourier series boundary: r(θ) = a₀ + Σ aₖcos(kθ) + bₖsin(kθ).
 
-    The optimisation variable is ``fourier_coeffs`` of shape
-    ``(n_sets, 2 * n_harmonics + 1)``, stored as ``[a₀, a₁, b₁, a₂, b₂, …]``.
+    The optimisation variable is `fourier_coeffs` of shape
+    `(n_sets, 2 * n_harmonics + 1)`, stored as `[a₀, a₁, b₁, a₂, b₂, …]`.
     Gives C∞-smooth boundaries with compact parametrisation.
 
     Attributes:
@@ -1048,8 +1048,8 @@ class Fourier(StarRepresentation):
 class BSpline(StarRepresentation):
     """Uniform periodic cubic B-spline boundary.
 
-    The optimisation variable is ``bspline_ctrl`` of shape
-    ``(n_sets, n_ctrl_pts)``. Gives C²-smooth boundaries with O(1) per-pixel
+    The optimisation variable is `bspline_ctrl` of shape
+    `(n_sets, n_ctrl_pts)`. Gives C²-smooth boundaries with O(1) per-pixel
     evaluation and no trigonometric operations beyond the initial angle lookup.
 
     Attributes:

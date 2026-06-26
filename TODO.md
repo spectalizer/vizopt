@@ -1,6 +1,5 @@
 ## Next
 
-* refactor all templates to use VizOptimizer
 
 * clean clean clean
 
@@ -24,7 +23,7 @@
     * layered graph diagram of class inheritance
     * treemap etc.
 
-* Remove all double backticks (my new pet peeve) from all docstrings
+* Remove all double backticks from all docstrings
 
 * Raster-based Euler is the nicest but slowest
 How can we make it faster? Initialization from circle-based? Hyperparameter optimization? Other ideas?
@@ -42,3 +41,7 @@ How can we make it faster? Initialization from circle-based? Hyperparameter opti
 * Template to D3js
 
 * Template to D3js, with user allowed to drag objects and interact with the optimization procedure...
+
+## Done
+
+* refactor all templates to use VizOptimizer

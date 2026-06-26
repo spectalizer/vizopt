@@ -7,8 +7,8 @@ visually enclosed by others (e.g. set membership diagrams, containment hierarchi
 - :class:`LinkedNestedCirclesOptimizer`: inclusion tree plus an ordinary graph
   whose edges should be drawn short.
 
-Both optimizers store fitted positions and radii in ``positions_`` and ``radii_``
-after :meth:`optimize` is called. Leaf node radii are fixed (from ``"size"``
+Both optimizers store fitted positions and radii in `positions_` and `radii_`
+after :meth:`optimize` is called. Leaf node radii are fixed (from `"size"`
 attributes); non-leaf / enclosing node radii are optimization variables.
 
 Initialization helpers (:func:`treemap_node_positions`,
@@ -67,14 +67,14 @@ def treemap_node_positions(
 
     Args:
         inclusion_graph: DiGraph with parent→child edges (edge (u, v) means
-            v ⊂ u). Leaf nodes (out-degree 0) must have a ``"size"`` attribute.
+            v ⊂ u). Leaf nodes (out-degree 0) must have a `"size"` attribute.
         canvas_size: Side length of the square canvas for the top-level layout.
 
     Returns:
-        Tuple ``(pos, variable_radii)`` where:
+        Tuple `(pos, variable_radii)` where:
 
-        - ``pos``: dict mapping every node name → ``(x, y)`` center
-        - ``variable_radii``: dict mapping non-leaf node name → initial radius
+        - `pos`: dict mapping every node name → `(x, y)` center
+        - `variable_radii`: dict mapping non-leaf node name → initial radius
           estimate (circumradius of the treemap rectangle)
     """
     # Bottom-up weight: each node's weight = sum of its leaf descendants' sizes.
@@ -122,18 +122,18 @@ def treemap_node_positions(
 def _greedy_place_circle(r, placed_circles, n_angles=36):
     """Find a non-overlapping position for a new circle near the current centroid.
 
-    Tries positions tangent to each already-placed circle at ``n_angles``
+    Tries positions tangent to each already-placed circle at `n_angles`
     evenly-spaced angles, picks the overlap-free candidate closest to the
     centroid of all placed circle centres. Falls back to placing just outside
     the cluster along the +x direction if no tangent position is overlap-free.
 
     Args:
         r: Radius of the circle to place.
-        placed_circles: List of ``(center_xy, radius)`` for already-placed circles.
+        placed_circles: List of `(center_xy, radius)` for already-placed circles.
         n_angles: Number of candidate angles to sample per placed circle.
 
     Returns:
-        ``(x, y)`` position for the new circle.
+        `(x, y)` position for the new circle.
     """
     if not placed_circles:
         return (0.0, 0.0)
@@ -186,17 +186,17 @@ def greedy_bottomup_node_positions(
 
     Args:
         inclusion_graph: DiGraph with parent->child edges (edge (u, v) means
-            v is in u). Leaf nodes (out-degree 0) must have a ``"size"`` attribute.
+            v is in u). Leaf nodes (out-degree 0) must have a `"size"` attribute.
         canvas_size: Side length of the square canvas for the final layout.
         margin_factor: Relative extra margin added to each non-leaf radius.
         n_angles: Number of candidate angles to try per placed circle when
             placing a new leaf.
 
     Returns:
-        Tuple ``(pos, variable_radii)`` where:
+        Tuple `(pos, variable_radii)` where:
 
-        - ``pos``: dict mapping every node name -> ``(x, y)`` center
-        - ``variable_radii``: dict mapping non-leaf node name -> initial radius
+        - `pos`: dict mapping every node name -> `(x, y)` center
+        - `variable_radii`: dict mapping non-leaf node name -> initial radius
           estimate
     """
     node_pos: dict = {}
@@ -445,21 +445,21 @@ class NestedCirclesOptimizer(VizOptimizer):
 
     Minimizes a weighted sum of:
 
-    - ``total_size``: compact layouts with low overall dimensions.
-    - ``collision``: non-related nodes should not overlap.
-    - ``non_inclusion``: child nodes must stay inside parent nodes.
+    - `total_size`: compact layouts with low overall dimensions.
+    - `collision`: non-related nodes should not overlap.
+    - `non_inclusion`: child nodes must stay inside parent nodes.
 
-    Leaf nodes (out-degree 0) have fixed radii from their ``"size"`` attribute.
+    Leaf nodes (out-degree 0) have fixed radii from their `"size"` attribute.
     Non-leaf nodes have optimizable radii.
 
     Args:
-        inclusion_tree: DiGraph with an edge ``(u, v)`` if v is contained in u.
-            Leaf nodes must have a ``"size"`` attribute (fixed radius).
+        inclusion_tree: DiGraph with an edge `(u, v)` if v is contained in u.
+            Leaf nodes must have a `"size"` attribute (fixed radius).
         weight_total_size: Weight for the total width/height objective.
         weight_collision: Weight for the collision penalty.
         weight_non_inclusion: Weight for the non-inclusion penalty.
         optim_config: Optimizer settings. Uses :class:`~vizopt.base.OptimConfig`
-            defaults when ``None``.
+            defaults when `None`.
     """
 
     def __init__(
@@ -513,7 +513,7 @@ class NestedCirclesOptimizer(VizOptimizer):
 
     @property
     def positions_(self) -> dict:
-        """Optimized node positions as a dict mapping node name to ``(x, y)``.
+        """Optimized node positions as a dict mapping node name to `(x, y)`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.
@@ -544,17 +544,17 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
 
     Minimizes a weighted sum of:
 
-    - ``edge_length``: shorter edges make the graph more readable.
-    - ``total_size``: compact layouts with low overall dimensions.
-    - ``collision``: non-related nodes should not overlap.
-    - ``non_inclusion``: child nodes must stay inside parent nodes.
+    - `edge_length`: shorter edges make the graph more readable.
+    - `total_size`: compact layouts with low overall dimensions.
+    - `collision`: non-related nodes should not overlap.
+    - `non_inclusion`: child nodes must stay inside parent nodes.
 
-    Graph nodes have fixed radii from their ``"size"`` attribute. Enclosing
-    nodes (present in ``inclusion_tree`` but not in ``graph``) have optimizable radii.
+    Graph nodes have fixed radii from their `"size"` attribute. Enclosing
+    nodes (present in `inclusion_tree` but not in `graph`) have optimizable radii.
 
     Args:
-        graph: NetworkX Graph with node ``"size"`` attributes.
-        inclusion_tree: DiGraph with an edge ``(u, v)`` if v is contained in u.
+        graph: NetworkX Graph with node `"size"` attributes.
+        inclusion_tree: DiGraph with an edge `(u, v)` if v is contained in u.
         weight_edge_length: Weight for the edge length objective.
         weight_total_size: Weight for the total width/height objective.
         weight_collision: Weight for the collision penalty.
@@ -648,7 +648,7 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
 
     @property
     def positions_(self) -> dict:
-        """Optimized node positions as a dict mapping node name to ``(x, y)``.
+        """Optimized node positions as a dict mapping node name to `(x, y)`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.

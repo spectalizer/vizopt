@@ -92,9 +92,9 @@ def _build_rgb(optim_vars, input_parameters):
     """Reconstruct the full (n, 3) sRGB array from free logit params.
 
     Args:
-        optim_vars: Dict with key ``"logit_rgb"`` of shape (n_free, 3).
-        input_parameters: Problem input dict with keys ``"n"``, ``"free_idx"``,
-            ``"fixed_idx"``, and ``"fixed_rgb"``.
+        optim_vars: Dict with key `"logit_rgb"` of shape (n_free, 3).
+        input_parameters: Problem input dict with keys `"n"`, `"free_idx"`,
+            `"fixed_idx"`, and `"fixed_rgb"`.
 
     Returns:
         sRGB array of shape (n, 3) with values in [0, 1].
@@ -152,8 +152,8 @@ def _color_svg_configuration(snapshots, input_parameters, size):
     """Build SVG element specs for the animated color palette.
 
     Args:
-        snapshots: List of ``(iteration, optim_vars)`` tuples.
-        input_parameters: Problem input dict with ``"labels"`` and color data.
+        snapshots: List of `(iteration, optim_vars)` tuples.
+        input_parameters: Problem input dict with `"labels"` and color data.
         size: SVG canvas size in pixels.
 
     Returns:
@@ -217,7 +217,7 @@ def build_color_input_parameters(
     coverage_temperature=0.05,
     seed=None,
 ):
-    """Build the ``input_parameters`` dict for color palette optimization.
+    """Build the `input_parameters` dict for color palette optimization.
 
     Args:
         distances: Symmetric pairwise distance matrix of shape (n, n). If a
@@ -227,12 +227,12 @@ def build_color_input_parameters(
         target_max_delta_e: The largest pairwise distance maps to this OKLAB ΔE
             value. OKLAB distances are in [0, ~0.4] for typical sRGB colors;
             the default of 0.3 spans most of the gamut.
-        target_L: Target OKLAB/OKLCH lightness in [0, 1], or ``None`` to
+        target_L: Target OKLAB/OKLCH lightness in [0, 1], or `None` to
             disable the luminosity term. ~0.75 for light mode, ~0.85 for dark mode.
         coverage_temperature: Temperature for the soft-min coverage term. Smaller
             values focus more sharply on the closest pair (harder min); larger
             values average more broadly across all pairs. Default 0.05.
-        seed: Integer random seed. When ``None`` (default), uses an MDS warm-start.
+        seed: Integer random seed. When `None` (default), uses an MDS warm-start.
 
     Returns:
         Dict of input parameters suitable for
@@ -296,15 +296,15 @@ class ColorPaletteOptimizer(VizOptimizer):
 
     Args:
         distances: Symmetric pairwise distance matrix of shape (n, n). If a
-            DataFrame, its index is used as labels for ``fixed_colors`` keys.
+            DataFrame, its index is used as labels for `fixed_colors` keys.
         fixed_colors: Map from label (DataFrame index value) or integer position
             to an sRGB tuple/array in [0, 1]. Those colors are held fixed.
         target_max_delta_e: The largest pairwise distance maps to this OKLAB ΔE
             value. Default 0.3.
         target_L: Target OKLAB/OKLCH lightness for all colors in [0, 1].
-            ``None`` disables the luminosity term. Typical values: ~0.75 for
+            `None` disables the luminosity term. Typical values: ~0.75 for
             light-mode palettes, ~0.85 for dark-mode palettes.
-        init_seed: Integer random seed for initialization. When ``None``
+        init_seed: Integer random seed for initialization. When `None`
             (default), uses an MDS warm-start.
         stress_weight: Multiplier for the stress term.
         coverage_weight: Multiplier for the coverage term.
@@ -357,7 +357,7 @@ class ColorPaletteOptimizer(VizOptimizer):
 
     @property
     def colors_(self) -> np.ndarray:
-        """Optimized sRGB palette, shape ``(n, 3)`` with values in ``[0, 1]``.
+        """Optimized sRGB palette, shape `(n, 3)` with values in `[0, 1]`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.

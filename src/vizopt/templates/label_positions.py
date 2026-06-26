@@ -96,8 +96,8 @@ class LabelPositionOptimizer(VizOptimizer):
     """Optimize label rectangle positions to avoid overlap while staying near points.
 
     Args:
-        point_positions: Array of shape ``(n, 2)`` with the anchor point coordinates.
-        rectangle_sizes: Array of shape ``(n, 2)`` with ``(width, height)`` of each label.
+        point_positions: Array of shape `(n, 2)` with the anchor point coordinates.
+        rectangle_sizes: Array of shape `(n, 2)` with `(width, height)` of each label.
         weight_intersection: Weight for the pairwise bounding-box intersection loss.
         weight_distance: Weight for the point-to-label distance loss.
     """
@@ -132,7 +132,7 @@ class LabelPositionOptimizer(VizOptimizer):
 
     @property
     def label_positions_(self) -> np.ndarray:
-        """Optimized label rectangle positions, shape ``(n, 2)``.
+        """Optimized label rectangle positions, shape `(n, 2)`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.

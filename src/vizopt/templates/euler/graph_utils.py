@@ -18,29 +18,29 @@ def offsets_from_graph(
     Assigns larger offsets to shallower (outer) sets so that nested set
     boundaries are drawn at visibly different sizes. Within the same depth
     level, larger sets (more leaf members) receive a slightly larger offset.
-    All offsets are at least ``min_offset``.
+    All offsets are at least `min_offset`.
 
-    The safety invariant ``(max_same_depth_count - 1) * sub_step < offset_step``
+    The safety invariant `(max_same_depth_count - 1) * sub_step < offset_step`
     ensures no same-depth set ever overshoots its parent's offset.
 
-    Non-members get ``exclusion_offset`` instead of the depth-based value,
+    Non-members get `exclusion_offset` instead of the depth-based value,
     which controls how far each boundary stays from elements it must exclude.
     Increasing it creates visible spacing between sibling set boundaries where
-    their elements are adjacent. Defaults to ``offset_step * (max_depth + 1)``.
+    their elements are adjacent. Defaults to `offset_step * (max_depth + 1)`.
 
     Args:
         inclusion_graph: DiGraph with parent→child edges.
         set_names: Ordered list of internal node names, in the same order
-            used by the optimizer (topological, as from ``_sets_from_graph``).
+            used by the optimizer (topological, as from `_sets_from_graph`).
         leaf_names: List of leaf node names (out-degree 0).
         offset_step: Offset increment per depth level.
         sub_step: Additional offset per size-rank within the same depth level.
         min_offset: Floor applied to every set's offset.
         exclusion_offset: Offset applied to non-member leaves. Defaults to
-            ``offset_step * (max_depth + 1)`` when ``None``.
+            `offset_step * (max_depth + 1)` when `None`.
 
     Returns:
-        Array of shape ``(S, N)`` with one offset per (set, leaf) pair.
+        Array of shape `(S, N)` with one offset per (set, leaf) pair.
     """
     roots = [n for n in inclusion_graph.nodes if inclusion_graph.in_degree(n) == 0]
     depth = {}

@@ -53,7 +53,7 @@ def _slab_t(centers, rect_xy, hw_sn, hh_sn, angles):
         angles: (K,) ray angles.
 
     Returns:
-        t_enter, t_exit, hits — each (S, K, N).  ``hits`` is True when the ray
+        t_enter, t_exit, hits — each (S, K, N).  `hits` is True when the ray
         intersects the rectangle and the intersection is in the forward
         direction (t_exit >= 0).
     """
@@ -216,7 +216,7 @@ def _term_rect_collision(optim_vars, input_params):
     Uses the minimum axis-wise penetration depth: two AABBs overlap iff both
     x- and y-gaps are negative, so violation = max(0, min(overlap_x, overlap_y)).
 
-    Penalty is ``overlap² + alpha * overlap``. The linear term gives a constant
+    Penalty is `overlap² + alpha * overlap`. The linear term gives a constant
     non-zero gradient for any overlap, preventing tiny violations from persisting
     due to vanishing gradients. alpha=0 recovers the pure quadratic penalty.
     """
@@ -499,9 +499,9 @@ class EulerDiagramRect(VizOptimizer):
     Construct directly from arrays or via :meth:`from_graph`.
 
     Args:
-        rectangles: Array of shape ``(N, 4)`` with columns ``[cx, cy, hw, hh]``.
+        rectangles: Array of shape `(N, 4)` with columns `[cx, cy, hw, hh]`.
         sets: List of S subsets, each a collection of integer indices into
-            ``rectangles``.
+            `rectangles`.
         weight_area: Weight for the area objective.
         weight_perimeter: Weight for the perimeter objective.
         weight_enclosure: Weight for the enclosure penalty.
@@ -522,14 +522,14 @@ class EulerDiagramRect(VizOptimizer):
             penalty. Default 1.0.
         k_angles: Angular resolution (number of uniformly-spaced rays).
         offsets: Padding added to each rectangle's half-extents. Scalar,
-            shape ``(N,)``, or shape ``(S, N)``.
-        label_rect_size: ``(hw, hh)`` half-extents of a label rectangle to
+            shape `(N,)`, or shape `(S, N)`.
+        label_rect_size: `(hw, hh)` half-extents of a label rectangle to
             reserve at the top of each set boundary. When set, each star
             boundary encloses a floating label rect whose position is an
             optimization variable.
-        label_membership: Bool array of shape ``(S, S)`` where ``[s, l]`` is
-            True when boundary ``s`` must enclose label rect ``l``. When
-            ``None``, each boundary encloses only its own label rect.
+        label_membership: Bool array of shape `(S, S)` where `[s, l]` is
+            True when boundary `s` must enclose label rect `l`. When
+            `None`, each boundary encloses only its own label rect.
         weight_label_enclosure: Weight for the label enclosure term.
         weight_label_element_exclusion: Weight for keeping label rects away
             from leaf rectangles.
@@ -618,14 +618,14 @@ class EulerDiagramRect(VizOptimizer):
         become sets. A leaf belongs to a set if it is a descendant of that set.
 
         Args:
-            inclusion_graph: DiGraph with parent→child edges (edge ``(u, v)`` means
-                ``v ⊂ u``). Leaf nodes must carry ``center`` (``[x, y]``), ``hw``
-                (half-width), and ``hh`` (half-height) attributes.
-            offsets: Padding added to each rectangle's half-extents. When ``None``
+            inclusion_graph: DiGraph with parent→child edges (edge `(u, v)` means
+                `v ⊂ u`). Leaf nodes must carry `center` (`[x, y]`), `hw`
+                (half-width), and `hh` (half-height) attributes.
+            offsets: Padding added to each rectangle's half-extents. When `None`
                 (default), computed automatically from the graph hierarchy via
                 :func:`~vizopt.templates.euler.graph_utils.offsets_from_graph`.
-            label_rect_size: ``(hw, hh)`` half-extents of the label rectangle.
-                When set, ``label_membership`` is derived from the hierarchy so
+            label_rect_size: `(hw, hh)` half-extents of the label rectangle.
+                When set, `label_membership` is derived from the hierarchy so
                 that outer set boundaries also enclose nested labels.
             **kwargs: Forwarded to :meth:`__init__`.
 
@@ -778,8 +778,8 @@ class EulerDiagramRect(VizOptimizer):
     def sets_(self) -> list[dict]:
         """Star boundary dicts from the last optimization result.
 
-        Each dict has ``"center"``, ``"radii"``, ``"angles"``, and (when a label
-        rect was used) ``"label_center"``.
+        Each dict has `"center"`, `"radii"`, `"angles"`, and (when a label
+        rect was used) `"label_center"`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.
@@ -802,7 +802,7 @@ class EulerDiagramRect(VizOptimizer):
 
     @property
     def rects_(self) -> np.ndarray:
-        """Optimized rectangle positions as an ``(N, 4)`` array of ``[cx, cy, hw, hh]``.
+        """Optimized rectangle positions as an `(N, 4)` array of `[cx, cy, hw, hh]`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.

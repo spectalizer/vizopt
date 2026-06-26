@@ -289,12 +289,12 @@ def make_layered_graph_input_params(
         preferred_edge_vector: Target edge vector as (dx, dy). Encodes both the
             preferred direction and the preferred edge length. Default (1, 0)
             produces a left-to-right layout with unit-length edges.
-            ``standard_direction`` (used by the direction and sibling terms) is
+            `standard_direction` (used by the direction and sibling terms) is
             derived as its unit vector.
 
     Returns:
         Dict suitable for :class:`LayeredGraphOptimizer` or for direct use with
-        :class:`~vizopt.base.OptimizationProblemTemplate`. Includes ``"node_names"``
+        :class:`~vizopt.base.OptimizationProblemTemplate`. Includes `"node_names"`
         for post-processing (not used in loss computation).
     """
     node_names = list(graph.nodes)
@@ -339,20 +339,20 @@ class LayeredGraphOptimizer(VizOptimizer):
 
     Minimizes a weighted sum of:
 
-    - ``edge_direction``: penalizes deviation of edge unit directions from
+    - `edge_direction`: penalizes deviation of edge unit directions from
       the standard direction (scale-invariant).
-    - ``edge_vector``: penalizes deviation of full edge vectors (direction
-      and length) from ``preferred_edge_vector``.
-    - ``node_separation``: penalizes node pairs closer than ``min_distance``.
-    - ``sibling_separation``: penalizes siblings (shared parent) that are too
+    - `edge_vector`: penalizes deviation of full edge vectors (direction
+      and length) from `preferred_edge_vector`.
+    - `node_separation`: penalizes node pairs closer than `min_distance`.
+    - `sibling_separation`: penalizes siblings (shared parent) that are too
       close in the perpendicular direction.
 
     Args:
         graph: Directed graph to lay out. Edge direction defines the "from → to"
-            orientation aligned with ``preferred_edge_vector``.
+            orientation aligned with `preferred_edge_vector`.
         min_distance: Minimum required Euclidean distance between any two nodes.
-        preferred_edge_vector: Target edge vector ``(dx, dy)``. Encodes both
-            preferred direction and preferred edge length. Default ``(1, 0)``
+        preferred_edge_vector: Target edge vector `(dx, dy)`. Encodes both
+            preferred direction and preferred edge length. Default `(1, 0)`
             produces a left-to-right layout with unit-length edges.
         weight_edge_direction: Weight for the edge direction term.
         weight_edge_vector: Weight for the edge vector term.
@@ -399,7 +399,7 @@ class LayeredGraphOptimizer(VizOptimizer):
 
     @property
     def node_positions_(self) -> dict:
-        """Optimized node positions as a dict mapping node name to ``(x, y)``.
+        """Optimized node positions as a dict mapping node name to `(x, y)`.
 
         Raises:
             ValueError: If :meth:`optimize` has not been called yet.
