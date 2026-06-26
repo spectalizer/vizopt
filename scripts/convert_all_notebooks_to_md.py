@@ -24,7 +24,12 @@ def _extract_title_and_desc(md_path: Path) -> tuple[str, str]:
         stripped = line.strip()
         if not title and re.match(r"^#{1,3} ", stripped):
             title = re.sub(r"^#{1,3} ", "", stripped)
-        elif title and stripped and not stripped.startswith("#") and not stripped.startswith("```"):
+        elif (
+            title
+            and stripped
+            and not stripped.startswith("#")
+            and not stripped.startswith("```")
+        ):
             desc = stripped
             break
     return title or md_path.stem, desc

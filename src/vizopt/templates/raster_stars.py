@@ -2,7 +2,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vizopt.base import ObjectiveTerm, OptimizationProblemTemplate
+from vizopt.base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from vizopt.components.bspline_stars import (
     raster_collision_loss_bspline,
 )
@@ -198,8 +203,8 @@ def soft_rasterize_star_fourier(
 def raster_collision_loss_fourier(optim_vars, input_params):
     """Raster-based pairwise collision loss using a Fourier boundary representation.
 
-    Same semantics as `raster_collision_loss` but reads ``fourier_coeffs`` from
-    *optim_vars* instead of ``radii``.
+    Same semantics as `raster_collision_loss` but reads `fourier_coeffs` from
+    *optim_vars* instead of `radii`.
 
     optim_vars keys:
         "centers":        (n_sets, 2)
@@ -231,164 +236,200 @@ _RASTER_COLLISION = {
 
 
 # ---------------------------------------------------------------------------
-# Optimiser
+# Public API
 # ---------------------------------------------------------------------------
 
 
-def optimize_star_domains_raster(
-    n_sets,
-    initial_centers,
-    representation: StarRepresentation = None,
-    target_areas=None,
-    initial_radius=1.0,
-    weight_target_area=20.0,
-    weight_area=1.0,
-    weight_perimeter=0.5,
-    weight_exclusion=10.0,
-    weight_enclosure=20.0,
-    weight_smoothness=1.0,
-    enclosures=None,
-    enclosure_offset=0.1,
-    exclusion_offset=0.1,
-    grid_resolution=128,
-    grid_margin=0.5,
-    temperature=0.05,
-    optim_config=None,
-    callback=None,
-    track_every=100,
-):
+class RasterStarOptimizer(VizOptimizer):
     """Optimise pure star domains using a raster-based collision loss for exclusion.
 
-    Drop-in replacement for `star_vs_star.optimize_star_domains` that swaps the
-    analytical `_multi_term_star_exclusion` for `raster_collision_loss`: pairwise
-    overlap is measured as the pixel-wise product of soft domain masks, giving
-    well-defined gradients even for complete overlaps.
+    Drop-in replacement for :class:`~vizopt.templates.star_vs_star.StarDomainOptimizer`
+    that swaps the analytical `star_excl` term for a pixel-wise raster overlap
+    loss, giving well-defined gradients even for complete overlaps.
 
-    The enclosure constraint remains analytical (`_multi_term_star_enclosure`).
-    The pixel grid is built once from the initial configuration and held fixed
-    throughout optimisation.
+    The enclosure constraint remains analytical (:func:`_multi_term_star_enclosure`
+    from :mod:`vizopt.templates.star_vs_star`). The pixel grid is built once from
+    the initial configuration and held fixed throughout optimization.
 
     Args:
-        n_sets: number of star domains.
-        initial_centers: (n_sets, 2) starting centers.
-        representation: a ``StarRepresentation`` instance (``Discrete``,
-            ``Fourier``, or ``BSpline``) that controls the boundary
-            parametrisation and its hyper-parameters. Defaults to
-            ``Discrete(k_angles=64)``.
-        target_areas: list of n_sets values (float or None).
-        initial_radius: fallback starting radius for sets without a target area.
-        weight_target_area: weight for target-area penalty.
-        weight_area: weight for area-minimisation regulariser.
-        weight_perimeter: weight for perimeter-minimisation regulariser.
-        weight_exclusion: weight for raster collision loss.
-        weight_enclosure: weight for analytical star-vs-star enclosure.
-        weight_smoothness: weight for adjacent-radii smoothness penalty.
-        enclosures: list of (inner_idx, outer_idx) pairs.
-        enclosure_offset: minimum inset for enclosure constraints.
-        exclusion_offset: outward boundary shift for raster collision; positive
-            values inflate each domain's soft mask, enforcing a minimum gap
-            between non-overlapping domains.
-        grid_resolution: pixels along the longer axis of the bounding box.
-        grid_margin: extra margin (in scene units) around the bounding box.
-        temperature: sigmoid sharpness for soft rasterization.
-        optim_config: optimization config dict; uses defaults when None.
-        callback: optional iteration callback.
-
-    Returns:
-        (results, history, problem) where results is a list of n_sets dicts with
-        keys ``"center"`` (2,), ``"radii"`` (K,), ``"angles"`` (K,), plus any
-        representation-specific extras (e.g. ``"fourier_coeffs"`` or
-        ``"bspline_ctrl"``).
+        n_sets: Number of star domains.
+        initial_centers: `(n_sets, 2)` starting centers.
+        representation: A :class:`~vizopt.components.stars.StarRepresentation`
+            instance (`Discrete`, `Fourier`, or `BSpline`) that controls
+            the boundary parametrisation. Defaults to `Discrete(k_angles=64)`.
+        target_areas: List of n_sets values (float or None).
+        initial_radius: Fallback starting radius for sets without a target area.
+        weight_target_area: Weight for target-area penalty.
+        weight_area: Weight for area-minimisation regulariser.
+        weight_perimeter: Weight for perimeter-minimisation regulariser.
+        weight_exclusion: Weight for raster collision loss.
+        weight_enclosure: Weight for analytical star-vs-star enclosure.
+        weight_smoothness: Weight for adjacent-radii smoothness penalty.
+        enclosures: List of `(inner_idx, outer_idx)` pairs.
+        enclosure_offset: Minimum inset for enclosure constraints.
+        exclusion_offset: Outward boundary shift for raster collision; positive
+            values inflate each domain's soft mask, enforcing a minimum gap.
+        grid_resolution: Pixels along the longer axis of the bounding box.
+        grid_margin: Extra margin (in scene units) around the bounding box.
+        temperature: Sigmoid sharpness for soft rasterization.
     """
-    if representation is None:
-        representation = Discrete()
 
-    k_angles = representation.k_angles
-    angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
-    angles_jnp = jnp.array(angles)
-    initial_centers = np.asarray(initial_centers, dtype=np.float32)
-
-    targets_raw = target_areas if target_areas is not None else [None] * n_sets
-    target_arr = np.array(
-        [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
-    )
-
-    initial_radii = np.zeros((n_sets, k_angles), dtype=np.float32)
-    for s in range(n_sets):
-        r0 = (
-            _radius_from_target_area(target_arr[s], k_angles)
-            if np.isfinite(target_arr[s])
-            else initial_radius
+    def __init__(
+        self,
+        n_sets: int,
+        initial_centers,
+        *,
+        representation: StarRepresentation = None,
+        target_areas=None,
+        initial_radius: float = 1.0,
+        weight_target_area: float = 20.0,
+        weight_area: float = 1.0,
+        weight_perimeter: float = 0.5,
+        weight_exclusion: float = 10.0,
+        weight_enclosure: float = 20.0,
+        weight_smoothness: float = 1.0,
+        enclosures=None,
+        enclosure_offset: float = 0.1,
+        exclusion_offset: float = 0.1,
+        grid_resolution: int = 128,
+        grid_margin: float = 0.5,
+        temperature: float = 0.05,
+    ):
+        self.n_sets = n_sets
+        self.initial_centers = initial_centers
+        self.representation = (
+            representation if representation is not None else Discrete()
         )
-        initial_radii[s] = r0
+        self.target_areas = target_areas
+        self.initial_radius = initial_radius
+        self.weight_target_area = weight_target_area
+        self.weight_area = weight_area
+        self.weight_perimeter = weight_perimeter
+        self.weight_exclusion = weight_exclusion
+        self.weight_enclosure = weight_enclosure
+        self.weight_smoothness = weight_smoothness
+        self.enclosures = enclosures
+        self.enclosure_offset = enclosure_offset
+        self.exclusion_offset = exclusion_offset
+        self.grid_resolution = grid_resolution
+        self.grid_margin = grid_margin
+        self.temperature = temperature
 
-    max_r = float(initial_radii.max())
-    x_min = float(initial_centers[:, 0].min()) - max_r - grid_margin
-    x_max = float(initial_centers[:, 0].max()) + max_r + grid_margin
-    y_min = float(initial_centers[:, 1].min()) - max_r - grid_margin
-    y_max = float(initial_centers[:, 1].max()) + max_r + grid_margin
-    grid_xy, pixel_area = make_pixel_grid(x_min, x_max, y_min, y_max, grid_resolution)
-    print(
-        f"Pixel grid: {grid_xy.shape[0]}x{grid_xy.shape[1]}, pixel_area={pixel_area:.4f}"
-    )
+    def _build_problem(self) -> OptimizationProblem:
+        n_sets = self.n_sets
+        representation = self.representation
+        k_angles = representation.k_angles
+        angles = np.linspace(0, 2 * np.pi, k_angles, endpoint=False).astype(np.float32)
+        angles_jnp = jnp.array(angles)
+        initial_centers = np.asarray(self.initial_centers, dtype=np.float32)
 
-    enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
-    for inner, outer in enclosures or []:
-        enclosure_mask[inner, outer] = True
-    exclusion_mask = _build_exclusion_mask(n_sets, enclosures)
+        targets_raw = (
+            self.target_areas if self.target_areas is not None else [None] * n_sets
+        )
+        target_arr = np.array(
+            [t if t is not None else np.nan for t in targets_raw], dtype=np.float32
+        )
 
-    input_parameters = {
-        "angles": angles,
-        "target_areas": target_arr,
-        "enclosure_mask": enclosure_mask,
-        "enclosure_offset": float(enclosure_offset),
-        "grid_xy": grid_xy,
-        "pixel_area": float(pixel_area),
-        "exclusion_mask": exclusion_mask,
-        "temperature": float(temperature),
-        "exclusion_offset": float(exclusion_offset),
-    }
+        initial_radii = np.zeros((n_sets, k_angles), dtype=np.float32)
+        for s in range(n_sets):
+            r0 = (
+                _radius_from_target_area(target_arr[s], k_angles)
+                if np.isfinite(target_arr[s])
+                else self.initial_radius
+            )
+            initial_radii[s] = r0
 
-    init_vars = representation.initialize_vars(n_sets, initial_radii, initial_centers)
+        max_r = float(initial_radii.max())
+        x_min = float(initial_centers[:, 0].min()) - max_r - self.grid_margin
+        x_max = float(initial_centers[:, 0].max()) + max_r + self.grid_margin
+        y_min = float(initial_centers[:, 1].min()) - max_r - self.grid_margin
+        y_max = float(initial_centers[:, 1].max()) + max_r + self.grid_margin
+        grid_xy, pixel_area = make_pixel_grid(
+            x_min, x_max, y_min, y_max, self.grid_resolution
+        )
+        print(
+            f"Pixel grid: {grid_xy.shape[0]}x{grid_xy.shape[1]}, pixel_area={pixel_area:.4f}"
+        )
 
-    def initialize(*_):
-        return {k: v.copy() for k, v in init_vars.items()}
+        enclosure_mask = np.zeros((n_sets, n_sets), dtype=bool)
+        for inner, outer in self.enclosures or []:
+            enclosure_mask[inner, outer] = True
+        exclusion_mask = _build_exclusion_mask(n_sets, self.enclosures)
 
-    def wrap(fn):
-        return representation.wrap(fn, angles_jnp)
-
-    terms = [
-        ObjectiveTerm("target_area", wrap(_multi_term_target_area), weight_target_area),
-        ObjectiveTerm(
-            "raster_excl", _RASTER_COLLISION[type(representation)], weight_exclusion
-        ),
-        ObjectiveTerm(
-            "star_enclose", wrap(_multi_term_star_enclosure), weight_enclosure
-        ),
-        ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
-        ObjectiveTerm("smoothness", wrap(_multi_term_smoothness), weight_smoothness),
-        ObjectiveTerm("area", wrap(_multi_term_area), weight_area),
-        ObjectiveTerm("perimeter", wrap(_multi_term_perimeter), weight_perimeter),
-    ]
-
-    problem = OptimizationProblemTemplate(
-        terms=terms,
-        initialize=initialize,
-        svg_configuration=representation.make_svg_configuration(),
-    ).instantiate(input_parameters)
-
-    result = problem.optimize(
-        optim_config, callback=callback, track_every=track_every
-    )
-
-    radii_arr = np.array(representation.to_radii(result.optim_vars, angles_jnp))
-    results = [
-        {
-            "center": np.array(result.optim_vars["centers"][s]),
-            "radii": radii_arr[s],
+        input_parameters = {
             "angles": angles,
-            **representation.extra_results(s, result.optim_vars),
+            "target_areas": target_arr,
+            "enclosure_mask": enclosure_mask,
+            "enclosure_offset": float(self.enclosure_offset),
+            "grid_xy": grid_xy,
+            "pixel_area": float(pixel_area),
+            "exclusion_mask": exclusion_mask,
+            "temperature": float(self.temperature),
+            "exclusion_offset": float(self.exclusion_offset),
         }
-        for s in range(n_sets)
-    ]
-    return results, result.history, problem
+
+        init_vars = representation.initialize_vars(
+            n_sets, initial_radii, initial_centers
+        )
+
+        def initialize(*_):
+            return {k: v.copy() for k, v in init_vars.items()}
+
+        def wrap(fn):
+            return representation.wrap(fn, angles_jnp)
+
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm(
+                    "target_area",
+                    wrap(_multi_term_target_area),
+                    self.weight_target_area,
+                ),
+                ObjectiveTerm(
+                    "raster_excl",
+                    _RASTER_COLLISION[type(representation)],
+                    self.weight_exclusion,
+                ),
+                ObjectiveTerm(
+                    "star_enclose",
+                    wrap(_multi_term_star_enclosure),
+                    self.weight_enclosure,
+                ),
+                ObjectiveTerm("min_radius", wrap(_multi_term_min_radius), 10.0),
+                ObjectiveTerm(
+                    "smoothness", wrap(_multi_term_smoothness), self.weight_smoothness
+                ),
+                ObjectiveTerm("area", wrap(_multi_term_area), self.weight_area),
+                ObjectiveTerm(
+                    "perimeter", wrap(_multi_term_perimeter), self.weight_perimeter
+                ),
+            ],
+            initialize=initialize,
+            svg_configuration=representation.make_svg_configuration(),
+        ).instantiate(input_parameters)
+
+    @property
+    def sets_(self) -> list[dict]:
+        """Star boundary dicts from the last optimization result.
+
+        Each dict has `"center"` (2,), `"radii"` (K,), `"angles"` (K,),
+        plus any representation-specific extras.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        optim_vars = self.result_.optim_vars
+        angles = self.problem_.input_parameters["angles"]
+        angles_jnp = jnp.array(angles)
+        radii_arr = np.array(self.representation.to_radii(optim_vars, angles_jnp))
+        return [
+            {
+                "center": np.array(optim_vars["centers"][s]),
+                "radii": radii_arr[s],
+                "angles": angles,
+                **self.representation.extra_results(s, optim_vars),
+            }
+            for s in range(self.n_sets)
+        ]

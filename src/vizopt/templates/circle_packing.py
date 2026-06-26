@@ -5,9 +5,9 @@ from jax import numpy as jnp
 
 from ..base import (
     ObjectiveTerm,
-    OptimConfig,
     OptimizationProblem,
     OptimizationProblemTemplate,
+    VizOptimizer,
 )
 from ..components.common import (
     calculate_collision_penalty,
@@ -36,7 +36,6 @@ def _term_collision(optim_vars, input_params):
         input_params["collision_pairs"],
         offset=input_params["collision_offset"],
     )
-
 
 
 # ---------------------------------------------------------------------------
@@ -71,8 +70,12 @@ def plot_circles(positions, radii):
             )
         )
     margin = float(max(radii))
-    ax.set_xlim(float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin)
-    ax.set_ylim(float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin)
+    ax.set_xlim(
+        float(positions[:, 0].min()) - margin, float(positions[:, 0].max()) + margin
+    )
+    ax.set_ylim(
+        float(positions[:, 1].min()) - margin, float(positions[:, 1].max()) + margin
+    )
     ax.set_aspect("equal")
     ax.set_title(f"Circle packing: {n} circles")
     plt.axis("off")
@@ -130,100 +133,83 @@ def _svg_configuration(snapshots, input_params, size):
 # ---------------------------------------------------------------------------
 
 
-def build_circle_packing_problem(
-    radii: list[float],
-    weight_total_size=2.0,
-    collision_offset=1.0,
-    initial_node_xys=None,
-) -> OptimizationProblem:
-    """Build an :class:`OptimizationProblem` for circle packing without running it.
-
-    Useful for animation: pass a :class:`~vizopt.animation.SnapshotCallback`
-    to :meth:`~vizopt.base.OptimizationProblem.optimize` and then call
-    :func:`~vizopt.animation.animate`.
-
-    Args:
-        radii: List of circle radii.
-        weight_total_size: Weight for the total width/height objective.
-        collision_offset: Minimum required gap between circle boundaries.
-        initial_node_xys: Optional initial (x, y) positions, shape (n, 2).
-
-    Returns:
-        An :class:`OptimizationProblem` with ``plot_configuration`` and
-        ``svg_configuration`` set.
-    """
-    node_radii = np.array(radii, dtype=np.float32)
-    n = len(node_radii)
-    if initial_node_xys is None:
-        total_scale = float(node_radii.sum()) if n > 0 else 1.0
-        initial_node_xys = np.random.rand(n, 2).astype(np.float32) * total_scale
-    else:
-        initial_node_xys = np.array(initial_node_xys, dtype=np.float32)
-
-    collision_pairs = (
-        np.array([[i, j] for i in range(n) for j in range(i)], dtype=np.int32)
-        if n > 1
-        else np.zeros((0, 2), dtype=np.int32)
-    )
-
-    input_parameters = {
-        "node_radii": node_radii,
-        "collision_pairs": collision_pairs,
-        "collision_offset": collision_offset,
-    }
-
-    _initial = initial_node_xys
-    _total_scale = float(node_radii.sum()) if n > 0 else 1.0
-
-    def initialize(_, seed):
-        rng = np.random.default_rng(seed)
-        noise = rng.standard_normal((n, 2)).astype(np.float32) * _total_scale * 0.1
-        return {"node_xys": _initial + noise}
-
-    terms = [
-        ObjectiveTerm("total_size", _term_total_size, weight_total_size),
-        ObjectiveTerm("collision", _term_collision),
-    ]
-
-    return OptimizationProblemTemplate(
-        terms=terms,
-        initialize=initialize,
-        plot_configuration=_plot_configuration,
-        svg_configuration=_svg_configuration,
-    ).instantiate(input_parameters)
-
-
-def optimize_circle_packing(
-    radii: list[float],
-    weight_total_size=2.0,
-    collision_offset=1.0,
-    initial_node_xys=None,
-    optim_config: OptimConfig | None = None,
-):
+class CirclePackingOptimizer(VizOptimizer):
     """Pack circles of given radii to minimize overlap and overall bounding box.
 
     Minimizes a weighted sum of:
-        - total width/height: compact bounding box of all circles
-        - collision penalty: circles should not overlap
+
+    - `total_size`: compact bounding box of all circles.
+    - `collision`: circles should not overlap (with optional gap).
 
     Args:
         radii: List of circle radii.
         weight_total_size: Weight for the total width/height objective.
         collision_offset: Minimum required gap between circle boundaries.
-        initial_node_xys: Optional initial (x, y) positions as an array of
-            shape (n, 2). If None, positions are randomly initialized.
-        optim_config: Optimizer settings (iterations, learning rate, seeds,
-            restarts). Uses :class:`~vizopt.base.OptimConfig` defaults when ``None``.
-
-    Returns:
-        List of (x, y) tuples, one per circle, in the same order as radii.
+        initial_node_xys: Optional initial `(x, y)` positions, shape `(n, 2)`.
+            If `None`, positions are randomly initialized.
     """
-    problem = build_circle_packing_problem(
-        radii=radii,
-        weight_total_size=weight_total_size,
-        collision_offset=collision_offset,
-        initial_node_xys=initial_node_xys,
-    )
-    result = problem.optimize(optim_config)
 
-    return [tuple(float(c) for c in xy) for xy in result.optim_vars["node_xys"]]
+    def __init__(
+        self,
+        radii: list[float],
+        *,
+        weight_total_size: float = 2.0,
+        collision_offset: float = 1.0,
+        initial_node_xys=None,
+    ):
+        self.radii = radii
+        self.weight_total_size = weight_total_size
+        self.collision_offset = collision_offset
+        self.initial_node_xys = initial_node_xys
+
+    def _build_problem(self) -> OptimizationProblem:
+        node_radii = np.array(self.radii, dtype=np.float32)
+        n = len(node_radii)
+        if self.initial_node_xys is None:
+            total_scale = float(node_radii.sum()) if n > 0 else 1.0
+            initial_node_xys = np.random.rand(n, 2).astype(np.float32) * total_scale
+        else:
+            initial_node_xys = np.array(self.initial_node_xys, dtype=np.float32)
+
+        collision_pairs = (
+            np.array([[i, j] for i in range(n) for j in range(i)], dtype=np.int32)
+            if n > 1
+            else np.zeros((0, 2), dtype=np.int32)
+        )
+
+        input_parameters = {
+            "node_radii": node_radii,
+            "collision_pairs": collision_pairs,
+            "collision_offset": self.collision_offset,
+        }
+
+        _initial = initial_node_xys
+        _total_scale = float(node_radii.sum()) if n > 0 else 1.0
+
+        def initialize(_, seed):
+            rng = np.random.default_rng(seed)
+            noise = rng.standard_normal((n, 2)).astype(np.float32) * _total_scale * 0.1
+            return {"node_xys": _initial + noise}
+
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm("total_size", _term_total_size, self.weight_total_size),
+                ObjectiveTerm("collision", _term_collision),
+            ],
+            initialize=initialize,
+            plot_configuration=_plot_configuration,
+            svg_configuration=_svg_configuration,
+        ).instantiate(input_parameters)
+
+    @property
+    def positions_(self) -> list[tuple[float, float]]:
+        """Optimized circle positions as a list of `(x, y)` tuples.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        return [
+            tuple(float(c) for c in xy) for xy in self.result_.optim_vars["node_xys"]
+        ]

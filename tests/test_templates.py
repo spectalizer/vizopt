@@ -11,11 +11,11 @@ from vizopt.examples.sets import (
     graph_to_optimizer_inputs,
     make_british_islands_graph,
 )
-from vizopt.templates.euler.stars_vs_circles import (
-    optimize_radially_convex_sets_and_circles,
-)
+from vizopt.templates.euler.stars_vs_circles import EulerDiagram
 
 _FAST = OptimConfig(n_iters=5, learning_rate=1e-2)
+
+
 def _NO_PRINT(*_):
     pass
 
@@ -25,17 +25,13 @@ def _NO_PRINT(*_):
 # ---------------------------------------------------------------------------
 
 
-def _two_circle_problem(representation=None):
+def _two_circle_problem(representation=None) -> EulerDiagram:
     """Minimal two-circle, two-set problem for smoke-testing optimizers."""
     circles = np.array([[0.0, 0.0, 0.5], [2.0, 0.0, 0.5]], dtype=np.float32)
     sets = [[0], [1]]
-    return optimize_radially_convex_sets_and_circles(
-        circles=circles,
-        sets=sets,
-        representation=representation,
-        optim_config=_FAST,
-        callback=_NO_PRINT,
-    )
+    diagram = EulerDiagram(circles, sets, representation=representation)
+    diagram.optimize(optim_config=_FAST, callback=_NO_PRINT)
+    return diagram
 
 
 # ---------------------------------------------------------------------------
@@ -43,41 +39,37 @@ def _two_circle_problem(representation=None):
 # ---------------------------------------------------------------------------
 
 
-def test_optimize_returns_four_tuple():
-    results, circles_out, history, problem = _two_circle_problem()
-    assert isinstance(results, list)
-    assert isinstance(history, list)
+def test_optimize_returns_euler_diagram():
+    diagram = _two_circle_problem()
+    assert isinstance(diagram.sets_, list)
+    assert isinstance(diagram.result_.history, list)
 
 
 def test_optimize_result_length():
-    results, _, _, _ = _two_circle_problem()
-    assert len(results) == 2
+    assert len(_two_circle_problem().sets_) == 2
 
 
 def test_optimize_result_keys():
-    results, _, _, _ = _two_circle_problem()
-    for r in results:
+    for r in _two_circle_problem().sets_:
         assert "center" in r
         assert "radii" in r
         assert "angles" in r
 
 
 def test_optimize_result_shapes():
-    results, _, _, _ = _two_circle_problem(Discrete(k_angles=16))
-    for r in results:
+    for r in _two_circle_problem(Discrete(k_angles=16)).sets_:
         assert r["center"].shape == (2,)
         assert r["radii"].shape == (16,)
         assert r["angles"].shape == (16,)
 
 
 def test_optimize_radii_positive():
-    results, _, _, _ = _two_circle_problem()
-    for r in results:
+    for r in _two_circle_problem().sets_:
         assert np.all(r["radii"] > 0)
 
 
 def test_optimize_history_has_term_keys():
-    _, _, history, _ = _two_circle_problem()
+    history = _two_circle_problem().result_.history
     assert len(history) > 0
     for record in history:
         assert "iteration" in record
@@ -90,50 +82,51 @@ def test_optimize_history_has_term_keys():
 
 
 def test_optimize_fourier_representation():
-    results, _, _, _ = _two_circle_problem(Fourier(k_angles=16, n_harmonics=4))
-    for r in results:
+    for r in _two_circle_problem(Fourier(k_angles=16, n_harmonics=4)).sets_:
         assert "fourier_coeffs" in r
         assert r["fourier_coeffs"].shape == (2 * 4 + 1,)
         assert r["radii"].shape == (16,)
 
 
 def test_optimize_bspline_representation():
-    results, _, _, _ = _two_circle_problem(BSpline(k_angles=16, n_ctrl_pts=8))
-    for r in results:
+    for r in _two_circle_problem(BSpline(k_angles=16, n_ctrl_pts=8)).sets_:
         assert "bspline_ctrl" in r
         assert r["bspline_ctrl"].shape == (8,)
         assert r["radii"].shape == (16,)
 
 
 def test_optimize_discrete_no_extra_results():
-    results, _, _, _ = _two_circle_problem(Discrete(k_angles=16))
-    for r in results:
+    for r in _two_circle_problem(Discrete(k_angles=16)).sets_:
         assert "fourier_coeffs" not in r
         assert "bspline_ctrl" not in r
 
 
 def test_convexity_alpha_reduces_concavity():
     """convexity_alpha=1 should produce a more convex boundary than alpha=0."""
-    circles = np.array([[-2.0, 0.0, 0.4], [0.0, 2.0, 0.4], [2.0, 0.0, 0.4]], dtype=np.float32)
+    circles = np.array(
+        [[-2.0, 0.0, 0.4], [0.0, 2.0, 0.4], [2.0, 0.0, 0.4]], dtype=np.float32
+    )
     sets = [[0, 1, 2]]
 
     def _run(alpha):
-        results, _, _, _ = optimize_radially_convex_sets_and_circles(
-            circles=circles,
-            sets=sets,
+        import jax.numpy as jnp
+
+        diagram = EulerDiagram(
+            circles,
+            sets,
             weight_convexity=5.0,
             convexity_alpha=alpha,
             weight_area=0.5,
             weight_perimeter=0.5,
             weight_smoothness=0.1,
             representation=Discrete(k_angles=32),
-            optim_config=OptimConfig(n_iters=200, learning_rate=5e-3),
-            callback=_NO_PRINT,
         )
-        import jax.numpy as jnp
-        radii = jnp.array(results[0]["radii"])
-        angles = jnp.array(results[0]["angles"])
-        center = jnp.array(results[0]["center"])
+        diagram.optimize(
+            OptimConfig(n_iters=200, learning_rate=5e-3), callback=_NO_PRINT
+        )
+        radii = jnp.array(diagram.sets_[0]["radii"])
+        angles = jnp.array(diagram.sets_[0]["angles"])
+        center = jnp.array(diagram.sets_[0]["center"])
         directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=1)
         points = center[None, :] + radii[:, None] * directions
         edges = jnp.roll(points, -1, axis=0) - points

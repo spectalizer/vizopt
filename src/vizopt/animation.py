@@ -12,9 +12,9 @@ from .base import OptimizationProblem, default_print_callback
 
 
 class SnapshotCallback:
-    """Callback that saves a numpy copy of ``optim_vars`` at regular intervals.
+    """Callback that saves a numpy copy of `optim_vars` at regular intervals.
 
-    Pass an instance as the ``callback`` argument to
+    Pass an instance as the `callback` argument to
     :meth:`OptimizationProblem.optimize`. Snapshots accumulate in
     :attr:`snapshots` and can be passed to :func:`animate`.
 
@@ -22,7 +22,7 @@ class SnapshotCallback:
         every: Save a snapshot every this many iterations.
 
     Attributes:
-        snapshots: List of ``(iteration, optim_vars)`` tuples, one per
+        snapshots: List of `(iteration, optim_vars)` tuples, one per
             recorded step.
 
     Example::
@@ -51,22 +51,22 @@ def animate(
 ) -> Any:
     """Create an animation of the optimization process.
 
-    Renders each ``optim_vars`` snapshot via ``problem.plot_configuration``
-    and assembles the frames into a ``FuncAnimation``.
+    Renders each `optim_vars` snapshot via `problem.plot_configuration`
+    and assembles the frames into a `FuncAnimation`.
 
     Args:
-        problem: The optimization problem; must have ``plot_configuration`` set.
-        snapshots: List of ``(iteration, optim_vars)`` tuples as produced by
+        problem: The optimization problem; must have `plot_configuration` set.
+        snapshots: List of `(iteration, optim_vars)` tuples as produced by
             :class:`SnapshotCallback`.
         interval: Delay between frames in milliseconds.
 
     Returns:
-        A ``matplotlib.animation.FuncAnimation``. In a Jupyter notebook,
-        display with ``IPython.display.HTML(anim.to_jshtml())``.
+        A `matplotlib.animation.FuncAnimation`. In a Jupyter notebook,
+        display with `IPython.display.HTML(anim.to_jshtml())`.
 
     Raises:
-        ValueError: If ``problem.plot_configuration`` is not set or
-            ``snapshots`` is empty.
+        ValueError: If `problem.plot_configuration` is not set or
+            `snapshots` is empty.
     """
     from matplotlib import animation
     from matplotlib import pyplot as plt
@@ -113,25 +113,25 @@ def snapshots_to_animated_svg(
 ) -> str:
     """Create an animated SVG from optimization snapshots.
 
-    Uses ``problem.svg_configuration`` to obtain per-element SVG specs, then
-    builds SMIL ``<animate>`` elements for attributes that vary across frames.
+    Uses `problem.svg_configuration` to obtain per-element SVG specs, then
+    builds SMIL `<animate>` elements for attributes that vary across frames.
 
     Args:
-        problem: The optimization problem; must have ``svg_configuration`` set.
-        snapshots: List of ``(iteration, optim_vars)`` tuples as produced by
+        problem: The optimization problem; must have `svg_configuration` set.
+        snapshots: List of `(iteration, optim_vars)` tuples as produced by
             :class:`SnapshotCallback`.
         fps: Frames per second.
         size: Width and height of the output SVG in pixels.
-        calc_mode: ``"linear"`` for smooth interpolation or ``"discrete"``
+        calc_mode: `"linear"` for smooth interpolation or `"discrete"`
             for instant jumps between frames.
         history: Optional list of history dicts as returned by
             :meth:`OptimizationProblem.optimize` (each dict has an
-            ``"iteration"`` key and a ``"total"`` key with the aggregate loss).
+            `"iteration"` key and a `"total"` key with the aggregate loss).
             When provided, a loss curve is rendered below the animation with an
             animated marker tracking the current frame.
         loss_curve_height: Height in pixels of the loss curve panel, used only
-            when ``history`` is provided.
-        log_scale: If ``True``, the loss axis uses a log10 scale.
+            when `history` is provided.
+        log_scale: If `True`, the loss axis uses a log10 scale.
         optim_vars_panel_height: Height in pixels of the spaghetti-plot panel
             for optimization variables.  When greater than zero, a panel is
             appended below the animation (and below the loss curve, if shown)
@@ -141,12 +141,12 @@ def snapshots_to_animated_svg(
             style of the loss curve panel.
 
     Returns:
-        An SVG string. Save with ``Path("out.svg").write_text(svg)`` or
-        display in Jupyter with ``IPython.display.SVG(data=svg)``.
+        An SVG string. Save with `Path("out.svg").write_text(svg)` or
+        display in Jupyter with `IPython.display.SVG(data=svg)`.
 
     Raises:
-        ValueError: If ``problem.svg_configuration`` is not set or
-            ``snapshots`` is empty.
+        ValueError: If `problem.svg_configuration` is not set or
+            `snapshots` is empty.
     """
     if problem.svg_configuration is None:
         raise ValueError(
@@ -233,17 +233,17 @@ def _loss_curve_svg_lines(
     """Build SVG lines for a loss curve panel placed below the main animation.
 
     Args:
-        history: List of history dicts with ``"iteration"`` and ``"total"`` keys.
-        snapshots: List of ``(iteration, optim_vars)`` tuples.
+        history: List of history dicts with `"iteration"` and `"total"` keys.
+        snapshots: List of `(iteration, optim_vars)` tuples.
         size: Width of the SVG (same as the animation width).
         panel_height: Height of the loss curve panel in pixels.
         n_frames: Number of animation frames.
         total_dur: Total animation duration in seconds.
-        calc_mode: SMIL ``calcMode`` (``"linear"`` or ``"discrete"``).
-        log_scale: If ``True``, the loss axis uses a log10 scale.
+        calc_mode: SMIL `calcMode` (`"linear"` or `"discrete"`).
+        log_scale: If `True`, the loss axis uses a log10 scale.
 
     Returns:
-        A list of SVG element strings to append before the closing ``</svg>``.
+        A list of SVG element strings to append before the closing `</svg>`.
     """
     pad_left = 40
     pad_right = 12
@@ -299,9 +299,7 @@ def _loss_curve_svg_lines(
         return cumulative[idx]
 
     # stroke-dashoffset per frame: total_len - d means only the first d px are drawn
-    dashoffsets = [
-        f"{total_len - _cum_len_at(sit):.1f}" for sit, _ in snapshots
-    ]
+    dashoffsets = [f"{total_len - _cum_len_at(sit):.1f}" for sit, _ in snapshots]
 
     # Animated marker x positions — one per snapshot frame
     snapshot_iters = [it for it, _ in snapshots]
@@ -368,22 +366,22 @@ def _optim_vars_spaghetti_svg_lines(
 ) -> list[str]:
     """Build SVG lines for a spaghetti-plot panel of optimization variables.
 
-    Each scalar component of ``optim_vars`` becomes one polyline traced across
+    Each scalar component of `optim_vars` becomes one polyline traced across
     all snapshot iterations.  Variables that share the same pytree leaf are
     drawn in the same colour.  An animated vertical marker tracks the current
     animation frame, consistent with the loss curve panel.
 
     Args:
-        snapshots: List of ``(iteration, optim_vars)`` tuples.
+        snapshots: List of `(iteration, optim_vars)` tuples.
         panel_y: Y-offset of this panel inside the SVG.
         size: Width of the SVG (same as the animation width).
         panel_height: Height of this panel in pixels.
         n_frames: Number of animation frames.
         total_dur: Total animation duration in seconds.
-        calc_mode: SMIL ``calcMode`` (``"linear"`` or ``"discrete"``).
+        calc_mode: SMIL `calcMode` (`"linear"` or `"discrete"`).
 
     Returns:
-        A list of SVG element strings to append before the closing ``</svg>``.
+        A list of SVG element strings to append before the closing `</svg>`.
     """
     pad_left = 40
     pad_right = 12
@@ -473,20 +471,20 @@ def chronophotograph(
     is fully opaque, so the eye reads the trajectory at a glance.
 
     Args:
-        problem: The optimization problem; must have ``plot_configuration`` set.
-        snapshots: List of ``(iteration, optim_vars)`` tuples as produced by
+        problem: The optimization problem; must have `plot_configuration` set.
+        snapshots: List of `(iteration, optim_vars)` tuples as produced by
             :class:`SnapshotCallback`.
         n_frames: Number of evenly-spaced frames to overlay.  Clamped to
-            ``len(snapshots)``.
+            `len(snapshots)`.
         alpha_start: Blend weight of the earliest selected frame (0–1).
         alpha_end: Blend weight of the latest selected frame (0–1).
 
     Returns:
-        A matplotlib ``Figure`` containing the composite image.
+        A matplotlib `Figure` containing the composite image.
 
     Raises:
-        ValueError: If ``problem.plot_configuration`` is not set or
-            ``snapshots`` is empty.
+        ValueError: If `problem.plot_configuration` is not set or
+            `snapshots` is empty.
     """
     from matplotlib import pyplot as plt
 
@@ -533,18 +531,18 @@ def smil_animate(
     total_dur: float,
     calc_mode: str = "linear",
 ) -> str:
-    """Build a SMIL ``<animate>`` element string for a numeric SVG attribute.
+    """Build a SMIL `<animate>` element string for a numeric SVG attribute.
 
     Args:
-        attr_name: SVG attribute to animate (e.g. ``"cx"``, ``"opacity"``).
+        attr_name: SVG attribute to animate (e.g. `"cx"`, `"opacity"`).
         per_frame_values: Stringified values, one per frame.
-        n_frames: Total number of frames, used to space ``keyTimes`` evenly.
+        n_frames: Total number of frames, used to space `keyTimes` evenly.
         total_dur: Animation duration in seconds.
-        calc_mode: ``"linear"`` or ``"discrete"``. Linear appends the first
-            value at ``keyTime`` ``1.0`` to close the loop smoothly.
+        calc_mode: `"linear"` or `"discrete"`. Linear appends the first
+            value at `keyTime` `1.0` to close the loop smoothly.
 
     Returns:
-        An SVG ``<animate>`` element string.
+        An SVG `<animate>` element string.
     """
     if calc_mode == "linear":
         key_times = (

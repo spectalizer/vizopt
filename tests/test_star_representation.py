@@ -14,7 +14,6 @@ from vizopt.components.stars import (
     fourier_to_radii,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -59,6 +58,7 @@ def test_discrete_to_radii_identity():
 
 def test_discrete_wrap_is_identity():
     rep = Discrete(k_angles=K)
+
     def fn(v, p):
         return v["radii"].sum()
 

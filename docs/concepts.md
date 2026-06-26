@@ -2,16 +2,60 @@
 
 ## Overview
 
-vizopt separates *problem definition* from *problem instantiation*, following a template pattern:
+vizopt has two layers:
+
+**User-facing** — `VizOptimizer` subclasses like `EulerDiagram`. They expose a sklearn-style API: store hyperparameters in `__init__`, run with `.optimize()`, access fitted state via trailing-underscore attributes.
+
+**Framework** — `OptimizationProblemTemplate` / `OptimizationProblem`. The lower-level building blocks that `VizOptimizer` assembles internally. Use these directly when building a new optimizer.
 
 ```
-ObjectiveTerm(s)
-       ↓
-OptimizationProblemTemplate   ←  initialize function
+VizOptimizer subclass (e.g. EulerDiagram)
+       ↓ ._build_problem()
+OptimizationProblemTemplate   ←  ObjectiveTerm(s) + initialize function
        ↓ .instantiate(input_parameters)
 OptimizationProblem
        ↓ .optimize()
-(optim_vars, history)
+OptimizationResult  (optim_vars, history, final_loss)
+```
+
+## VizOptimizer
+
+`VizOptimizer` is the base class for all user-facing visualization optimizers. Subclasses implement `_build_problem()` to turn stored hyperparameters into a configured `OptimizationProblem`. The base class handles the rest.
+
+```python
+diagram = EulerDiagram(circles, sets, weight_enclosure=20.0)
+# or
+diagram = EulerDiagram.from_graph(inclusion_graph)
+
+result = diagram.optimize(OptimConfig(n_iters=1000))
+
+diagram.sets_     # list of per-set dicts with center, radii, angles
+diagram.circles_  # (N, 3) array of optimized [cx, cy, r]
+diagram.plot()    # inherited from VizOptimizer
+```
+
+Fitted state lives in `diagram.problem_` and `diagram.result_` after `optimize()` is called. Domain-specific outputs (like `sets_` and `circles_`) are properties that read from `result_.optim_vars`.
+
+### Implementing a new VizOptimizer
+
+```python
+from vizopt.base import OptimizationProblem, OptimizationProblemTemplate, VizOptimizer
+
+class MyLayout(VizOptimizer):
+    def __init__(self, data, *, weight_x=1.0):
+        self.data = data
+        self.weight_x = weight_x
+
+    def _build_problem(self) -> OptimizationProblem:
+        # build terms, initialize, input_parameters ...
+        return OptimizationProblemTemplate(
+            terms=[...],
+            initialize=...,
+        ).instantiate(input_parameters)
+
+    @property
+    def result_positions(self):
+        return self.result_.optim_vars["positions"]
 ```
 
 ## ObjectiveTerm
@@ -62,10 +106,8 @@ problem = template.instantiate(
 A concrete runnable instance created via `template.instantiate(input_parameters)`:
 
 ```python
-optim_vars, history = problem.optimize(
-    n_iters=1000,
-    learning_rate=0.001,
-    track_every=10,
+result = problem.optimize(
+    OptimConfig(n_iters=1000, learning_rate=0.001, track_every=10),
 )
 ```
 
@@ -92,7 +134,7 @@ Terms with `multiplier=0.0` are skipped entirely.
 
 ## Optimization History
 
-`history` is a list of dicts recorded every `track_every` iterations:
+`history` is a list of dicts recorded every `OptimConfig.track_every` iterations:
 
 ```python
 [

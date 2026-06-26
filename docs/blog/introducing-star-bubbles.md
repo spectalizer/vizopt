@@ -1,6 +1,6 @@
-# Introducing Stars-and-Bubbles Euler diagrams
+# From Circles to Stars: Euler Diagrams with Optimized Radially Convex Boundaries
 
-Smoother, better visualization of overlapping sets using mathematical optimization.
+*Smoother, better visualization of overlapping sets using mathematical optimization.*
 
 TODO Add a nice animation somewhere near the beginning of the article.
 
@@ -161,7 +161,7 @@ These terms push toward compact shapes.
 
 I have implemented all this in Python using [JAX](https://docs.jax.dev), allowing for automatic differentiation and Just-in-time (JIT) compilation. Automatic differentiation means you can focus on defining and parameterizing the objective terms without having to worry about gradients. JIT compilation means you can run a gradient-based optimizer (e.g. Adam) for a few thousand iterations in seconds rather than minutes.
 
-This is available in my `vizopt` package (mathematical optimization for data visualization, still in early stage), so you can also try it at home.
+This is available in my `vizopt` package (mathematical optimization for data visualization, still in early stage), so you can also try it at home, starting from the code example in the appendix.
 
 
 ## Conclusions
@@ -195,6 +195,29 @@ Matrix-based representations, node-link diagrams or overlays on other visualizat
 *Hypergraphs* generalize the concept of a graph, by allowing an edge (*hyperedge*) to connect any number of nodes instead of two nodes for a normal graph. A hyperedge connects nodes just as a set can contain elements. The hypergraph notation can allow useful mathematical tools to be applied, as in Rottmann et al.
 
 ## Appendix
+
+### Code example
+
+```python
+import numpy as np
+
+from vizopt.base import OptimConfig
+from vizopt.templates.euler.stars_vs_circles import EulerDiagram
+
+# Three elements as circles: [cx, cy, radius]
+circles = np.array([
+    [0.0, 0.5, 0.2],  # a
+    [0.5, 0.5, 0.2],  # b
+    [1.0, 0.5, 0.2],  # c
+])
+
+# Four sets
+sets = [[0, 1], [1, 2], [0, 2], [0, 1, 2]]  # {a,b}, {b,c}, {a,c}, {a, b, b}
+
+diagram = EulerDiagram(circles, sets, set_names=["S1", "S2", "S3", "S4"], weight_position_anchor=0.0, offsets=[[0.05], [0.1], [0.15], [0.2]])
+diagram.optimize(optim_config=OptimConfig(n_iters=5000, learning_rate=0.003))
+diagram.plot()
+```
 
 ### Advanced topic 1: Representation
 

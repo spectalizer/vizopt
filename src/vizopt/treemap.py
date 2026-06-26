@@ -24,7 +24,7 @@ def _worst_ratio_strip(row, row_sum, W, H, total):
 
 
 def _squarify_recursive(items, rect, out):
-    """One squarified-treemap layout step, writing results into ``out``."""
+    """One squarified-treemap layout step, writing results into `out`."""
     if not items:
         return
     x0, y0, x1, y1 = rect
@@ -60,7 +60,7 @@ def _squarify_recursive(items, rect, out):
             out[name] = (x_cursor, y0, x_cursor + tile_w, y0 + strip_h)
             x_cursor += tile_w
         remaining_rect = (x0, y0 + strip_h, x1, y1)
-    _squarify_recursive(items[len(row):], remaining_rect, out)
+    _squarify_recursive(items[len(row) :], remaining_rect, out)
 
 
 def squarify_layout(items, rect):
@@ -70,11 +70,11 @@ def squarify_layout(items, rect):
     weight, minimising the worst aspect ratio across all tiles.
 
     Args:
-        items: Sequence of ``(name, weight)`` pairs with positive weights.
-        rect: ``(x0, y0, x1, y1)`` bounding rectangle.
+        items: Sequence of `(name, weight)` pairs with positive weights.
+        rect: `(x0, y0, x1, y1)` bounding rectangle.
 
     Returns:
-        Dict mapping each name to its ``(x0, y0, x1, y1)`` subrectangle.
+        Dict mapping each name to its `(x0, y0, x1, y1)` subrectangle.
     """
     if not items:
         return {}

@@ -6,13 +6,13 @@ def graph_to_optimizer_inputs(G):
     """Derive vizopt optimizer inputs from a set-hierarchy DiGraph.
 
     Args:
-        G: A ``networkx.DiGraph`` whose nodes carry ``target_area`` (float or
-            None), ``center`` ([x, y]), and ``color`` (hex string) attributes,
+        G: A `networkx.DiGraph` whose nodes carry `target_area` (float or
+            None), `center` ([x, y]), and `color` (hex string) attributes,
             and whose edges point from parent to child (parent ⊃ child).
 
     Returns:
-        Tuple of ``(set_names, idx, enclosures, target_areas, initial_centers)``
-        in the formats expected by ``optimize_star_domains_raster`` and similar.
+        Tuple of `(set_names, idx, enclosures, target_areas, initial_centers)`
+        in the formats expected by `optimize_star_domains_raster` and similar.
     """
     set_names = list(G.nodes)
     idx = {name: i for i, name in enumerate(set_names)}
@@ -28,12 +28,12 @@ def get_leaf_circles(G):
     """Extract leaf nodes (out-degree 0) as circles.
 
     Args:
-        G: A DiGraph with parent→child edges. Leaf nodes must carry ``center``
-            ([x, y]) and ``r`` (float) attributes.
+        G: A DiGraph with parent→child edges. Leaf nodes must carry `center`
+            ([x, y]) and `r` (float) attributes.
 
     Returns:
-        Tuple of ``(names, circles, name_to_idx)`` where ``circles`` is a list
-        of ``(cx, cy, r)`` tuples and ``name_to_idx`` maps name to integer index.
+        Tuple of `(names, circles, name_to_idx)` where `circles` is a list
+        of `(cx, cy, r)` tuples and `name_to_idx` maps name to integer index.
     """
     names = [n for n in G.nodes if G.out_degree(n) == 0]
     circles = [(*G.nodes[n]["center"], G.nodes[n]["r"]) for n in names]
@@ -48,12 +48,12 @@ def get_enclosing_sets(G, leaf_names):
 
     Args:
         G: A DiGraph with parent→child edges.
-        leaf_names: Ordered list of leaf territory names (from ``get_leaf_circles``).
+        leaf_names: Ordered list of leaf territory names (from `get_leaf_circles`).
 
     Returns:
-        Tuple of ``(set_names, sets_idx)`` where ``set_names`` is the ordered list
-        of enclosing node names and ``sets_idx`` is a list of lists of indices into
-        ``leaf_names``.
+        Tuple of `(set_names, sets_idx)` where `set_names` is the ordered list
+        of enclosing node names and `sets_idx` is a list of lists of indices into
+        `leaf_names`.
     """
     set_names = [n for n in nx.topological_sort(G) if G.out_degree(n) > 0]
     leaf_set = set(leaf_names)
@@ -81,9 +81,9 @@ def make_multiples_of_primes_graph(
         layout_r: Radius of the ring used to spread initial positions.
 
     Returns:
-        A ``networkx.DiGraph`` with parent→child edges, ready for
-        ``optimize_multiple_radially_convex_sets_with_movable_circles_from_graph``.
-        Leaf nodes carry ``center`` and ``r`` attributes; set nodes carry only
+        A `networkx.DiGraph` with parent→child edges, ready for
+        `optimize_multiple_radially_convex_sets_with_movable_circles_from_graph`.
+        Leaf nodes carry `center` and `r` attributes; set nodes carry only
         their name.
     """
     multiple_dict = {p: [k for k in range(1, max_n + 1) if k % p == 0] for p in primes}
@@ -129,8 +129,8 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
         r: Circle radius assigned to every leaf node.
 
     Returns:
-        A ``networkx.DiGraph`` with parent→child edges. Leaf nodes carry
-        ``center`` and ``r`` attributes.
+        A `networkx.DiGraph` with parent→child edges. Leaf nodes carry
+        `center` and `r` attributes.
     """
     G: nx.DiGraph = nx.DiGraph()
 
@@ -179,9 +179,9 @@ def make_overlapping_circles_example():
     partially overlapping membership to exercise exclusion and smoothness terms.
 
     Returns:
-        Tuple of ``(circles, sets, offsets)`` where ``circles`` is a list of
-        ``(cx, cy, r)`` tuples, ``sets`` is a list of lists of circle indices,
-        and ``offsets`` is a ``(4, 1)`` float array of boundary offsets.
+        Tuple of `(circles, sets, offsets)` where `circles` is a list of
+        `(cx, cy, r)` tuples, `sets` is a list of lists of circle indices,
+        and `offsets` is a `(4, 1)` float array of boundary offsets.
     """
     circles = [
         # Set 0: left cluster
@@ -214,10 +214,10 @@ def make_overlapping_circles_example():
 def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGraph:
     """Build the British Isles set-hierarchy as a DiGraph.
 
-    Nodes carry ``target_area``, ``center``, and ``color`` attributes for use
-    with ``graph_to_optimizer_inputs`` and ``get_leaf_circles``. Aggregate set
-    nodes have ``target_area=None``; leaf territory nodes have a numeric value.
-    Leaf nodes also carry an ``r`` attribute (``sqrt(target_area / π)``).
+    Nodes carry `target_area`, `center`, and `color` attributes for use
+    with `graph_to_optimizer_inputs` and `get_leaf_circles`. Aggregate set
+    nodes have `target_area=None`; leaf territory nodes have a numeric value.
+    Leaf nodes also carry an `r` attribute (`sqrt(target_area / π)`).
 
     Args:
         include_ireland_island: When True, adds "Ireland island" as the union
@@ -225,7 +225,7 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
             Republic of Ireland sits directly inside "British Islands".
 
     Returns:
-        A ``networkx.DiGraph`` ready for ``graph_to_optimizer_inputs``.
+        A `networkx.DiGraph` ready for `graph_to_optimizer_inputs`.
     """
     G = nx.DiGraph()
 

@@ -5,7 +5,12 @@ import numpy as np
 from jax import numpy as jnp
 from matplotlib import pyplot as plt
 
-from ..base import ObjectiveTerm, OptimizationProblemTemplate
+from ..base import (
+    ObjectiveTerm,
+    OptimizationProblem,
+    OptimizationProblemTemplate,
+    VizOptimizer,
+)
 from ..components.common import should_be_positive_activation
 
 # ---------------------------------------------------------------------------
@@ -271,25 +276,13 @@ def _plot_configuration(optim_vars, input_params):
 # Public API
 # ---------------------------------------------------------------------------
 
-layered_graph_template = OptimizationProblemTemplate(
-    terms=[
-        ObjectiveTerm("edge_direction", _term_edge_direction, 1.0),
-        ObjectiveTerm("edge_vector", _term_edge_vector, 1.0),
-        ObjectiveTerm("node_separation", _term_node_separation, 1.0),
-        ObjectiveTerm("sibling_separation", _term_sibling_separation, 1.0),
-    ],
-    initialize=_initialize,
-    plot_configuration=_plot_configuration,
-    svg_configuration=_svg_configuration,
-)
-
 
 def make_layered_graph_input_params(
     graph: nx.DiGraph,
     min_distance: float = 1.0,
     preferred_edge_vector: tuple[float, float] = (1.0, 0.0),
 ) -> dict:
-    """Pre-process a NetworkX digraph into input_parameters for layered_graph_template.
+    """Pre-process a NetworkX digraph into input_parameters for layered graph layout.
 
     Converts graph topology into pre-computed numpy arrays suitable for JAX
     JIT compilation. All pairs of nodes are pre-computed for the separation term.
@@ -301,12 +294,13 @@ def make_layered_graph_input_params(
         preferred_edge_vector: Target edge vector as (dx, dy). Encodes both the
             preferred direction and the preferred edge length. Default (1, 0)
             produces a left-to-right layout with unit-length edges.
-            ``standard_direction`` (used by the direction and sibling terms) is
+            `standard_direction` (used by the direction and sibling terms) is
             derived as its unit vector.
 
     Returns:
-        Dict suitable for layered_graph_template.instantiate(). Includes
-        "node_names" for post-processing (not used in loss computation).
+        Dict suitable for :class:`LayeredGraphOptimizer` or for direct use with
+        :class:`~vizopt.base.OptimizationProblemTemplate`. Includes `"node_names"`
+        for post-processing (not used in loss computation).
     """
     node_names = list(graph.nodes)
     n = len(node_names)
@@ -343,3 +337,94 @@ def make_layered_graph_input_params(
         "standard_direction": standard_direction,
         "node_names": node_names,
     }
+
+
+class LayeredGraphOptimizer(VizOptimizer):
+    """Optimize node positions in a directed graph to produce a layered layout.
+
+    Minimizes a weighted sum of:
+
+    - `edge_direction`: penalizes deviation of edge unit directions from
+      the standard direction (scale-invariant).
+    - `edge_vector`: penalizes deviation of full edge vectors (direction
+      and length) from `preferred_edge_vector`.
+    - `node_separation`: penalizes node pairs closer than `min_distance`.
+    - `sibling_separation`: penalizes siblings (shared parent) that are too
+      close in the perpendicular direction.
+
+    Args:
+        graph: Directed graph to lay out. Edge direction defines the "from → to"
+            orientation aligned with `preferred_edge_vector`.
+        min_distance: Minimum required Euclidean distance between any two nodes.
+        preferred_edge_vector: Target edge vector `(dx, dy)`. Encodes both
+            preferred direction and preferred edge length. Default `(1, 0)`
+            produces a left-to-right layout with unit-length edges.
+        weight_edge_direction: Weight for the edge direction term.
+        weight_edge_vector: Weight for the edge vector term.
+        weight_node_separation: Weight for the node separation term.
+        weight_sibling_separation: Weight for the sibling separation term.
+    """
+
+    def __init__(
+        self,
+        graph: nx.DiGraph,
+        *,
+        min_distance: float = 1.0,
+        preferred_edge_vector: tuple[float, float] = (1.0, 0.0),
+        weight_edge_direction: float = 1.0,
+        weight_edge_vector: float = 1.0,
+        weight_node_separation: float = 1.0,
+        weight_sibling_separation: float = 1.0,
+    ):
+        self.graph = graph
+        self.min_distance = min_distance
+        self.preferred_edge_vector = preferred_edge_vector
+        self.weight_edge_direction = weight_edge_direction
+        self.weight_edge_vector = weight_edge_vector
+        self.weight_node_separation = weight_node_separation
+        self.weight_sibling_separation = weight_sibling_separation
+
+    def _build_problem(self) -> OptimizationProblem:
+        input_parameters = make_layered_graph_input_params(
+            self.graph,
+            min_distance=self.min_distance,
+            preferred_edge_vector=self.preferred_edge_vector,
+        )
+        return OptimizationProblemTemplate(
+            terms=[
+                ObjectiveTerm(
+                    "edge_direction", _term_edge_direction, self.weight_edge_direction
+                ),
+                ObjectiveTerm(
+                    "edge_vector", _term_edge_vector, self.weight_edge_vector
+                ),
+                ObjectiveTerm(
+                    "node_separation",
+                    _term_node_separation,
+                    self.weight_node_separation,
+                ),
+                ObjectiveTerm(
+                    "sibling_separation",
+                    _term_sibling_separation,
+                    self.weight_sibling_separation,
+                ),
+            ],
+            initialize=_initialize,
+            plot_configuration=_plot_configuration,
+            svg_configuration=_svg_configuration,
+        ).instantiate(input_parameters)
+
+    @property
+    def node_positions_(self) -> dict:
+        """Optimized node positions as a dict mapping node name to `(x, y)`.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "result_"):
+            raise ValueError("No result yet — call optimize() first.")
+        node_names = self.problem_.input_parameters["node_names"]
+        node_xys = np.array(self.result_.optim_vars["node_xys"])
+        return {
+            name: tuple(float(c) for c in xy) for name, xy in zip(node_names, node_xys)
+        }

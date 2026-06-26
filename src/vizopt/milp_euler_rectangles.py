@@ -14,8 +14,14 @@ def _grid_positions(N, r, L):
     return np.array(pts)
 
 
-def solve_euler_rectangles(membership, r=0.15, offset=0.2, layout_size=5.0,
-                            initial_positions=None, position_penalty=0.0):
+def solve_euler_rectangles(
+    membership,
+    r=0.15,
+    offset=0.2,
+    layout_size=5.0,
+    initial_positions=None,
+    position_penalty=0.0,
+):
     """Find element positions and set rectangles forming an Euler diagram.
 
     Args:
@@ -52,8 +58,14 @@ def solve_euler_rectangles(membership, r=0.15, offset=0.2, layout_size=5.0,
 
     rx = [pulp.LpVariable(f"rx_{j}", lowBound=0, upBound=L) for j in range(S)]
     ry = [pulp.LpVariable(f"ry_{j}", lowBound=0, upBound=L) for j in range(S)]
-    rw = [pulp.LpVariable(f"rw_{j}", lowBound=2 * (r + offsets[j]), upBound=L) for j in range(S)]
-    rh = [pulp.LpVariable(f"rh_{j}", lowBound=2 * (r + offsets[j]), upBound=L) for j in range(S)]
+    rw = [
+        pulp.LpVariable(f"rw_{j}", lowBound=2 * (r + offsets[j]), upBound=L)
+        for j in range(S)
+    ]
+    rh = [
+        pulp.LpVariable(f"rh_{j}", lowBound=2 * (r + offsets[j]), upBound=L)
+        for j in range(S)
+    ]
 
     objective = pulp.lpSum(2 * (rw[j] + rh[j]) for j in range(S))
 
@@ -76,20 +88,20 @@ def solve_euler_rectangles(membership, r=0.15, offset=0.2, layout_size=5.0,
         for j in range(S):
             d = offsets[j]
             if membership[i, j]:
-                prob += ex[i] - r >= rx[j]          + d
-                prob += ex[i] + r <= rx[j] + rw[j]  - d
-                prob += ey[i] - r >= ry[j]          + d
-                prob += ey[i] + r <= ry[j] + rh[j]  - d
+                prob += ex[i] - r >= rx[j] + d
+                prob += ex[i] + r <= rx[j] + rw[j] - d
+                prob += ey[i] - r >= ry[j] + d
+                prob += ey[i] + r <= ry[j] + rh[j] - d
             else:
                 bL = pulp.LpVariable(f"bL_{i}_{j}", cat="Binary")
                 bR = pulp.LpVariable(f"bR_{i}_{j}", cat="Binary")
                 bB = pulp.LpVariable(f"bB_{i}_{j}", cat="Binary")
                 bT = pulp.LpVariable(f"bT_{i}_{j}", cat="Binary")
                 prob += bL + bR + bB + bT >= 1
-                prob += ex[i] + r <= rx[j]          - d + M * (1 - bL)
-                prob += ex[i] - r >= rx[j] + rw[j]  + d - M * (1 - bR)
-                prob += ey[i] + r <= ry[j]          - d + M * (1 - bB)
-                prob += ey[i] - r >= ry[j] + rh[j]  + d - M * (1 - bT)
+                prob += ex[i] + r <= rx[j] - d + M * (1 - bL)
+                prob += ex[i] - r >= rx[j] + rw[j] + d - M * (1 - bR)
+                prob += ey[i] + r <= ry[j] - d + M * (1 - bB)
+                prob += ey[i] - r >= ry[j] + rh[j] + d - M * (1 - bT)
 
     for i in range(N):
         for k in range(i + 1, N):
@@ -120,6 +132,15 @@ def solve_euler_rectangles(membership, r=0.15, offset=0.2, layout_size=5.0,
     prob.solve(solver)
 
     elem_pos = np.array([[pulp.value(ex[i]), pulp.value(ey[i])] for i in range(N)])
-    rects = np.array([[pulp.value(rx[j]), pulp.value(ry[j]), pulp.value(rw[j]), pulp.value(rh[j])] for j in range(S)])
+    rects = np.array(
+        [
+            [pulp.value(rx[j]), pulp.value(ry[j]), pulp.value(rw[j]), pulp.value(rh[j])]
+            for j in range(S)
+        ]
+    )
 
-    return {"status": pulp.LpStatus[prob.status], "element_positions": elem_pos, "rectangles": rects}
+    return {
+        "status": pulp.LpStatus[prob.status],
+        "element_positions": elem_pos,
+        "rectangles": rects,
+    }
