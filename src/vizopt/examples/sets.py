@@ -211,7 +211,10 @@ def make_overlapping_circles_example():
     return circles, sets, offsets
 
 
-def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGraph:
+def make_british_islands_graph(
+    include_ireland_island: bool = True,
+    include_british_isles: bool = False,
+) -> nx.DiGraph:
     """Build the British Isles set-hierarchy as a DiGraph.
 
     Nodes carry `target_area`, `center`, and `color` attributes for use
@@ -219,10 +222,22 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
     nodes have `target_area=None`; leaf territory nodes have a numeric value.
     Leaf nodes also carry an `r` attribute (`sqrt(target_area / π)`).
 
+    Set hierarchy (outermost first):
+
+    - (British Isles → British Islands)  [optional]
+    - British Islands → United Kingdom, Crown Dependencies, Ireland island
+    - United Kingdom → Great Britain, Northern Ireland
+    - Great Britain → England, Scotland, Wales
+    - Crown Dependencies → Isle of Man, Channel Islands
+    - Channel Islands → Jersey, Guernsey
+    - Ireland island → Northern Ireland, Republic of Ireland
+
     Args:
         include_ireland_island: When True, adds "Ireland island" as the union
             of Northern Ireland and the Republic of Ireland. When False, the
             Republic of Ireland sits directly inside "British Islands".
+        include_british_isles: When True, adds "British Isles" as the outermost
+            geographic container wrapping "British Islands".
 
     Returns:
         A `networkx.DiGraph` ready for `graph_to_optimizer_inputs`.
@@ -248,6 +263,7 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
     G.add_node("Isle of Man", target_area=0.07, center=[-0.8, 2.5], color="#c05780")
     G.add_node("Jersey", target_area=0.04, center=[3.0, -3.5], color="#e8a838")
     G.add_node("Guernsey", target_area=0.03, center=[1.2, -3.8], color="#2e9bba")
+    G.add_node("Channel Islands", target_area=None, center=[2.1, -3.6], color="#1a9e77")
 
     # Edges: parent → child  (parent ⊃ child)
     G.add_edge("Great Britain", "England")
@@ -255,11 +271,17 @@ def make_british_islands_graph(include_ireland_island: bool = True) -> nx.DiGrap
     G.add_edge("Great Britain", "Wales")
     G.add_edge("United Kingdom", "Great Britain")
     G.add_edge("United Kingdom", "Northern Ireland")
+    if include_british_isles:
+        G.add_node(
+            "British Isles", target_area=None, center=[0.0, 1.0], color="#aaaaaa"
+        )
+        G.add_edge("British Isles", "British Islands")
     G.add_edge("British Islands", "United Kingdom")
     G.add_edge("British Islands", "Crown Dependencies")
     G.add_edge("Crown Dependencies", "Isle of Man")
-    G.add_edge("Crown Dependencies", "Jersey")
-    G.add_edge("Crown Dependencies", "Guernsey")
+    G.add_edge("Crown Dependencies", "Channel Islands")
+    G.add_edge("Channel Islands", "Jersey")
+    G.add_edge("Channel Islands", "Guernsey")
 
     if include_ireland_island:
         G.add_edge("Ireland island", "Northern Ireland")

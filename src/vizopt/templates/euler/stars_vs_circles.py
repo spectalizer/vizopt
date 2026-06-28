@@ -222,7 +222,7 @@ class EulerDiagram(VizOptimizer):
             offsets=offsets,
             set_names=set_names,
             leaf_names=leaf_names,
-            set_colors=set_colors,
+            set_colors=kwargs.pop("set_colors", set_colors),
             **kwargs,
         )
 
@@ -472,7 +472,15 @@ class EulerDiagram(VizOptimizer):
 def _make_plot_configuration(
     set_names, leaf_names, representation, has_label, set_colors=None
 ):
-    def plot_configuration(optim_vars, input_params, show_arrows=False, ax=None):
+    def plot_configuration(
+        optim_vars,
+        input_params,
+        show_arrows=False,
+        ax=None,
+        background_alpha=None,
+        set_alpha=0.2,
+        margins=0.1,
+    ):
         from matplotlib import pyplot as plt
 
         angles = input_params["angles"]
@@ -500,7 +508,7 @@ def _make_plot_configuration(
             by = np.append(
                 cy + radii * np.sin(angles), cy + radii[0] * np.sin(angles[0])
             )
-            ax.fill(bx, by, alpha=0.15, color=color)
+            ax.fill(bx, by, alpha=set_alpha, color=color)
             ax.plot(bx, by, color=color, linewidth=2, label=name)
 
         for i, (name, pos) in enumerate(zip(leaf_names, circle_positions)):
@@ -548,6 +556,16 @@ def _make_plot_configuration(
         if has_label:
             label_positions = np.array(optim_vars["label_positions"])
             for name, color, lp in zip(set_names, colors, label_positions):
+                bbox = (
+                    dict(
+                        facecolor=color,
+                        alpha=background_alpha,
+                        edgecolor="none",
+                        boxstyle="round,pad=0.3",
+                    )
+                    if background_alpha is not None
+                    else None
+                )
                 ax.text(
                     float(lp[0]),
                     float(lp[1]),
@@ -557,13 +575,14 @@ def _make_plot_configuration(
                     fontsize=9,
                     fontweight="bold",
                     color=color,
+                    bbox=bbox,
                 )
         else:
             ax.legend(fontsize=9)
 
         ax.set_aspect("equal")
         ax.autoscale_view()
-        ax.margins(0.15)
+        ax.margins(margins=margins)
         ax.axis("off")
         if _own_figure:
             plt.tight_layout()
