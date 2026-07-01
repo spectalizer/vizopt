@@ -54,9 +54,9 @@ if False:
         color="#374151",
     )
 
-pad = 1.5
+pad = 1.0
 ax.set_xlim(-ROOT_R - pad, ROOT_R + pad)
-ax.set_ylim(-ROOT_R - pad - 1.5, ROOT_R + pad)
+ax.set_ylim(-ROOT_R - pad, ROOT_R + pad)
 ax.set_aspect("equal")
 ax.axis("off")
 
