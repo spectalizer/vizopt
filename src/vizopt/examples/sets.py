@@ -122,6 +122,9 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
     - Lizards: Reptiles, Terrestrial Animals
     - Sea Turtles: Reptiles, Marine Animals
     - Sharks: Marine Animals, Marine Fish
+    - Barracuda: Marine Animals, Marine Fish
+    - Herring: Marine Animals, Marine Fish
+    - Fox: Mammals, Terrestrial Animals
 
     All sets are subsets of Animals. Marine Fish is a subset of Marine Animals.
 
@@ -141,6 +144,9 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
     G.add_node("Lizards", center=[3.0, -1.5], r=r)
     G.add_node("Sea Turtles", center=[-1.0, -2.0], r=r)
     G.add_node("Sharks", center=[-2.5, -1.5], r=r)
+    G.add_node("Barracuda", center=[-3.5, -1.0], r=r)
+    G.add_node("Herring", center=[-1.5, -2.5], r=r)
+    G.add_node("Fox", center=[3.0, 1.0], r=r)
 
     G.add_node("Mammals")
     G.add_node("Reptiles")
@@ -167,6 +173,10 @@ def make_animals_graph(r=0.5) -> nx.DiGraph:
     G.add_edge("Marine Animals", "Sea Turtles")
     G.add_edge("Marine Animals", "Marine Fish")
     G.add_edge("Marine Fish", "Sharks")
+    G.add_edge("Marine Fish", "Barracuda")
+    G.add_edge("Marine Fish", "Herring")
+    G.add_edge("Mammals", "Fox")
+    G.add_edge("Terrestrial Animals", "Fox")
 
     return G
 
@@ -212,7 +222,6 @@ def make_overlapping_circles_example():
 
 
 def make_british_islands_graph(
-    include_ireland_island: bool = True,
     include_british_isles: bool = False,
 ) -> nx.DiGraph:
     """Build the British Isles set-hierarchy as a DiGraph.
@@ -224,20 +233,19 @@ def make_british_islands_graph(
 
     Set hierarchy (outermost first):
 
-    - (British Isles → British Islands)  [optional]
-    - British Islands → United Kingdom, Crown Dependencies, Ireland island
+    - (British Isles → British Islands, Ireland island)  [optional]
+    - British Islands → United Kingdom, Crown Dependencies
     - United Kingdom → Great Britain, Northern Ireland
     - Great Britain → England, Scotland, Wales
     - Crown Dependencies → Isle of Man, Channel Islands
     - Channel Islands → Jersey, Guernsey
     - Ireland island → Northern Ireland, Republic of Ireland
 
+    Northern Ireland is a child of both United Kingdom and Ireland island.
+
     Args:
-        include_ireland_island: When True, adds "Ireland island" as the union
-            of Northern Ireland and the Republic of Ireland. When False, the
-            Republic of Ireland sits directly inside "British Islands".
         include_british_isles: When True, adds "British Isles" as the outermost
-            geographic container wrapping "British Islands".
+            geographic container wrapping both "British Islands" and "Ireland island".
 
     Returns:
         A `networkx.DiGraph` ready for `graph_to_optimizer_inputs`.
@@ -271,25 +279,21 @@ def make_british_islands_graph(
     G.add_edge("Great Britain", "Wales")
     G.add_edge("United Kingdom", "Great Britain")
     G.add_edge("United Kingdom", "Northern Ireland")
-    if include_british_isles:
-        G.add_node(
-            "British Isles", target_area=None, center=[0.0, 1.0], color="#aaaaaa"
-        )
-        G.add_edge("British Isles", "British Islands")
     G.add_edge("British Islands", "United Kingdom")
     G.add_edge("British Islands", "Crown Dependencies")
     G.add_edge("Crown Dependencies", "Isle of Man")
     G.add_edge("Crown Dependencies", "Channel Islands")
     G.add_edge("Channel Islands", "Jersey")
     G.add_edge("Channel Islands", "Guernsey")
+    G.add_edge("Ireland island", "Northern Ireland")
+    G.add_edge("Ireland island", "Republic of Ireland")
 
-    if include_ireland_island:
-        G.add_edge("Ireland island", "Northern Ireland")
-        G.add_edge("Ireland island", "Republic of Ireland")
-        G.add_edge("British Islands", "Ireland island")
-    else:
-        G.remove_node("Ireland island")
-        G.add_edge("British Islands", "Republic of Ireland")
+    if include_british_isles:
+        G.add_node(
+            "British Isles", target_area=None, center=[0.0, 1.0], color="#aaaaaa"
+        )
+        G.add_edge("British Isles", "British Islands")
+        G.add_edge("British Isles", "Ireland island")
 
     # Add r to leaf nodes for use with stars_vs_circles.from_graph API
     for n in G.nodes:
