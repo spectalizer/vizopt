@@ -480,8 +480,16 @@ def _make_plot_configuration(
         background_alpha=None,
         set_alpha=0.2,
         margins=0.1,
+        halo_line_width=3,
     ):
         from matplotlib import pyplot as plt
+        import matplotlib.patheffects as pe
+
+        halo = (
+            [pe.withStroke(linewidth=halo_line_width, foreground="white")]
+            if halo_line_width
+            else []
+        )
 
         angles = input_params["angles"]
         circle_radii = input_params["circle_radii"]
@@ -551,6 +559,7 @@ def _make_plot_configuration(
                 va="center",
                 fontsize=9,
                 fontweight="bold",
+                path_effects=halo,
             )
 
         if has_label:
@@ -576,13 +585,16 @@ def _make_plot_configuration(
                     fontweight="bold",
                     color=color,
                     bbox=bbox,
+                    path_effects=[
+                        pe.withStroke(linewidth=halo_line_width, foreground="white")
+                    ],
                 )
         else:
             ax.legend(fontsize=9)
 
         ax.set_aspect("equal")
         ax.autoscale_view()
-        ax.margins(margins=margins)
+        ax.margins(margins)
         ax.axis("off")
         if _own_figure:
             plt.tight_layout()
