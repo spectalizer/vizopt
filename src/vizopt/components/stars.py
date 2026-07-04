@@ -686,8 +686,21 @@ def _init_centers_and_radii(
 # ---------------------------------------------------------------------------
 
 
-def _compute_svg_transform(snapshots, circles_array, has_movable_circles, size):
-    """Compute a world→SVG coordinate transform from the bounding box of all frames."""
+def _compute_svg_transform(
+    snapshots, circles_array, has_movable_circles, size, margin: float = 0.05
+):
+    """Compute a world→SVG coordinate transform from the bounding box of all frames.
+
+    Args:
+        snapshots: List of `(iteration, optim_vars)` tuples.
+        circles_array: `(N, 3)` array of `[cx, cy, r]` input circles, included
+            in the bounding box even if not visited by any snapshot.
+        has_movable_circles: Whether `optim_vars["circle_positions"]` should
+            also be included in the bounding box.
+        size: Width/height of the target SVG canvas in pixels.
+        margin: Empty border around the content, as a fraction of the
+            content's span (the larger of its width and height).
+    """
     all_x, all_y = [], []
     for _, v in snapshots:
         centers = np.array(v["centers"])
@@ -709,12 +722,14 @@ def _compute_svg_transform(snapshots, circles_array, has_movable_circles, size):
     all_y.extend((circles_array[:, 1] + r_col).tolist())
     all_y.extend((circles_array[:, 1] - r_col).tolist())
 
-    x_min, y_min = min(all_x), min(all_y)
-    span = max(max(all_x) - x_min, max(all_y) - y_min)
-    margin = span * 0.05
-    x_min -= margin
-    y_max = y_min + span + 2 * margin
-    span += 2 * margin
+    x_min, x_max = min(all_x), max(all_x)
+    y_min, y_max = min(all_y), max(all_y)
+    span = max(x_max - x_min, y_max - y_min)
+    margin_abs = span * margin
+    span += 2 * margin_abs
+    cx, cy = (x_min + x_max) / 2, (y_min + y_max) / 2
+    x_min = cx - span / 2
+    y_max = cy + span / 2
 
     def to_svg(x, y):
         sx = (x - x_min) / span * size
@@ -727,13 +742,20 @@ def _compute_svg_transform(snapshots, circles_array, has_movable_circles, size):
     return to_svg, r_to_svg
 
 
-def _svg_configuration_fixed(snapshots, input_params, size):
-    """SVG configuration for fixed-circles radially convex sets."""
+def _svg_configuration_fixed(snapshots, input_params, size, margin: float = 0.05):
+    """SVG configuration for fixed-circles radially convex sets.
+
+    Args:
+        margin: Empty border around the content, as a fraction of the
+            content's span.
+    """
     circles = input_params["circles"]
     angles = input_params["angles"]
     S = input_params["membership"].shape[0]
     N = len(circles)
-    to_svg, r_to_svg = _compute_svg_transform(snapshots, circles, False, size)
+    to_svg, r_to_svg = _compute_svg_transform(
+        snapshots, circles, False, size, margin=margin
+    )
 
     elements = []
 
@@ -783,8 +805,13 @@ def _svg_configuration_fixed(snapshots, input_params, size):
     return elements
 
 
-def _svg_configuration_movable(snapshots, input_params, size):
-    """SVG configuration for movable-circles radially convex sets."""
+def _svg_configuration_movable(snapshots, input_params, size, margin: float = 0.05):
+    """SVG configuration for movable-circles radially convex sets.
+
+    Args:
+        margin: Empty border around the content, as a fraction of the
+            content's span.
+    """
     circle_radii = input_params["circle_radii"]
     circles_array = np.column_stack(
         [
@@ -795,7 +822,9 @@ def _svg_configuration_movable(snapshots, input_params, size):
     angles = input_params["angles"]
     S = input_params["membership"].shape[0]
     N = len(circle_radii)
-    to_svg, r_to_svg = _compute_svg_transform(snapshots, circles_array, True, size)
+    to_svg, r_to_svg = _compute_svg_transform(
+        snapshots, circles_array, True, size, margin=margin
+    )
 
     elements = []
 
@@ -898,8 +927,13 @@ def _wrap_fourier_term(fn, angles):
 # ---------------------------------------------------------------------------
 
 
-def _svg_configuration_star_only(snapshots, input_params, size):
-    """SVG configuration for pure star domains (no underlying circles)."""
+def _svg_configuration_star_only(snapshots, input_params, size, margin: float = 0.05):
+    """SVG configuration for pure star domains (no underlying circles).
+
+    Args:
+        margin: Empty border around the content, as a fraction of the
+            content's span.
+    """
     angles = input_params["angles"]
     n_sets = snapshots[0][1]["centers"].shape[0]
 
@@ -913,12 +947,14 @@ def _svg_configuration_star_only(snapshots, input_params, size):
             all_x.extend(bx.tolist())
             all_y.extend(by.tolist())
 
-    x_min, y_min = min(all_x), min(all_y)
-    span = max(max(all_x) - x_min, max(all_y) - y_min)
-    margin = span * 0.05
-    x_min -= margin
-    y_max = y_min + span + 2 * margin
-    span += 2 * margin
+    x_min, x_max = min(all_x), max(all_x)
+    y_min, y_max = min(all_y), max(all_y)
+    span = max(x_max - x_min, y_max - y_min)
+    margin_abs = span * margin
+    span += 2 * margin_abs
+    cx, cy = (x_min + x_max) / 2, (y_min + y_max) / 2
+    x_min = cx - span / 2
+    y_max = cy + span / 2
 
     def to_svg(x, y):
         return (x - x_min) / span * size, (y_max - y) / span * size
@@ -1011,7 +1047,10 @@ class StarRepresentation(ABC):
 
         Converts representation-specific vars to radii on each snapshot so any
         base SVG renderer that reads `optim_vars["radii"]` can be reused for
-        all representations.
+        all representations. The returned function accepts an optional
+        `margin` keyword argument (fraction of the content's span used as an
+        empty border), which :func:`~vizopt.animation.snapshots_to_animated_svg`
+        forwards from its own `margin` argument.
 
         Args:
             base_svg_fn: the underlying `(snapshots, input_params, size) →
@@ -1023,13 +1062,13 @@ class StarRepresentation(ABC):
         if base_svg_fn is None:
             base_svg_fn = _svg_configuration_star_only
 
-        def svg_configuration(snapshots, input_params, size):
+        def svg_configuration(snapshots, input_params, size, margin: float = 0.05):
             angles_jnp = jnp.array(input_params["angles"])
             converted = [
                 (i, {**v, "radii": np.array(self.to_radii(v, angles_jnp))})
                 for i, v in snapshots
             ]
-            return base_svg_fn(converted, input_params, size)
+            return base_svg_fn(converted, input_params, size, margin=margin)
 
         return svg_configuration
 

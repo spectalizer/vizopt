@@ -1,5 +1,6 @@
 """Animation utilities for visualizing optimization progress."""
 
+import inspect
 import math
 from typing import Any
 
@@ -110,6 +111,7 @@ def snapshots_to_animated_svg(
     loss_curve_height: int = 120,
     log_scale: bool = False,
     optim_vars_panel_height: int = 0,
+    margin: float | None = None,
 ) -> str:
     """Create an animated SVG from optimization snapshots.
 
@@ -139,14 +141,20 @@ def snapshots_to_animated_svg(
             all variable trajectories across iterations at a glance.  An
             animated vertical marker tracks the current frame, matching the
             style of the loss curve panel.
+        margin: Empty border around the content, as a fraction of the
+            content's span. Only forwarded to `problem.svg_configuration` if
+            that function accepts a `margin` keyword (e.g. one built by
+            `StarRepresentation.make_svg_configuration`); left at `None`
+            (the underlying function's own default) otherwise.
 
     Returns:
         An SVG string. Save with `Path("out.svg").write_text(svg)` or
         display in Jupyter with `IPython.display.SVG(data=svg)`.
 
     Raises:
-        ValueError: If `problem.svg_configuration` is not set or
-            `snapshots` is empty.
+        ValueError: If `problem.svg_configuration` is not set, `snapshots` is
+            empty, or `margin` is given but `problem.svg_configuration` does
+            not accept a `margin` keyword.
     """
     if problem.svg_configuration is None:
         raise ValueError(
@@ -155,7 +163,17 @@ def snapshots_to_animated_svg(
     if not snapshots:
         raise ValueError("snapshots is empty.")
 
-    elements = problem.svg_configuration(snapshots, problem.input_parameters, size)
+    svg_config_kwargs = {}
+    if margin is not None:
+        if "margin" not in inspect.signature(problem.svg_configuration).parameters:
+            raise ValueError(
+                "margin was given but problem.svg_configuration does not accept "
+                "a margin keyword argument."
+            )
+        svg_config_kwargs["margin"] = margin
+    elements = problem.svg_configuration(
+        snapshots, problem.input_parameters, size, **svg_config_kwargs
+    )
     n_frames = len(snapshots)
     total_dur = n_frames / fps
 

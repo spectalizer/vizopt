@@ -445,6 +445,33 @@ class VizOptimizer(ABC):
             raise ValueError("No result yet — call optimize() first.")
         self.problem_.plot(**kwargs)
 
+    def animate(self, callback, **kwargs) -> Any:
+        """Create a matplotlib animation of the optimization progress.
+
+        Convenience wrapper around :func:`~vizopt.animation.animate` that
+        renders each snapshot via this optimizer's `plot_configuration`. To
+        save as a GIF, call `.save(path, writer="pillow", fps=...)` on the
+        returned animation.
+
+        Args:
+            callback: A :class:`~vizopt.animation.SnapshotCallback` passed to
+                :meth:`optimize`, or a raw list of `(iteration, optim_vars)`
+                tuples.
+            **kwargs: Forwarded to :func:`~vizopt.animation.animate`.
+
+        Returns:
+            A `matplotlib.animation.FuncAnimation`.
+
+        Raises:
+            ValueError: If :meth:`optimize` has not been called yet.
+        """
+        if not hasattr(self, "problem_"):
+            raise ValueError("No result yet — call optimize() first.")
+        from .animation import animate
+
+        snapshots = callback.snapshots if hasattr(callback, "snapshots") else callback
+        return animate(self.problem_, snapshots, **kwargs)
+
     def animate_svg(self, callback, **kwargs) -> str:
         """Create an animated SVG from a SnapshotCallback.
 
