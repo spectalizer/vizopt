@@ -149,7 +149,7 @@ When a NetworkX `DiGraph` encodes a set hierarchy or containment relationship, t
 
 ## Style guide
 
-- Google-style docstrings, no double backticks, no repetition of type hints in docstrings
+- Google-style docstrings, no double backticks, no repetition of type hints in docstrings, no `:meth:`, `:class:` etc.
 - No imports inside functions unless genuinely needed (e.g. lazy imports for optional/heavy deps like `matplotlib`)
 
 ## General guidelines
