@@ -1,0 +1,825 @@
+[
+  {
+    "country": "Q222",
+    "countryLabel": "Albania",
+    "lat": 41.0,
+    "lon": 20.0,
+    "population": 2811655,
+    "orgs": [
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q228",
+    "countryLabel": "Andorra",
+    "lat": 42.558333333333,
+    "lon": 1.5552777777778,
+    "population": 87486,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  },
+  {
+    "country": "Q399",
+    "countryLabel": "Armenia",
+    "lat": 40.383333,
+    "lon": 44.95,
+    "population": 2930450,
+    "orgs": [
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q40",
+    "countryLabel": "Austria",
+    "lat": 48.0,
+    "lon": 14.0,
+    "population": 8979894,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q227",
+    "countryLabel": "Azerbaijan",
+    "lat": 40.3,
+    "lon": 47.7,
+    "population": 10180770,
+    "orgs": [
+      "Q326816",
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "GUAM Organization for Democracy and Economic Development",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q31",
+    "countryLabel": "Belgium",
+    "lat": 50.641111111111,
+    "lon": 4.6680555555556,
+    "population": 11825551,
+    "orgs": [
+      "Q13116",
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Benelux",
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q225",
+    "countryLabel": "Bosnia and Herzegovina",
+    "lat": 44.0,
+    "lon": 18.0,
+    "population": 3816459,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  },
+  {
+    "country": "Q219",
+    "countryLabel": "Bulgaria",
+    "lat": 42.75,
+    "lon": 25.5,
+    "population": 6423207,
+    "orgs": [
+      "Q1969730",
+      "Q380340",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Organization of the Black Sea Economic Cooperation",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q224",
+    "countryLabel": "Croatia",
+    "lat": 45.25,
+    "lon": 15.466667,
+    "population": 3871833,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q229",
+    "countryLabel": "Cyprus",
+    "lat": 35.0,
+    "lon": 33.0,
+    "population": 1344976,
+    "orgs": [
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union"
+    ]
+  },
+  {
+    "country": "Q213",
+    "countryLabel": "Czech Republic",
+    "lat": 50.0,
+    "lon": 15.0,
+    "population": 10909500,
+    "orgs": [
+      "Q1969730",
+      "Q244323",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area",
+      "Visegrád Group"
+    ]
+  },
+  {
+    "country": "Q35",
+    "countryLabel": "Denmark",
+    "lat": 56.0,
+    "lon": 10.0,
+    "population": 5822863,
+    "orgs": [
+      "Q146165",
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Nordic Council",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q191",
+    "countryLabel": "Estonia",
+    "lat": 59.0,
+    "lon": 26.0,
+    "population": 1369995,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q670356",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Baltic Assembly",
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q33",
+    "countryLabel": "Finland",
+    "lat": 65.0,
+    "lon": 27.0,
+    "population": 5652881,
+    "orgs": [
+      "Q146165",
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Nordic Council",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q142",
+    "countryLabel": "France",
+    "lat": 47.0,
+    "lon": 2.0,
+    "population": 68605616,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q230",
+    "countryLabel": "Georgia",
+    "lat": 42.0,
+    "lon": 44.0,
+    "population": 3694600,
+    "orgs": [
+      "Q326816",
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "GUAM Organization for Democracy and Economic Development",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q183",
+    "countryLabel": "Germany",
+    "lat": 51.0,
+    "lon": 10.0,
+    "population": 83577140,
+    "orgs": [
+      "Q1969730",
+      "Q1969730",
+      "Q458",
+      "Q458",
+      "Q8908",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "Council of Europe",
+      "European Union",
+      "European Union",
+      "Schengen Area",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q41",
+    "countryLabel": "Greece",
+    "lat": 38.5,
+    "lon": 23.0,
+    "population": 10482487,
+    "orgs": [
+      "Q1969730",
+      "Q380340",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Organization of the Black Sea Economic Cooperation",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q223",
+    "countryLabel": "Greenland",
+    "lat": 72.0,
+    "lon": -40.0,
+    "population": 56609,
+    "orgs": [
+      "Q146165"
+    ],
+    "orgLabels": [
+      "Nordic Council"
+    ]
+  },
+  {
+    "country": "Q28",
+    "countryLabel": "Hungary",
+    "lat": 47.0,
+    "lon": 19.0,
+    "population": 9603634,
+    "orgs": [
+      "Q1969730",
+      "Q244323",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area",
+      "Visegrád Group"
+    ]
+  },
+  {
+    "country": "Q189",
+    "countryLabel": "Iceland",
+    "lat": 65.0,
+    "lon": -19.0,
+    "population": 364260,
+    "orgs": [
+      "Q146165",
+      "Q166546",
+      "Q1969730",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Free Trade Association",
+      "Nordic Council",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q27",
+    "countryLabel": "Ireland",
+    "lat": 53.0,
+    "lon": -8.0,
+    "population": 5149139,
+    "orgs": [
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union"
+    ]
+  },
+  {
+    "country": "Q38",
+    "countryLabel": "Italy",
+    "lat": 42.5,
+    "lon": 12.5,
+    "population": 58850717,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q29999",
+    "countryLabel": "Kingdom of the Netherlands",
+    "lat": 52.366666666667,
+    "lon": 4.8833333333333,
+    "population": 17100715,
+    "orgs": [
+      "Q13116"
+    ],
+    "orgLabels": [
+      "Benelux"
+    ]
+  },
+  {
+    "country": "Q211",
+    "countryLabel": "Latvia",
+    "lat": 57.0,
+    "lon": 25.0,
+    "population": 1856932,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q670356",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Baltic Assembly",
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q347",
+    "countryLabel": "Liechtenstein",
+    "lat": 47.145,
+    "lon": 9.553889,
+    "population": 37922,
+    "orgs": [
+      "Q166546",
+      "Q1969730",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Free Trade Association",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q37",
+    "countryLabel": "Lithuania",
+    "lat": 55.2,
+    "lon": 24.0,
+    "population": 2860002,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q670356",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Baltic Assembly",
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q32",
+    "countryLabel": "Luxembourg",
+    "lat": 49.77,
+    "lon": 6.13,
+    "population": 681973,
+    "orgs": [
+      "Q13116",
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Benelux",
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q233",
+    "countryLabel": "Malta",
+    "lat": 35.9,
+    "lon": 14.4,
+    "population": 553214,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q217",
+    "countryLabel": "Moldova",
+    "lat": 47.25,
+    "lon": 28.516667,
+    "population": 2409207,
+    "orgs": [
+      "Q326816",
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "GUAM Organization for Democracy and Economic Development",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q235",
+    "countryLabel": "Monaco",
+    "lat": 43.731111111111,
+    "lon": 7.42,
+    "population": 38857,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  },
+  {
+    "country": "Q236",
+    "countryLabel": "Montenegro",
+    "lat": 42.766667,
+    "lon": 19.216667,
+    "population": 617213,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  },
+  {
+    "country": "Q55",
+    "countryLabel": "Netherlands",
+    "lat": 52.316666666667,
+    "lon": 5.55,
+    "population": 17942942,
+    "orgs": [
+      "Q13116",
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Benelux",
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q221",
+    "countryLabel": "North Macedonia",
+    "lat": 41.65,
+    "lon": 21.716667,
+    "population": 1836713,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  },
+  {
+    "country": "Q20",
+    "countryLabel": "Norway",
+    "lat": 59.933333333333,
+    "lon": 10.683333333333,
+    "population": 5627400,
+    "orgs": [
+      "Q146165",
+      "Q166546",
+      "Q1969730",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Free Trade Association",
+      "Nordic Council",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q36",
+    "countryLabel": "Poland",
+    "lat": 52.0,
+    "lon": 19.0,
+    "population": 37563071,
+    "orgs": [
+      "Q1969730",
+      "Q244323",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area",
+      "Visegrád Group"
+    ]
+  },
+  {
+    "country": "Q45",
+    "countryLabel": "Portugal",
+    "lat": 38.7,
+    "lon": -9.1833333333333,
+    "population": 10347892,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q218",
+    "countryLabel": "Romania",
+    "lat": 46.0,
+    "lon": 25.0,
+    "population": 19053815,
+    "orgs": [
+      "Q1969730",
+      "Q380340",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Organization of the Black Sea Economic Cooperation",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q159",
+    "countryLabel": "Russia",
+    "lat": 66.416666666667,
+    "lon": 94.25,
+    "population": 146119928,
+    "orgs": [
+      "Q380340"
+    ],
+    "orgLabels": [
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q238",
+    "countryLabel": "San Marino",
+    "lat": 43.933333333333,
+    "lon": 12.466666666667,
+    "population": 33600,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  },
+  {
+    "country": "Q403",
+    "countryLabel": "Serbia",
+    "lat": 43.95,
+    "lon": 20.933333333333,
+    "population": 6605168,
+    "orgs": [
+      "Q319014",
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Central European Free Trade Agreement",
+      "Council of Europe",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q214",
+    "countryLabel": "Slovakia",
+    "lat": 48.7,
+    "lon": 19.7,
+    "population": 5409407,
+    "orgs": [
+      "Q1969730",
+      "Q244323",
+      "Q458"
+    ],
+    "orgLabels": [
+      "European Union",
+      "Schengen Area",
+      "Visegrád Group"
+    ]
+  },
+  {
+    "country": "Q215",
+    "countryLabel": "Slovenia",
+    "lat": 46.0,
+    "lon": 15.0,
+    "population": 2066880,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q29",
+    "countryLabel": "Spain",
+    "lat": 40.2,
+    "lon": -3.5,
+    "population": 48592909,
+    "orgs": [
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q34",
+    "countryLabel": "Sweden",
+    "lat": 61.0,
+    "lon": 15.0,
+    "population": 10609460,
+    "orgs": [
+      "Q146165",
+      "Q1969730",
+      "Q458",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Union",
+      "Nordic Council",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q39",
+    "countryLabel": "Switzerland",
+    "lat": 46.798562,
+    "lon": 8.231973,
+    "population": 9104063,
+    "orgs": [
+      "Q166546",
+      "Q1969730",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "European Free Trade Association",
+      "Schengen Area"
+    ]
+  },
+  {
+    "country": "Q43",
+    "countryLabel": "Turkey",
+    "lat": 39.0,
+    "lon": 36.0,
+    "population": 85372377,
+    "orgs": [
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q212",
+    "countryLabel": "Ukraine",
+    "lat": 49.0,
+    "lon": 32.0,
+    "population": 41167335,
+    "orgs": [
+      "Q326816",
+      "Q380340",
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe",
+      "GUAM Organization for Democracy and Economic Development",
+      "Organization of the Black Sea Economic Cooperation"
+    ]
+  },
+  {
+    "country": "Q145",
+    "countryLabel": "United Kingdom",
+    "lat": 54.6,
+    "lon": -2.0,
+    "population": 67326569,
+    "orgs": [
+      "Q8908"
+    ],
+    "orgLabels": [
+      "Council of Europe"
+    ]
+  }
+]

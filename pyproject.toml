@@ -64,3 +64,11 @@ exclude_lines = [
 
 [tool.pyright]
 reportPrivateImportUsage = "none"
+
+[[tool.pyright.executionEnvironments]]
+# nbconvert's script output for notebooks always includes get_ipython()/magic
+# calls, IPython display() calls, and bare-expression cell outputs; these are
+# not real bugs, so silence them only for notebook-derived files.
+root = "notebooks"
+reportUndefinedVariable = "none"
+reportUnusedExpression = "none"
