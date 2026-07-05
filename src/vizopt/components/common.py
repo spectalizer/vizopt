@@ -1,21 +1,22 @@
 import jax
 import numpy as np
 from jax import numpy as jnp
+from jax.typing import ArrayLike
 
 
-def multiple_bbox_intersections(bbox_matrix: np.ndarray, other_bbox_matrix: np.ndarray):
+def multiple_bbox_intersections(bbox_matrix: ArrayLike, other_bbox_matrix: ArrayLike):
     """Calculate the pairwise intersections of two sets of bounding boxes
 
     This vectorized implementation is more efficient than the avoided double for loop
 
     Args:
-        bbox_matrix: numpy array of shape (n, 2, 2)
+        bbox_matrix: array of shape (n, 2, 2)
             dimensions: points, min and max, xy coordinates
-        other_bbox_matrix: numpy array of shape (m, 2, 2)
+        other_bbox_matrix: array of shape (m, 2, 2)
             dimensions: points, min and max, xy coordinates
 
     Returns:
-        numpy array of shape (n, m)
+        array of shape (n, m)
     """
     rep_bbox_matrix = jnp.repeat(bbox_matrix, other_bbox_matrix.shape[0], axis=0)
     rep_other_bbox_matrix = jnp.tile(other_bbox_matrix, (bbox_matrix.shape[0], 1, 1))

@@ -1,0 +1,2091 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "name": "Turkish",
+      "level": "language",
+      "latitude": 39.8667,
+      "longitude": 32.8667,
+      "size": 0.906817,
+      "wikt_name": "Turkish",
+      "id": "nucl1301"
+    },
+    {
+      "name": "Northern Kurdish",
+      "level": "language",
+      "latitude": 37.0,
+      "longitude": 43.0,
+      "size": 0.382099,
+      "wikt_name": "Kurmanji",
+      "id": "nort2641"
+    },
+    {
+      "name": "Standard Arabic",
+      "level": "language",
+      "latitude": 27.9625,
+      "longitude": 43.8525,
+      "size": 1.830301,
+      "wikt_name": "Standard Arabic",
+      "id": "stan1318"
+    },
+    {
+      "name": "Tunisian Arabic",
+      "level": "language",
+      "latitude": 33.7966,
+      "longitude": 9.56156,
+      "size": 0.340588,
+      "wikt_name": "Tunisian Arabic",
+      "id": "tuni1259"
+    },
+    {
+      "name": "Nepali",
+      "level": "language",
+      "latitude": 28.0,
+      "longitude": 85.0,
+      "size": 0.491233,
+      "wikt_name": "Nepali",
+      "id": "nepa1254"
+    },
+    {
+      "name": "Tamil-Kannada",
+      "level": "family",
+      "latitude": 11.572015583333332,
+      "longitude": 76.983034,
+      "id": "tami1291"
+    },
+    {
+      "name": "Thai",
+      "level": "language",
+      "latitude": 14.192,
+      "longitude": 100.671,
+      "size": 0.632456,
+      "wikt_name": "Thai",
+      "id": "thai1261"
+    },
+    {
+      "name": "Tajik",
+      "level": "language",
+      "latitude": 38.8213,
+      "longitude": 68.5549,
+      "size": 0.374166,
+      "wikt_name": "Tajik",
+      "id": "taji1245"
+    },
+    {
+      "name": "Kazakh",
+      "level": "language",
+      "latitude": 51.17,
+      "longitude": 71.454,
+      "size": 0.362794,
+      "wikt_name": "Kazakh",
+      "id": "kaza1248"
+    },
+    {
+      "name": "South Azerbaijani",
+      "level": "language",
+      "latitude": 36.5137,
+      "longitude": 48.4302,
+      "size": 0.387298,
+      "wikt_name": "South Azerbaijani",
+      "id": "sout2697"
+    },
+    {
+      "name": "Bhojpuri",
+      "level": "language",
+      "latitude": 26.458455,
+      "longitude": 84.817115,
+      "size": 0.722496,
+      "wikt_name": "Bhojpuri",
+      "id": "bhoj1244"
+    },
+    {
+      "name": "South Levantine Arabic",
+      "level": "dialect",
+      "latitude": 31.5601,
+      "longitude": 38.0837,
+      "size": 0.340588,
+      "wikt_name": "South Levantine Arabic",
+      "id": "sout3123"
+    },
+    {
+      "name": "French",
+      "level": "language",
+      "latitude": 48.0,
+      "longitude": 2.0,
+      "size": 1.442765,
+      "wikt_name": "French",
+      "id": "stan1290"
+    },
+    {
+      "name": "Northern Chinese",
+      "level": "family",
+      "latitude": 36.367461257575755,
+      "longitude": 109.92003653636364,
+      "id": "nort3155"
+    },
+    {
+      "name": "Chittagonian",
+      "level": "language",
+      "latitude": 20.831,
+      "longitude": 93.1695,
+      "size": 0.360555,
+      "wikt_name": "Chittagonian",
+      "id": "chit1275"
+    },
+    {
+      "name": "Continental Indo-Aryan",
+      "level": "family",
+      "latitude": 25.842536516190286,
+      "longitude": 73.54699461904742,
+      "id": "cont1248"
+    },
+    {
+      "name": "Min Nan Chinese",
+      "level": "language",
+      "latitude": 24.5,
+      "longitude": 118.17,
+      "size": 0.707814,
+      "wikt_name": "Southern Min",
+      "id": "minn1241"
+    },
+    {
+      "name": "Italo-Western Romance",
+      "level": "family",
+      "latitude": 29.146065774074447,
+      "longitude": 2.8956558444444442,
+      "id": "ital1285"
+    },
+    {
+      "name": "Tagalog-Filipino",
+      "level": "family",
+      "latitude": 13.162500000000001,
+      "longitude": 122.6055,
+      "size": 0.67082,
+      "wikt_name": "Tagalog",
+      "id": "taga1269"
+    },
+    {
+      "name": "Modern High German",
+      "level": "family",
+      "latitude": 43.52048664,
+      "longitude": 10.41484444,
+      "id": "mode1258"
+    },
+    {
+      "name": "Bavarian",
+      "level": "language",
+      "latitude": 47.9232,
+      "longitude": 13.246,
+      "size": 0.3755,
+      "wikt_name": "Bavarian",
+      "id": "bava1246"
+    },
+    {
+      "name": "Dutch",
+      "level": "language",
+      "latitude": 52.0,
+      "longitude": 5.0,
+      "size": 0.480625,
+      "wikt_name": "Dutch",
+      "id": "dutc1256"
+    },
+    {
+      "name": "Southern Pashto",
+      "level": "language",
+      "latitude": 31.5,
+      "longitude": 65.7,
+      "size": 0.330151,
+      "wikt_name": "Southern Pashto",
+      "id": "sout2649"
+    },
+    {
+      "name": "Spanish",
+      "level": "language",
+      "latitude": 40.4414,
+      "longitude": -1.11788,
+      "size": 2.202272,
+      "wikt_name": "Spanish",
+      "id": "stan1288"
+    },
+    {
+      "name": "Chhattisgarhi",
+      "level": "language",
+      "latitude": 20.3601,
+      "longitude": 82.0483,
+      "size": 0.403733,
+      "wikt_name": "Chhattisgarhi",
+      "id": "chha1249"
+    },
+    {
+      "name": "East Slavic",
+      "level": "family",
+      "latitude": 55.20950666666667,
+      "longitude": -2.3025749999999987,
+      "id": "east1426"
+    },
+    {
+      "name": "Shaurasenic",
+      "level": "family",
+      "latitude": 29.8027519245283,
+      "longitude": 66.02319688679246,
+      "id": "shau1239"
+    },
+    {
+      "name": "Nuclear Oromo",
+      "level": "family",
+      "latitude": 2.6992,
+      "longitude": 39.14062,
+      "size": 0.489898,
+      "wikt_name": "Oromo",
+      "id": "nucl1736"
+    },
+    {
+      "name": "Farsic",
+      "level": "family",
+      "latitude": 34.18212545454546,
+      "longitude": 61.032289090909096,
+      "id": "fars1255"
+    },
+    {
+      "name": "German",
+      "level": "language",
+      "latitude": 48.649,
+      "longitude": 12.4676,
+      "size": 1.024695,
+      "wikt_name": "German",
+      "id": "stan1295"
+    },
+    {
+      "name": "Igbo",
+      "level": "language",
+      "latitude": 4.62705,
+      "longitude": 7.23441,
+      "size": 0.519615,
+      "wikt_name": "Igbo",
+      "id": "nucl1417"
+    },
+    {
+      "name": "Tamil",
+      "level": "language",
+      "latitude": 10.520219,
+      "longitude": 78.825989,
+      "size": 0.866025,
+      "wikt_name": "Tamil",
+      "id": "tami1289"
+    },
+    {
+      "name": "Sanaani Arabic",
+      "level": "language",
+      "latitude": 15.6552,
+      "longitude": 44.8412,
+      "size": 0.337639,
+      "wikt_name": "San\u02bdani Arabic",
+      "id": "sana1295"
+    },
+    {
+      "name": "Kipchak-Turkestan",
+      "level": "family",
+      "latitude": 45.35273395652174,
+      "longitude": 58.28437095652174,
+      "id": "kipc1240"
+    },
+    {
+      "name": "Middle-Modern Indo-Aryan",
+      "level": "family",
+      "latitude": 26.958041359327062,
+      "longitude": 73.85650222629954,
+      "id": "midd1375"
+    },
+    {
+      "name": "Austronesian",
+      "level": "family",
+      "latitude": -2.8431722438675697,
+      "longitude": 128.63418316651618,
+      "id": "aust1307"
+    },
+    {
+      "name": "Western Hindi",
+      "level": "family",
+      "latitude": 20.43837272727273,
+      "longitude": 86.08337272727273,
+      "id": "west2812"
+    },
+    {
+      "name": "Uighur",
+      "level": "language",
+      "latitude": 43.88,
+      "longitude": 87.38,
+      "size": 0.32249,
+      "wikt_name": "Uyghur",
+      "id": "uigh1240"
+    },
+    {
+      "name": "Indo-European",
+      "level": "family",
+      "latitude": 33.037704637702504,
+      "longitude": 38.213474869415755,
+      "size": 5.822371,
+      "wikt_name": "Indo-European",
+      "id": "indo1319"
+    },
+    {
+      "name": "Swahili",
+      "level": "language",
+      "latitude": -8.25605,
+      "longitude": 37.624,
+      "size": 0.907193,
+      "wikt_name": "Kiswahili",
+      "id": "swah1253"
+    },
+    {
+      "name": "Cantonese",
+      "level": "dialect",
+      "latitude": 23.0118,
+      "longitude": 113.2021,
+      "size": 0.853775,
+      "wikt_name": "Cantonese",
+      "id": "cant1236"
+    },
+    {
+      "name": "Vietnamese",
+      "level": "language",
+      "latitude": 20.681188,
+      "longitude": 105.774071,
+      "size": 0.87178,
+      "wikt_name": "Vietnamese",
+      "id": "viet1252"
+    },
+    {
+      "name": "Hungarian",
+      "level": "language",
+      "latitude": 46.9068585714,
+      "longitude": 19.6555271429,
+      "size": 0.354965,
+      "wikt_name": "Hungarian",
+      "id": "hung1274"
+    },
+    {
+      "name": "Cebuano",
+      "level": "language",
+      "latitude": 8.38799,
+      "longitude": 124.367,
+      "size": 0.398748,
+      "wikt_name": "Cebuano",
+      "id": "cebu1242"
+    },
+    {
+      "name": "Ukrainian",
+      "level": "language",
+      "latitude": 49.796,
+      "longitude": 29.945,
+      "size": 0.589153,
+      "wikt_name": "Ukrainian",
+      "id": "ukra1253"
+    },
+    {
+      "name": "Common Turkic",
+      "level": "family",
+      "latitude": 45.893762939999995,
+      "longitude": 69.11364595799999,
+      "id": "comm1245"
+    },
+    {
+      "name": "Moroccan Arabic",
+      "level": "language",
+      "latitude": 32.5,
+      "longitude": -7.5,
+      "size": 0.524404,
+      "wikt_name": "Moroccan Arabic",
+      "id": "moro1292"
+    },
+    {
+      "name": "Sino-Tibetan",
+      "level": "family",
+      "latitude": 26.61548183610678,
+      "longitude": 97.28390603969122,
+      "size": 3.834058,
+      "wikt_name": "Sino-Tibetan",
+      "id": "sino1245"
+    },
+    {
+      "name": "West Germanic",
+      "level": "family",
+      "latitude": 30.952882672413796,
+      "longitude": -4.766788198275862,
+      "id": "west2793"
+    },
+    {
+      "name": "Hausa",
+      "level": "language",
+      "latitude": 11.1513,
+      "longitude": 8.7804,
+      "size": 0.662571,
+      "wikt_name": "Hausa",
+      "id": "haus1257"
+    },
+    {
+      "name": "Turkmen",
+      "level": "language",
+      "latitude": 37.08719,
+      "longitude": 59.17574,
+      "size": 0.4,
+      "wikt_name": "Turkmen",
+      "id": "turk1304"
+    },
+    {
+      "name": "Malayo-Polynesian",
+      "level": "family",
+      "latitude": -3.3123081715926497,
+      "longitude": 128.76679444356813,
+      "id": "mala1545"
+    },
+    {
+      "name": "Malay (individual language)",
+      "level": "language",
+      "latitude": 10.738877679487178,
+      "longitude": 42.15982964529915,
+      "size": 0.877496,
+      "wikt_name": "Malay",
+      "id": "mala1546"
+    },
+    {
+      "name": "Rundi",
+      "level": "language",
+      "latitude": -2.94,
+      "longitude": 29.97,
+      "size": 0.328634,
+      "wikt_name": "Kirundi",
+      "id": "rund1242"
+    },
+    {
+      "name": "Gauda-Kamrupa",
+      "level": "family",
+      "latitude": 24.028460388888888,
+      "longitude": 89.78100888888889,
+      "id": "gaud1237"
+    },
+    {
+      "name": "Classical Indo-European",
+      "level": "family",
+      "latitude": 32.91290362312312,
+      "longitude": 38.38273607557552,
+      "id": "clas1257"
+    },
+    {
+      "name": "Tamil-Malayalam",
+      "level": "family",
+      "latitude": 11.1533718125,
+      "longitude": 76.9788606875,
+      "id": "tami1298"
+    },
+    {
+      "name": "Modern Turkestan",
+      "level": "family",
+      "latitude": 40.93986666666667,
+      "longitude": 76.40371666666667,
+      "id": "uygh1240"
+    },
+    {
+      "name": "Maghrebi",
+      "level": "family",
+      "latitude": 32.535525,
+      "longitude": 5.88736875,
+      "id": "magh1239"
+    },
+    {
+      "name": "Kinshasa Lingala",
+      "level": "language",
+      "latitude": -4.409174,
+      "longitude": 15.28532,
+      "size": 0.447214,
+      "wikt_name": "Lingala",
+      "id": "ling1263"
+    },
+    {
+      "name": "Iranian",
+      "level": "family",
+      "latitude": 35.28925823931624,
+      "longitude": 56.19717724786325,
+      "id": "iran1269"
+    },
+    {
+      "name": "Sinitic",
+      "level": "family",
+      "latitude": 30.025642398913043,
+      "longitude": 113.55030967608697,
+      "id": "sini1245"
+    },
+    {
+      "name": "Southern Ndebele-Lowland",
+      "level": "family",
+      "latitude": -26.54755,
+      "longitude": 29.296625,
+      "id": "ngun1267"
+    },
+    {
+      "name": "Amharic",
+      "level": "language",
+      "latitude": 11.708182,
+      "longitude": 39.543456,
+      "size": 0.5,
+      "wikt_name": "Amharic",
+      "id": "amha1245"
+    },
+    {
+      "name": "Nyanja",
+      "level": "language",
+      "latitude": -14.8047,
+      "longitude": 32.8108,
+      "size": 0.34641,
+      "wikt_name": "Chewa",
+      "id": "nyan1308"
+    },
+    {
+      "name": "Midlands Indo-Aryan",
+      "level": "family",
+      "latitude": 26.98464908187105,
+      "longitude": 70.59910437134474,
+      "id": "midl1245"
+    },
+    {
+      "name": "Chittagonian (Retired)",
+      "level": "language",
+      "latitude": 10.738877679487178,
+      "longitude": 42.15982964529915,
+      "size": 0.360555,
+      "wikt_name": "Chittagonian",
+      "id": "chit1285"
+    },
+    {
+      "name": "Atlantic-Congo",
+      "level": "family",
+      "latitude": 2.8066154641969137,
+      "longitude": 13.830503389878807,
+      "id": "atla1278"
+    },
+    {
+      "name": "Odia",
+      "level": "language",
+      "latitude": 21.0,
+      "longitude": 85.0,
+      "size": 0.587367,
+      "wikt_name": "Odia",
+      "id": "oriy1255"
+    },
+    {
+      "name": "South Dravidian",
+      "level": "family",
+      "latitude": 13.686793486486486,
+      "longitude": 78.05120408108108,
+      "id": "sout3133"
+    },
+    {
+      "name": "Slavic",
+      "level": "family",
+      "latitude": 49.183635640000006,
+      "longitude": 12.89173676,
+      "id": "slav1255"
+    },
+    {
+      "name": "Czech",
+      "level": "language",
+      "latitude": 49.873398,
+      "longitude": 15.10437,
+      "size": 0.327109,
+      "wikt_name": "Czech",
+      "id": "czec1258"
+    },
+    {
+      "name": "Nguni-Tsonga-Copi",
+      "level": "family",
+      "latitude": -25.833364545454547,
+      "longitude": 30.936904545454546,
+      "id": "ngun1280"
+    },
+    {
+      "name": "Marathi",
+      "level": "language",
+      "latitude": 17.9344,
+      "longitude": 76.6665,
+      "size": 0.911592,
+      "wikt_name": "Marathi",
+      "id": "mara1378"
+    },
+    {
+      "name": "Min Dong Chinese",
+      "level": "language",
+      "latitude": 26.0,
+      "longitude": 119.5,
+      "size": 0.320936,
+      "wikt_name": "Eastern Min",
+      "id": "mind1253"
+    },
+    {
+      "name": "Northeast Savanna Bantu",
+      "level": "family",
+      "latitude": -3.886501375,
+      "longitude": 35.031702414473685,
+      "id": "nort3203"
+    },
+    {
+      "name": "Volta-Congo",
+      "level": "family",
+      "latitude": 2.365622429496403,
+      "longitude": 15.119467174899281,
+      "id": "volt1241"
+    },
+    {
+      "name": "Eastern Hindi",
+      "level": "family",
+      "latitude": 23.607875,
+      "longitude": 82.81325,
+      "id": "east2726"
+    },
+    {
+      "name": "Maithili",
+      "level": "language",
+      "latitude": 26.3817,
+      "longitude": 86.2211,
+      "size": 0.582237,
+      "wikt_name": "Maithili",
+      "id": "mait1250"
+    },
+    {
+      "name": "Dakhini (Urdu)",
+      "level": "dialect",
+      "latitude": 33.037704637702504,
+      "longitude": 38.213474869415755,
+      "size": 0.357771,
+      "wikt_name": "Dakhan\u012b",
+      "id": "dakh1244"
+    },
+    {
+      "name": "Romanian",
+      "level": "language",
+      "latitude": 46.3913,
+      "longitude": 24.2256,
+      "size": 0.49295,
+      "wikt_name": "Romanian",
+      "id": "roma1327"
+    },
+    {
+      "name": "Korean",
+      "level": "language",
+      "latitude": 37.54,
+      "longitude": 126.98,
+      "size": 0.879204,
+      "wikt_name": "Korean",
+      "id": "kore1280"
+    },
+    {
+      "name": "Portuguese",
+      "level": "language",
+      "latitude": 39.91,
+      "longitude": -8.1,
+      "size": 1.594679,
+      "wikt_name": "Portuguese",
+      "id": "port1283"
+    },
+    {
+      "name": "Global Javanese",
+      "level": "family",
+      "latitude": -7.60487,
+      "longitude": 82.409875,
+      "size": 0.918198,
+      "wikt_name": "Javanese",
+      "id": "glob1245"
+    },
+    {
+      "name": "Haryanvi",
+      "level": "language",
+      "latitude": 29.0166,
+      "longitude": 76.0432,
+      "size": 0.374166,
+      "wikt_name": "Haryanvi",
+      "id": "hary1238"
+    },
+    {
+      "name": "Saidi Arabic",
+      "level": "language",
+      "latitude": 25.4132,
+      "longitude": 30.5302,
+      "size": 0.473286,
+      "wikt_name": "Sa\u02bdidi Arabic",
+      "id": "said1239"
+    },
+    {
+      "name": "Benue-Congo",
+      "level": "family",
+      "latitude": 0.4836253390804598,
+      "longitude": 17.767005694444446,
+      "size": 1.949359,
+      "wikt_name": "Benue\u2013Congo",
+      "id": "benu1247"
+    },
+    {
+      "name": "Arabic",
+      "level": "family",
+      "latitude": 26.204792774999998,
+      "longitude": 32.559154324999994,
+      "size": 2.054264,
+      "wikt_name": "Arabic",
+      "id": "arab1395"
+    },
+    {
+      "name": "Daic",
+      "level": "family",
+      "latitude": 21.503201094445,
+      "longitude": 103.25912263333333,
+      "id": "daic1237"
+    },
+    {
+      "name": "Egypto-Sudanic Arabic",
+      "level": "family",
+      "latitude": 15.220624285714285,
+      "longitude": 26.319693142857144,
+      "id": "egyp1254"
+    },
+    {
+      "name": "West Ibero-Romance",
+      "level": "family",
+      "latitude": 18.483440238096428,
+      "longitude": 18.214587285714284,
+      "id": "west2838"
+    },
+    {
+      "name": "Bookkeeping",
+      "level": "family",
+      "latitude": 10.738877679487178,
+      "longitude": 42.15982964529915,
+      "id": "book1242"
+    },
+    {
+      "name": "Madurese",
+      "level": "language",
+      "latitude": -7.0,
+      "longitude": 113.0,
+      "size": 0.387298,
+      "wikt_name": "Madurese",
+      "id": "nucl1460"
+    },
+    {
+      "name": "Oriya-Gauda-Kamrupa",
+      "level": "family",
+      "latitude": 22.771116125000002,
+      "longitude": 88.03044416666667,
+      "id": "oriy1254"
+    },
+    {
+      "name": "Malagasic",
+      "level": "family",
+      "latitude": -20.806432142857144,
+      "longitude": 46.37180714285714,
+      "size": 0.425892,
+      "wikt_name": "Malagasy",
+      "id": "mala1537"
+    },
+    {
+      "name": "Telugu",
+      "level": "language",
+      "latitude": 16.4529,
+      "longitude": 78.7024,
+      "size": 0.905539,
+      "wikt_name": "Telugu",
+      "id": "telu1262"
+    },
+    {
+      "name": "Akan",
+      "level": "language",
+      "latitude": 6.34756,
+      "longitude": -1.33254,
+      "size": 0.331662,
+      "wikt_name": "Akan",
+      "id": "akan1250"
+    },
+    {
+      "name": "Kannada",
+      "level": "language",
+      "latitude": 13.5878,
+      "longitude": 76.1198,
+      "size": 0.660303,
+      "wikt_name": "Kannada",
+      "id": "nucl1305"
+    },
+    {
+      "name": "East Bantu",
+      "level": "family",
+      "latitude": -8.23643363405797,
+      "longitude": 33.70399448188405,
+      "id": "east2731"
+    },
+    {
+      "name": "Mainstream Lowland East Cushitic",
+      "level": "family",
+      "latitude": 3.335456380952381,
+      "longitude": 40.024826476190476,
+      "id": "main1283"
+    },
+    {
+      "name": "West Highlands Kivu",
+      "level": "family",
+      "latitude": -3.1145611428571427,
+      "longitude": 30.276306857142856,
+      "id": "rwan1241"
+    },
+    {
+      "name": "Italian",
+      "level": "language",
+      "latitude": 43.0464,
+      "longitude": 12.6489,
+      "size": 0.805107,
+      "wikt_name": "Italian",
+      "id": "ital1282"
+    },
+    {
+      "name": "Hijazi Arabic",
+      "level": "language",
+      "latitude": 22.8346,
+      "longitude": 38.9237,
+      "size": 0.380789,
+      "wikt_name": "Hijazi Arabic",
+      "id": "hija1235"
+    },
+    {
+      "name": "Awadhi",
+      "level": "language",
+      "latitude": 27.5907,
+      "longitude": 82.4663,
+      "size": 0.469042,
+      "wikt_name": "Awadhi",
+      "id": "awad1243"
+    },
+    {
+      "name": "Malvi",
+      "level": "language",
+      "latitude": 23.488,
+      "longitude": 75.562,
+      "size": 0.316228,
+      "wikt_name": "Malvi",
+      "id": "malv1243"
+    },
+    {
+      "name": "Global Dutch",
+      "level": "family",
+      "latitude": -4.2432044,
+      "longitude": 53.1395658,
+      "id": "glob1241"
+    },
+    {
+      "name": "Sylheti",
+      "level": "language",
+      "latitude": 24.83724,
+      "longitude": 92.25347,
+      "size": 0.373898,
+      "wikt_name": "Sylheti",
+      "id": "sylh1242"
+    },
+    {
+      "name": "Middle-Modern Sinitic",
+      "level": "family",
+      "latitude": 31.41169588115942,
+      "longitude": 112.62396721014493,
+      "id": "midd1354"
+    },
+    {
+      "name": "Central Atlas",
+      "level": "dialect",
+      "latitude": 32.7415,
+      "longitude": -2.40872,
+      "size": 0.412311,
+      "wikt_name": "Central Atlas Tamazight",
+      "id": "cent2195"
+    },
+    {
+      "name": "Western Farsi",
+      "level": "language",
+      "latitude": 32.9,
+      "longitude": 53.3,
+      "size": 0.726636,
+      "wikt_name": "Iranian Persian",
+      "id": "west2369"
+    },
+    {
+      "name": "Sinhala",
+      "level": "language",
+      "latitude": 8.0,
+      "longitude": 81.0,
+      "size": 0.391152,
+      "wikt_name": "Sinhala",
+      "id": "sinh1246"
+    },
+    {
+      "name": "Shifted Western Romance",
+      "level": "family",
+      "latitude": 26.568794502222666,
+      "longitude": 1.2133771066666663,
+      "id": "shif1234"
+    },
+    {
+      "name": "Turkic",
+      "level": "family",
+      "latitude": 46.13166611538462,
+      "longitude": 68.18412522884616,
+      "id": "turk1311"
+    },
+    {
+      "name": "Austroasiatic",
+      "level": "family",
+      "latitude": 16.28436893678161,
+      "longitude": 100.92108045977011,
+      "id": "aust1305"
+    },
+    {
+      "name": "Yoruba",
+      "level": "language",
+      "latitude": 7.15345,
+      "longitude": 3.67225,
+      "size": 0.632456,
+      "wikt_name": "Yoruba",
+      "id": "yoru1245"
+    },
+    {
+      "name": "Assamese",
+      "level": "language",
+      "latitude": 26.0876,
+      "longitude": 91.2932,
+      "size": 0.391152,
+      "wikt_name": "Assamese",
+      "id": "assa1263"
+    },
+    {
+      "name": "Hakka Chinese",
+      "level": "language",
+      "latitude": 25.0,
+      "longitude": 116.0,
+      "size": 0.694262,
+      "wikt_name": "Hakka Chinese",
+      "id": "hakk1236"
+    },
+    {
+      "name": "Koreanic",
+      "level": "family",
+      "latitude": 37.353363,
+      "longitude": 127.103458,
+      "id": "kore1284"
+    },
+    {
+      "name": "Serbian-Croatian-Bosnian",
+      "level": "language",
+      "latitude": 44.15,
+      "longitude": 18.81,
+      "size": 0.43589,
+      "wikt_name": "Serbo-Croatian",
+      "id": "sout1528"
+    },
+    {
+      "name": "Magadhan",
+      "level": "family",
+      "latitude": 23.047841444444444,
+      "longitude": 70.38069411111111,
+      "id": "mait1254"
+    },
+    {
+      "name": "Min",
+      "level": "family",
+      "latitude": 24.804904245,
+      "longitude": 117.092137635,
+      "id": "minn1248"
+    },
+    {
+      "name": "Tai-Kadai",
+      "level": "family",
+      "latitude": 22.397926670068365,
+      "longitude": 105.03152118367348,
+      "id": "taik1256"
+    },
+    {
+      "name": "West Semitic",
+      "level": "family",
+      "latitude": 24.132073644859812,
+      "longitude": 39.08516394859813,
+      "id": "west2786"
+    },
+    {
+      "name": "English",
+      "level": "language",
+      "latitude": 53.0,
+      "longitude": -1.0,
+      "size": 3.365066,
+      "wikt_name": "English",
+      "id": "stan1293"
+    },
+    {
+      "name": "Burmese",
+      "level": "language",
+      "latitude": 20.7926,
+      "longitude": 93.9665,
+      "size": 0.573585,
+      "wikt_name": "Burmese",
+      "id": "nucl1310"
+    },
+    {
+      "name": "Polish",
+      "level": "language",
+      "latitude": 51.8439,
+      "longitude": 18.6255,
+      "size": 0.634035,
+      "wikt_name": "Polish",
+      "id": "poli1260"
+    },
+    {
+      "name": "Gujarati-Rajasthani",
+      "level": "family",
+      "latitude": 25.71443724137931,
+      "longitude": 72.68644620689655,
+      "id": "guja1255"
+    },
+    {
+      "name": "Rajasthani",
+      "level": "family",
+      "latitude": 26.807343636363637,
+      "longitude": 73.03157454545455,
+      "size": 0.6,
+      "wikt_name": "Rajasthani",
+      "id": "raja1256"
+    },
+    {
+      "name": "Sindhi",
+      "level": "language",
+      "latitude": 26.0,
+      "longitude": 69.0,
+      "size": 0.5,
+      "wikt_name": "Sindhi",
+      "id": "sind1272"
+    },
+    {
+      "name": "Afrikaans",
+      "level": "language",
+      "latitude": -31.63272,
+      "longitude": 20.46356,
+      "size": 0.320936,
+      "wikt_name": "Afrikaans",
+      "id": "afri1274"
+    },
+    {
+      "name": "Afro-Asiatic",
+      "level": "family",
+      "latitude": 14.93476275990099,
+      "longitude": 22.438121780940595,
+      "id": "afro1255"
+    },
+    {
+      "name": "Coastal Min",
+      "level": "family",
+      "latitude": 23.795503707692305,
+      "longitude": 116.57313457692308,
+      "id": "coas1318"
+    },
+    {
+      "name": "Central Khmer",
+      "level": "language",
+      "latitude": 12.0515,
+      "longitude": 105.015,
+      "size": 0.407431,
+      "wikt_name": "Khmer",
+      "id": "cent1989"
+    },
+    {
+      "name": "Uralic",
+      "level": "family",
+      "latitude": 62.01308438095185,
+      "longitude": 49.32062592857223,
+      "id": "ural1272"
+    },
+    {
+      "name": "Gujarati",
+      "level": "language",
+      "latitude": 22.687,
+      "longitude": 71.0962,
+      "size": 0.750999,
+      "wikt_name": "Gujarati",
+      "id": "guja1252"
+    },
+    {
+      "name": "Zulu",
+      "level": "language",
+      "latitude": -28.9,
+      "longitude": 30.2,
+      "size": 0.396232,
+      "wikt_name": "Zulu",
+      "id": "zulu1248"
+    },
+    {
+      "name": "Wu Chinese",
+      "level": "language",
+      "latitude": 29.8621,
+      "longitude": 119.682,
+      "size": 0.902219,
+      "wikt_name": "Wu Chinese",
+      "id": "wuch1236"
+    },
+    {
+      "name": "Xhosa",
+      "level": "language",
+      "latitude": -31.0389,
+      "longitude": 28.0769,
+      "size": 0.331662,
+      "wikt_name": "Xhosa",
+      "id": "xhos1239"
+    },
+    {
+      "name": "Taibei Mandarin",
+      "level": "dialect",
+      "latitude": 36.04965562068965,
+      "longitude": 109.65417990689654,
+      "size": 0.387298,
+      "wikt_name": "Standard Taiwanese Mandarin",
+      "id": "taib1240"
+    },
+    {
+      "name": "Egyptian Arabic",
+      "level": "language",
+      "latitude": 31.0,
+      "longitude": 31.0,
+      "size": 1.002708,
+      "wikt_name": "Egyptian Arabic",
+      "id": "egyp1253"
+    },
+    {
+      "name": "Kinyarwanda",
+      "level": "language",
+      "latitude": -1.56771,
+      "longitude": 29.6441,
+      "size": 0.347851,
+      "wikt_name": "Kinyarwanda",
+      "id": "kiny1244"
+    },
+    {
+      "name": "Magahi",
+      "level": "language",
+      "latitude": 25.0915,
+      "longitude": 85.3335,
+      "size": 0.454973,
+      "wikt_name": "Magahi",
+      "id": "maga1260"
+    },
+    {
+      "name": "Sudanese Arabic",
+      "level": "language",
+      "latitude": 17.8021,
+      "longitude": 33.3179,
+      "size": 0.564801,
+      "wikt_name": "Sudanese Arabic",
+      "id": "suda1236"
+    },
+    {
+      "name": "Greek",
+      "level": "family",
+      "latitude": 38.489758214285715,
+      "longitude": 25.491639071428573,
+      "size": 0.362724,
+      "wikt_name": "Greek",
+      "id": "gree1276"
+    },
+    {
+      "name": "Malayalam",
+      "level": "language",
+      "latitude": 9.59208,
+      "longitude": 76.7651,
+      "size": 0.609098,
+      "wikt_name": "Malayalam",
+      "id": "mala1464"
+    },
+    {
+      "name": "Northern Uzbek",
+      "level": "language",
+      "latitude": 40.886,
+      "longitude": 69.211,
+      "size": 0.518772,
+      "wikt_name": "Northern Uzbek",
+      "id": "nort2690"
+    },
+    {
+      "name": "Somali",
+      "level": "language",
+      "latitude": 4.778704,
+      "longitude": 45.152856,
+      "size": 0.402492,
+      "wikt_name": "Somali",
+      "id": "soma1255"
+    },
+    {
+      "name": "Min Beic",
+      "level": "family",
+      "latitude": 27.05,
+      "longitude": 118.32,
+      "size": 0.331662,
+      "wikt_name": "Northern Min",
+      "id": "minb1244"
+    },
+    {
+      "name": "Dravidian",
+      "level": "family",
+      "latitude": 14.951995441860465,
+      "longitude": 78.66127130232559,
+      "id": "drav1251"
+    },
+    {
+      "name": "Indo-Iranian",
+      "level": "family",
+      "latitude": 30.138619318351967,
+      "longitude": 67.8984195374531,
+      "id": "indo1320"
+    },
+    {
+      "name": "Hausa States Fulfulde",
+      "level": "language",
+      "latitude": 10.9972,
+      "longitude": 11.1188,
+      "size": 0.380789,
+      "wikt_name": "Nigerian Fulfulde",
+      "id": "nige1253"
+    },
+    {
+      "name": "Algerian Arabic",
+      "level": "language",
+      "latitude": 35.4208,
+      "longitude": 3.23033,
+      "size": 0.650022,
+      "wikt_name": "Algerian Arabic",
+      "id": "alge1239"
+    },
+    {
+      "name": "Gan Chinese",
+      "level": "language",
+      "latitude": 27.9896,
+      "longitude": 115.166,
+      "size": 0.470106,
+      "wikt_name": "Gan Chinese",
+      "id": "ganc1239"
+    },
+    {
+      "name": "Gauda-Banga",
+      "level": "family",
+      "latitude": 23.275580153846153,
+      "longitude": 89.92592138461539,
+      "id": "gaud1238"
+    },
+    {
+      "name": "Hindi",
+      "level": "language",
+      "latitude": 25.0,
+      "longitude": 77.0,
+      "size": 1.846619,
+      "wikt_name": "Hindi",
+      "id": "hind1269"
+    },
+    {
+      "name": "Romance",
+      "level": "family",
+      "latitude": 29.960939788194793,
+      "longitude": 3.7578306875,
+      "id": "roma1334"
+    },
+    {
+      "name": "Xiang Chinese",
+      "level": "language",
+      "latitude": 27.66847,
+      "longitude": 111.47112,
+      "size": 0.610737,
+      "wikt_name": "Xiang Chinese",
+      "id": "xian1251"
+    },
+    {
+      "name": "Jinyu Chinese",
+      "level": "language",
+      "latitude": 38.8284,
+      "longitude": 111.278,
+      "size": 0.684836,
+      "wikt_name": "Jin",
+      "id": "jiny1235"
+    },
+    {
+      "name": "Ta'izzi-Adeni Arabic",
+      "level": "language",
+      "latitude": 13.6555,
+      "longitude": 45.6411,
+      "size": 0.324037,
+      "wikt_name": "Ta\u02bdizzi-Adeni Arabic",
+      "id": "taiz1242"
+    },
+    {
+      "name": "Bahasa Indonesia",
+      "level": "dialect",
+      "latitude": -2.12281,
+      "longitude": 105.7075,
+      "size": 1.410661,
+      "wikt_name": "Indonesian",
+      "id": "stin1234"
+    },
+    {
+      "name": "Russian",
+      "level": "language",
+      "latitude": 59.0,
+      "longitude": 50.0,
+      "size": 1.309309,
+      "wikt_name": "Russian",
+      "id": "russ1263"
+    },
+    {
+      "name": "Japonic",
+      "level": "family",
+      "latitude": 27.938981565217393,
+      "longitude": 128.60764486956523,
+      "id": "japo1237"
+    },
+    {
+      "name": "Nuclear Pashto",
+      "level": "family",
+      "latitude": 32.47176666666667,
+      "longitude": 68.82763333333334,
+      "id": "nucl1276"
+    },
+    {
+      "name": "West Slavic",
+      "level": "family",
+      "latitude": 51.303825375,
+      "longitude": 16.30382,
+      "id": "west2792"
+    },
+    {
+      "name": "Narrow Bantu",
+      "level": "family",
+      "latitude": -4.839286035353536,
+      "longitude": 24.865001851851854,
+      "id": "narr1281"
+    },
+    {
+      "name": "Northern Pashto",
+      "level": "language",
+      "latitude": 34.0,
+      "longitude": 71.33,
+      "size": 0.457165,
+      "wikt_name": "Northern Pashto",
+      "id": "nort2646"
+    },
+    {
+      "name": "Central Philippine",
+      "level": "family",
+      "latitude": 11.180817777777778,
+      "longitude": 123.56891148148149,
+      "id": "cent2246"
+    },
+    {
+      "name": "Northern Daic",
+      "level": "family",
+      "latitude": 23.9589,
+      "longitude": 107.97857142857143,
+      "size": 0.4,
+      "wikt_name": "Zhuang",
+      "id": "nort3180"
+    },
+    {
+      "name": "Hindustani",
+      "level": "family",
+      "latitude": 10.9653,
+      "longitude": 103.6275,
+      "size": 2.21382,
+      "wikt_name": "Hindustani",
+      "id": "hind1270"
+    },
+    {
+      "name": "Tsonga",
+      "level": "language",
+      "latitude": -23.5754,
+      "longitude": 31.8105,
+      "size": 0.360555,
+      "wikt_name": "Tsonga",
+      "id": "tson1249"
+    },
+    {
+      "name": "Bengali",
+      "level": "language",
+      "latitude": 24.0,
+      "longitude": 90.0,
+      "size": 1.732051,
+      "wikt_name": "Bangla",
+      "id": "beng1280"
+    },
+    {
+      "name": "Japanese",
+      "level": "language",
+      "latitude": 35.0,
+      "longitude": 135.0,
+      "size": 1.131371,
+      "wikt_name": "Japanese",
+      "id": "nucl1643"
+    },
+    {
+      "name": "Nuclear Oghuz",
+      "level": "family",
+      "latitude": 38.30974277777778,
+      "longitude": 42.79454333333334,
+      "id": "nucl1769"
+    },
+    {
+      "name": "Arabian Peninsula Arabic",
+      "level": "family",
+      "latitude": 21.417401363636362,
+      "longitude": 48.407000999999994,
+      "id": "arab1393"
+    }
+  ],
+  "edges": [
+    {
+      "source": "tami1291",
+      "target": "nucl1305"
+    },
+    {
+      "source": "tami1291",
+      "target": "tami1298"
+    },
+    {
+      "source": "nort3155",
+      "target": "jiny1235"
+    },
+    {
+      "source": "nort3155",
+      "target": "taib1240"
+    },
+    {
+      "source": "cont1248",
+      "target": "midl1245"
+    },
+    {
+      "source": "cont1248",
+      "target": "oriy1254"
+    },
+    {
+      "source": "cont1248",
+      "target": "sind1272"
+    },
+    {
+      "source": "cont1248",
+      "target": "mara1378"
+    },
+    {
+      "source": "ital1285",
+      "target": "shif1234"
+    },
+    {
+      "source": "ital1285",
+      "target": "ital1282"
+    },
+    {
+      "source": "mode1258",
+      "target": "bava1246"
+    },
+    {
+      "source": "mode1258",
+      "target": "stan1295"
+    },
+    {
+      "source": "east1426",
+      "target": "russ1263"
+    },
+    {
+      "source": "east1426",
+      "target": "ukra1253"
+    },
+    {
+      "source": "shau1239",
+      "target": "east2726"
+    },
+    {
+      "source": "shau1239",
+      "target": "mait1254"
+    },
+    {
+      "source": "shau1239",
+      "target": "west2812"
+    },
+    {
+      "source": "fars1255",
+      "target": "west2369"
+    },
+    {
+      "source": "fars1255",
+      "target": "taji1245"
+    },
+    {
+      "source": "kipc1240",
+      "target": "uygh1240"
+    },
+    {
+      "source": "kipc1240",
+      "target": "kaza1248"
+    },
+    {
+      "source": "midd1375",
+      "target": "cont1248"
+    },
+    {
+      "source": "midd1375",
+      "target": "sinh1246"
+    },
+    {
+      "source": "aust1307",
+      "target": "mala1545"
+    },
+    {
+      "source": "west2812",
+      "target": "hind1270"
+    },
+    {
+      "source": "west2812",
+      "target": "hary1238"
+    },
+    {
+      "source": "indo1319",
+      "target": "clas1257"
+    },
+    {
+      "source": "comm1245",
+      "target": "kipc1240"
+    },
+    {
+      "source": "comm1245",
+      "target": "nucl1769"
+    },
+    {
+      "source": "sino1245",
+      "target": "sini1245"
+    },
+    {
+      "source": "sino1245",
+      "target": "nucl1310"
+    },
+    {
+      "source": "west2793",
+      "target": "stan1293"
+    },
+    {
+      "source": "west2793",
+      "target": "glob1241"
+    },
+    {
+      "source": "west2793",
+      "target": "mode1258"
+    },
+    {
+      "source": "mala1545",
+      "target": "glob1245"
+    },
+    {
+      "source": "mala1545",
+      "target": "stin1234"
+    },
+    {
+      "source": "mala1545",
+      "target": "mala1537"
+    },
+    {
+      "source": "mala1545",
+      "target": "nucl1460"
+    },
+    {
+      "source": "mala1545",
+      "target": "cent2246"
+    },
+    {
+      "source": "gaud1237",
+      "target": "gaud1238"
+    },
+    {
+      "source": "gaud1237",
+      "target": "assa1263"
+    },
+    {
+      "source": "clas1257",
+      "target": "indo1320"
+    },
+    {
+      "source": "clas1257",
+      "target": "gree1276"
+    },
+    {
+      "source": "clas1257",
+      "target": "slav1255"
+    },
+    {
+      "source": "clas1257",
+      "target": "west2793"
+    },
+    {
+      "source": "clas1257",
+      "target": "roma1334"
+    },
+    {
+      "source": "tami1298",
+      "target": "mala1464"
+    },
+    {
+      "source": "tami1298",
+      "target": "tami1289"
+    },
+    {
+      "source": "uygh1240",
+      "target": "uigh1240"
+    },
+    {
+      "source": "uygh1240",
+      "target": "nort2690"
+    },
+    {
+      "source": "magh1239",
+      "target": "alge1239"
+    },
+    {
+      "source": "magh1239",
+      "target": "moro1292"
+    },
+    {
+      "source": "magh1239",
+      "target": "tuni1259"
+    },
+    {
+      "source": "iran1269",
+      "target": "nucl1276"
+    },
+    {
+      "source": "iran1269",
+      "target": "fars1255"
+    },
+    {
+      "source": "iran1269",
+      "target": "nort2641"
+    },
+    {
+      "source": "sini1245",
+      "target": "minn1248"
+    },
+    {
+      "source": "sini1245",
+      "target": "midd1354"
+    },
+    {
+      "source": "ngun1267",
+      "target": "xhos1239"
+    },
+    {
+      "source": "ngun1267",
+      "target": "zulu1248"
+    },
+    {
+      "source": "midl1245",
+      "target": "shau1239"
+    },
+    {
+      "source": "midl1245",
+      "target": "guja1255"
+    },
+    {
+      "source": "midl1245",
+      "target": "nepa1254"
+    },
+    {
+      "source": "midl1245",
+      "target": "malv1243"
+    },
+    {
+      "source": "atla1278",
+      "target": "volt1241"
+    },
+    {
+      "source": "atla1278",
+      "target": "nige1253"
+    },
+    {
+      "source": "sout3133",
+      "target": "tami1291"
+    },
+    {
+      "source": "sout3133",
+      "target": "telu1262"
+    },
+    {
+      "source": "slav1255",
+      "target": "east1426"
+    },
+    {
+      "source": "slav1255",
+      "target": "west2792"
+    },
+    {
+      "source": "slav1255",
+      "target": "sout1528"
+    },
+    {
+      "source": "ngun1280",
+      "target": "tson1249"
+    },
+    {
+      "source": "ngun1280",
+      "target": "ngun1267"
+    },
+    {
+      "source": "nort3203",
+      "target": "rwan1241"
+    },
+    {
+      "source": "nort3203",
+      "target": "swah1253"
+    },
+    {
+      "source": "volt1241",
+      "target": "benu1247"
+    },
+    {
+      "source": "volt1241",
+      "target": "akan1250"
+    },
+    {
+      "source": "east2726",
+      "target": "chha1249"
+    },
+    {
+      "source": "east2726",
+      "target": "awad1243"
+    },
+    {
+      "source": "benu1247",
+      "target": "nucl1417"
+    },
+    {
+      "source": "benu1247",
+      "target": "yoru1245"
+    },
+    {
+      "source": "benu1247",
+      "target": "narr1281"
+    },
+    {
+      "source": "arab1395",
+      "target": "arab1393"
+    },
+    {
+      "source": "arab1395",
+      "target": "stan1318"
+    },
+    {
+      "source": "arab1395",
+      "target": "egyp1254"
+    },
+    {
+      "source": "arab1395",
+      "target": "sout3123"
+    },
+    {
+      "source": "arab1395",
+      "target": "magh1239"
+    },
+    {
+      "source": "daic1237",
+      "target": "nort3180"
+    },
+    {
+      "source": "daic1237",
+      "target": "thai1261"
+    },
+    {
+      "source": "egyp1254",
+      "target": "egyp1253"
+    },
+    {
+      "source": "egyp1254",
+      "target": "said1239"
+    },
+    {
+      "source": "egyp1254",
+      "target": "suda1236"
+    },
+    {
+      "source": "west2838",
+      "target": "stan1288"
+    },
+    {
+      "source": "west2838",
+      "target": "port1283"
+    },
+    {
+      "source": "book1242",
+      "target": "chit1285"
+    },
+    {
+      "source": "book1242",
+      "target": "mala1546"
+    },
+    {
+      "source": "oriy1254",
+      "target": "gaud1237"
+    },
+    {
+      "source": "oriy1254",
+      "target": "oriy1255"
+    },
+    {
+      "source": "east2731",
+      "target": "nort3203"
+    },
+    {
+      "source": "east2731",
+      "target": "nyan1308"
+    },
+    {
+      "source": "east2731",
+      "target": "ngun1280"
+    },
+    {
+      "source": "main1283",
+      "target": "soma1255"
+    },
+    {
+      "source": "main1283",
+      "target": "nucl1736"
+    },
+    {
+      "source": "rwan1241",
+      "target": "kiny1244"
+    },
+    {
+      "source": "rwan1241",
+      "target": "rund1242"
+    },
+    {
+      "source": "glob1241",
+      "target": "dutc1256"
+    },
+    {
+      "source": "glob1241",
+      "target": "afri1274"
+    },
+    {
+      "source": "midd1354",
+      "target": "ganc1239"
+    },
+    {
+      "source": "midd1354",
+      "target": "hakk1236"
+    },
+    {
+      "source": "midd1354",
+      "target": "nort3155"
+    },
+    {
+      "source": "midd1354",
+      "target": "xian1251"
+    },
+    {
+      "source": "midd1354",
+      "target": "cant1236"
+    },
+    {
+      "source": "midd1354",
+      "target": "wuch1236"
+    },
+    {
+      "source": "shif1234",
+      "target": "west2838"
+    },
+    {
+      "source": "shif1234",
+      "target": "stan1290"
+    },
+    {
+      "source": "turk1311",
+      "target": "comm1245"
+    },
+    {
+      "source": "aust1305",
+      "target": "cent1989"
+    },
+    {
+      "source": "aust1305",
+      "target": "viet1252"
+    },
+    {
+      "source": "kore1284",
+      "target": "kore1280"
+    },
+    {
+      "source": "mait1254",
+      "target": "maga1260"
+    },
+    {
+      "source": "mait1254",
+      "target": "mait1250"
+    },
+    {
+      "source": "mait1254",
+      "target": "bhoj1244"
+    },
+    {
+      "source": "minn1248",
+      "target": "coas1318"
+    },
+    {
+      "source": "minn1248",
+      "target": "minb1244"
+    },
+    {
+      "source": "taik1256",
+      "target": "daic1237"
+    },
+    {
+      "source": "west2786",
+      "target": "arab1395"
+    },
+    {
+      "source": "west2786",
+      "target": "amha1245"
+    },
+    {
+      "source": "guja1255",
+      "target": "raja1256"
+    },
+    {
+      "source": "guja1255",
+      "target": "guja1252"
+    },
+    {
+      "source": "afro1255",
+      "target": "west2786"
+    },
+    {
+      "source": "afro1255",
+      "target": "haus1257"
+    },
+    {
+      "source": "afro1255",
+      "target": "main1283"
+    },
+    {
+      "source": "afro1255",
+      "target": "cent2195"
+    },
+    {
+      "source": "coas1318",
+      "target": "mind1253"
+    },
+    {
+      "source": "coas1318",
+      "target": "minn1241"
+    },
+    {
+      "source": "ural1272",
+      "target": "hung1274"
+    },
+    {
+      "source": "drav1251",
+      "target": "sout3133"
+    },
+    {
+      "source": "indo1320",
+      "target": "midd1375"
+    },
+    {
+      "source": "indo1320",
+      "target": "iran1269"
+    },
+    {
+      "source": "gaud1238",
+      "target": "beng1280"
+    },
+    {
+      "source": "gaud1238",
+      "target": "sylh1242"
+    },
+    {
+      "source": "gaud1238",
+      "target": "chit1275"
+    },
+    {
+      "source": "roma1334",
+      "target": "ital1285"
+    },
+    {
+      "source": "roma1334",
+      "target": "roma1327"
+    },
+    {
+      "source": "japo1237",
+      "target": "nucl1643"
+    },
+    {
+      "source": "nucl1276",
+      "target": "nort2646"
+    },
+    {
+      "source": "nucl1276",
+      "target": "sout2649"
+    },
+    {
+      "source": "west2792",
+      "target": "czec1258"
+    },
+    {
+      "source": "west2792",
+      "target": "poli1260"
+    },
+    {
+      "source": "narr1281",
+      "target": "east2731"
+    },
+    {
+      "source": "narr1281",
+      "target": "ling1263"
+    },
+    {
+      "source": "cent2246",
+      "target": "taga1269"
+    },
+    {
+      "source": "cent2246",
+      "target": "cebu1242"
+    },
+    {
+      "source": "hind1270",
+      "target": "hind1269"
+    },
+    {
+      "source": "hind1270",
+      "target": "dakh1244"
+    },
+    {
+      "source": "nucl1769",
+      "target": "nucl1301"
+    },
+    {
+      "source": "nucl1769",
+      "target": "sout2697"
+    },
+    {
+      "source": "nucl1769",
+      "target": "turk1304"
+    },
+    {
+      "source": "arab1393",
+      "target": "hija1235"
+    },
+    {
+      "source": "arab1393",
+      "target": "taiz1242"
+    },
+    {
+      "source": "arab1393",
+      "target": "sana1295"
+    }
+  ]
+}
