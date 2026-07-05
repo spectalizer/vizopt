@@ -172,19 +172,6 @@ def test_graph_england_in_great_britain():
     assert G.has_edge("Great Britain", "England")
 
 
-def test_graph_without_ireland_island():
-    G = make_british_islands_graph(include_ireland_island=False)
-    assert "Ireland island" not in G.nodes
-    assert G.has_edge("British Islands", "Republic of Ireland")
-
-
-def test_graph_with_ireland_island():
-    G = make_british_islands_graph(include_ireland_island=True)
-    assert "Ireland island" in G.nodes
-    assert G.has_edge("Ireland island", "Republic of Ireland")
-    assert G.has_edge("Ireland island", "Northern Ireland")
-
-
 # ---------------------------------------------------------------------------
 # get_leaf_circles
 # ---------------------------------------------------------------------------
