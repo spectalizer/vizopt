@@ -1,5 +1,7 @@
 """MILP-based Euler diagram layout with rectangular set boundaries."""
 
+from typing import Sequence
+
 import numpy as np
 import pulp
 
@@ -17,7 +19,7 @@ def _grid_positions(N, r, L):
 def solve_euler_rectangles(
     membership,
     r=0.15,
-    offset=0.2,
+    offset: float | Sequence[float] = 0.2,
     layout_size=5.0,
     initial_positions=None,
     position_penalty=0.0,
