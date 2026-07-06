@@ -97,6 +97,8 @@ def treemap_layout(
     graph: nx.DiGraph,
     root: Path = Path("."),
     rect: Rect = (0.0, 0.0, 1.0, 1.0),
+    *,
+    padding: float = 0.0,
 ) -> dict[Path, Rect]:
     """Recursive squarified treemap layout of a file tree.
 
@@ -110,6 +112,12 @@ def treemap_layout(
         graph: Directed graph as returned by build_file_tree.
         root: Node to lay out the subtree of.
         rect: Bounding rectangle (x0, y0, x1, y1) assigned to root.
+        padding: Inset applied to a directory's rectangle, in the same
+            units as rect, before laying out its children. Leaves a
+            margin between a directory's border and its children so
+            nested rectangles stay visually distinguishable. Clamped so
+            it never exceeds half of either side of the directory's
+            rectangle.
 
     Returns:
         Dict mapping every node reachable from root (including root
@@ -122,14 +130,19 @@ def treemap_layout(
         return out
     out[root] = rect
 
+    def _inset(r: Rect) -> Rect:
+        x0, y0, x1, y1 = r
+        pad = min(padding, (x1 - x0) / 2, (y1 - y0) / 2)
+        return (x0 + pad, y0 + pad, x1 - pad, y1 - pad)
+
     def _layout(node: Path, node_rect: Rect) -> None:
         items = [(c, sizes[c]) for c in graph.successors(node) if sizes[c] > 0]
         for child, child_rect in squarify_layout(items, node_rect).items():
             out[child] = child_rect
             if graph.nodes[child]["is_dir"]:
-                _layout(child, child_rect)
+                _layout(child, _inset(child_rect))
 
-    _layout(root, rect)
+    _layout(root, _inset(rect))
     return out
 
 
@@ -137,22 +150,26 @@ def plot_treemap(
     graph: nx.DiGraph,
     root: Path = Path("."),
     *,
+    padding: float = 0.0,
     ax: Axes | None = None,
 ) -> Axes:
     """Plot a squarified treemap of a file tree.
 
-    Directories are drawn as unfilled outlines (so nested children remain
-    visible) and files as filled, labeled rectangles.
+    Directories are drawn as unfilled, labeled outlines (so nested
+    children remain visible) and files as filled, labeled rectangles.
 
     Args:
         graph: Directed graph as returned by build_file_tree.
         root: Node to plot the subtree of.
+        padding: Inset left between a directory's border and its
+            children; see treemap_layout. Also gives directory name
+            labels room to sit clear of their children.
         ax: Axes to draw on. A new figure and axes are created if None.
 
     Returns:
         The axes the treemap was drawn on.
     """
-    rects = treemap_layout(graph, root)
+    rects = treemap_layout(graph, root, padding=padding)
     if ax is None:
         _, ax = plt.subplots(figsize=(10, 7))
     assert ax is not None
@@ -169,7 +186,20 @@ def plot_treemap(
                 linewidth=1.5 if is_dir else 0.5,
             )
         )
-        if not is_dir:
+        if is_dir:
+            if node != root:
+                ax.annotate(
+                    node.name,
+                    xy=(x0, y1),
+                    xytext=(3, -3),
+                    textcoords="offset points",
+                    ha="left",
+                    va="top",
+                    fontsize=8,
+                    fontweight="bold",
+                    clip_on=True,
+                )
+        else:
             ax.text(
                 (x0 + x1) / 2,
                 (y0 + y1) / 2,

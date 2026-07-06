@@ -112,3 +112,36 @@ def test_treemap_layout_skips_zero_size_subdirectories(tmp_path):
         Path("sub"),
         Path("sub/b.txt"),
     }
+
+
+def test_treemap_layout_padding_insets_children(tmp_path):
+    root = _make_tree(tmp_path)
+    graph = build_file_tree(root)
+
+    rects = treemap_layout(graph, padding=0.05)
+
+    # Root itself keeps the full rect; only its children are inset.
+    assert rects[Path(".")] == (0.0, 0.0, 1.0, 1.0)
+    for node in (Path("a.txt"), Path("sub")):
+        x0, y0, x1, y1 = rects[node]
+        assert x0 >= 0.05 - 1e-9
+        assert y0 >= 0.05 - 1e-9
+        assert x1 <= 0.95 + 1e-9
+        assert y1 <= 0.95 + 1e-9
+    # sub/b.txt must be strictly inside sub's (also inset) rect.
+    sx0, sy0, sx1, sy1 = rects[Path("sub")]
+    bx0, by0, bx1, by1 = rects[Path("sub/b.txt")]
+    assert sx0 < bx0 and bx1 < sx1
+    assert sy0 < by0 and by1 < sy1
+
+
+def test_treemap_layout_padding_clamped_for_tiny_rects(tmp_path):
+    root = _make_tree(tmp_path)
+    graph = build_file_tree(root)
+
+    # padding far larger than the rect must not invert x0/x1 or y0/y1.
+    rects = treemap_layout(graph, padding=1000.0)
+
+    for x0, y0, x1, y1 in rects.values():
+        assert x0 <= x1
+        assert y0 <= y1
