@@ -1,5 +1,6 @@
 """Introspection utilities for visualizing the structure of this project."""
 
+import ast
 from pathlib import Path
 
 import networkx as nx
@@ -216,3 +217,25 @@ def plot_treemap(
     ax.set_aspect("equal")
     ax.set_axis_off()
     return ax
+
+
+def parse_module_ast(path: str | Path) -> ast.Module:
+    """Parse a Python module file into its abstract syntax tree.
+
+    Args:
+        path: Path to a .py file. Accepts a string path or a
+            pathlib.Path.
+
+    Returns:
+        The parsed module. Its filename is attached via ast.parse's
+        filename argument, so downstream tools (e.g. ast.walk error
+        messages) can report locations against the original file.
+
+    Raises:
+        FileNotFoundError: If path does not point to an existing file.
+        SyntaxError: If the file's contents are not valid Python.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} is not a file")
+    return ast.parse(path.read_text(), filename=str(path))

@@ -1,10 +1,16 @@
 """Tests for vizopt.introspection"""
 
+import ast
 from pathlib import Path
 
 import pytest
 
-from vizopt.introspection import build_file_tree, compute_subtree_sizes, treemap_layout
+from vizopt.introspection import (
+    build_file_tree,
+    compute_subtree_sizes,
+    parse_module_ast,
+    treemap_layout,
+)
 
 
 def _make_tree(tmp_path):
@@ -145,3 +151,29 @@ def test_treemap_layout_padding_clamped_for_tiny_rects(tmp_path):
     for x0, y0, x1, y1 in rects.values():
         assert x0 <= x1
         assert y0 <= y1
+
+
+def test_parse_module_ast_returns_module(tmp_path):
+    module_path = tmp_path / "example.py"
+    module_path.write_text("class Base:\n    pass\n\n\nclass Child(Base):\n    pass\n")
+
+    tree = parse_module_ast(module_path)
+
+    assert isinstance(tree, ast.Module)
+    class_names = [
+        n.name for n in ast.iter_child_nodes(tree) if isinstance(n, ast.ClassDef)
+    ]
+    assert class_names == ["Base", "Child"]
+
+
+def test_parse_module_ast_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        parse_module_ast(tmp_path / "does_not_exist.py")
+
+
+def test_parse_module_ast_invalid_syntax(tmp_path):
+    module_path = tmp_path / "broken.py"
+    module_path.write_text("def broken(:\n")
+
+    with pytest.raises(SyntaxError):
+        parse_module_ast(module_path)
