@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from vizopt.introspection import (
+    build_class_hierarchy,
     build_file_tree,
     compute_subtree_sizes,
     parse_module_ast,
@@ -177,3 +178,73 @@ def test_parse_module_ast_invalid_syntax(tmp_path):
 
     with pytest.raises(SyntaxError):
         parse_module_ast(module_path)
+
+
+def test_parse_module_ast_reads_non_ascii_as_utf8(tmp_path):
+    module_path = tmp_path / "unicode_docstring.py"
+    module_path.write_bytes(
+        'def f():\n    """Uses subscripts a₀, a₁."""\n'.encode("utf-8")
+    )
+
+    tree = parse_module_ast(module_path)
+
+    docstring = ast.get_docstring(tree.body[0])
+    assert docstring == "Uses subscripts a₀, a₁."
+
+
+def test_build_class_hierarchy_simple_inheritance(tmp_path):
+    module_path = tmp_path / "example.py"
+    module_path.write_text("class Base:\n    pass\n\n\nclass Child(Base):\n    pass\n")
+
+    graph = build_class_hierarchy(parse_module_ast(module_path))
+
+    assert set(graph.nodes) == {"Base", "Child"}
+    assert list(graph.successors("Base")) == ["Child"]
+
+
+def test_build_class_hierarchy_multiple_inheritance(tmp_path):
+    module_path = tmp_path / "example.py"
+    module_path.write_text(
+        "class A:\n"
+        "    pass\n\n\n"
+        "class B:\n"
+        "    pass\n\n\n"
+        "class C(A, B):\n"
+        "    pass\n"
+    )
+
+    graph = build_class_hierarchy(parse_module_ast(module_path))
+
+    assert set(graph.predecessors("C")) == {"A", "B"}
+
+
+def test_build_class_hierarchy_external_base_added_as_node(tmp_path):
+    module_path = tmp_path / "example.py"
+    module_path.write_text(
+        "import base\n\n\nclass Child(base.VizOptimizer):\n    pass\n"
+    )
+
+    graph = build_class_hierarchy(parse_module_ast(module_path))
+
+    assert set(graph.nodes) == {"base.VizOptimizer", "Child"}
+    assert list(graph.successors("base.VizOptimizer")) == ["Child"]
+
+
+def test_build_class_hierarchy_no_inheritance_isolated_node(tmp_path):
+    module_path = tmp_path / "example.py"
+    module_path.write_text("class Standalone:\n    pass\n")
+
+    graph = build_class_hierarchy(parse_module_ast(module_path))
+
+    assert list(graph.nodes) == ["Standalone"]
+    assert list(graph.edges) == []
+
+
+def test_build_class_hierarchy_subscripted_base_falls_back_to_unparse(tmp_path):
+    module_path = tmp_path / "example.py"
+    module_path.write_text("class Child(Generic[int]):\n    pass\n")
+
+    graph = build_class_hierarchy(parse_module_ast(module_path))
+
+    assert set(graph.nodes) == {"Generic[int]", "Child"}
+    assert list(graph.successors("Generic[int]")) == ["Child"]

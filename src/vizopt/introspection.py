@@ -238,4 +238,44 @@ def parse_module_ast(path: str | Path) -> ast.Module:
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"{path} is not a file")
-    return ast.parse(path.read_text(), filename=str(path))
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def _base_name(node: ast.expr) -> str:
+    """Best-effort dotted name for a base class expression."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_base_name(node.value)}.{node.attr}"
+    return ast.unparse(node)
+
+
+def build_class_hierarchy(tree: ast.Module) -> nx.DiGraph:
+    """Build a class-inheritance graph from a module's AST.
+
+    Walks every ast.ClassDef in tree, at any nesting level, and adds a
+    parent -> child edge from each base class to the class that inherits
+    from it, following the project's parent -> child edge convention.
+    Base classes are added as nodes even when they are not themselves
+    defined in tree (e.g. imported classes), so cross-module inheritance
+    edges remain visible.
+
+    Classes are identified by their simple name (dotted, for bases
+    accessed through attribute access, e.g. module.Class); same-named
+    classes defined in different scopes are not distinguished and will
+    collide as a single node.
+
+    Args:
+        tree: Module AST, as returned by parse_module_ast.
+
+    Returns:
+        Directed graph whose edges point from base class to subclass.
+    """
+    graph: nx.DiGraph = nx.DiGraph()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        graph.add_node(node.name)
+        for base in node.bases:
+            graph.add_edge(_base_name(base), node.name)
+    return graph
