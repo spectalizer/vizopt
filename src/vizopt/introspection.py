@@ -279,3 +279,137 @@ def build_class_hierarchy(tree: ast.Module) -> nx.DiGraph:
         for base in node.bases:
             graph.add_edge(_base_name(base), node.name)
     return graph
+
+
+def _climb(directory: Path, levels: int) -> Path | None:
+    """Directory reached by climbing levels - 1 steps above directory.
+
+    Mirrors Python's relative-import level convention: level 1 (a
+    single leading dot) leaves directory unchanged, level 2 goes up one
+    directory, and so on. Returns None if climbing would go above the
+    project root.
+    """
+    if levels == 1:
+        return directory
+    ancestors = directory.parents
+    index = levels - 2
+    if index >= len(ancestors):
+        return None
+    return ancestors[index]
+
+
+def build_import_graph(
+    root: str | Path,
+    *,
+    ignore: set[str] | None = None,
+) -> nx.DiGraph:
+    """Build a directed graph of import dependencies between modules.
+
+    Parses every .py file under root and adds an edge from an importing
+    module to each internal module or package it imports (edges point
+    importer -> imported). Imports of external and standard-library
+    packages are dropped, since they resolve to nothing under root.
+
+    Absolute imports (e.g. from vizopt.base import X) are resolved by
+    matching root.name as the top-level package name; if root is not
+    itself that package's directory, absolute imports will not resolve.
+    Relative imports (from .base import X, from ..templates import
+    color, etc.) are resolved directly against root's directory
+    structure and are unaffected by root.name.
+
+    When an imported name refers to a further submodule or subpackage
+    (e.g. from ..components import common, where common is
+    components/common.py), the edge points to that submodule rather
+    than to the enclosing package; otherwise it points to the module or
+    package the name was imported from.
+
+    Args:
+        root: Package directory to walk. Accepts a string path or a
+            pathlib.Path; relative paths are resolved against the
+            current working directory.
+        ignore: Forwarded to build_file_tree.
+
+    Returns:
+        Directed graph whose nodes are the same pathlib.Path keys as
+        build_file_tree (relative to root, including every .py file
+        even if it has no internal imports) and whose edges point from
+        an importing module to each internal module or package it
+        imports.
+
+    Raises:
+        NotADirectoryError: If root is not an existing directory.
+    """
+    root = Path(root).resolve()
+    file_tree = build_file_tree(root, ignore=ignore)
+    package_name = root.name
+
+    file_nodes = {n for n in file_tree.nodes if not file_tree.nodes[n]["is_dir"]}
+    dir_nodes = {n for n in file_tree.nodes if file_tree.nodes[n]["is_dir"]}
+
+    def _resolve_module(module_dir: Path) -> Path | None:
+        if module_dir == Path("."):
+            return Path(".")
+        module_file = module_dir.with_name(module_dir.name + ".py")
+        if module_file in file_nodes:
+            return module_file
+        if module_dir in dir_nodes:
+            return module_dir
+        return None
+
+    def _add_from_edges(source: Path, base_dir: Path, names: list[str]) -> None:
+        for name in names:
+            if base_dir / f"{name}.py" in file_nodes:
+                graph.add_edge(source, base_dir / f"{name}.py")
+                continue
+            if base_dir / name in dir_nodes:
+                graph.add_edge(source, base_dir / name)
+                continue
+            target = _resolve_module(base_dir)
+            if target is not None:
+                graph.add_edge(source, target)
+
+    def _absolute_base_dir(dotted: str) -> Path | None:
+        if not (dotted == package_name or dotted.startswith(package_name + ".")):
+            return None
+        remainder = dotted[len(package_name) :].lstrip(".")
+        return Path(*remainder.split(".")) if remainder else Path(".")
+
+    graph: nx.DiGraph = nx.DiGraph()
+    graph.add_nodes_from(n for n in file_nodes if n.suffix == ".py")
+
+    for rel_path in file_nodes:
+        if rel_path.suffix != ".py":
+            continue
+        tree = parse_module_ast(root / rel_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module_dir = _absolute_base_dir(alias.name)
+                    if module_dir is None:
+                        continue
+                    target = _resolve_module(module_dir)
+                    if target is not None:
+                        graph.add_edge(rel_path, target)
+            elif isinstance(node, ast.ImportFrom):
+                if node.level == 0:
+                    # Python's grammar guarantees module is set when level
+                    # is 0 (only "from . import x" style syntax, which
+                    # always has level >= 1, allows module to be None).
+                    assert node.module is not None
+                    base_dir = _absolute_base_dir(node.module)
+                    if base_dir is None:
+                        continue
+                else:
+                    climbed = _climb(rel_path.parent, node.level)
+                    if climbed is None:
+                        continue
+                    base_dir = (
+                        climbed / Path(*node.module.split("."))
+                        if node.module
+                        else climbed
+                    )
+                _add_from_edges(
+                    rel_path, base_dir, [alias.name for alias in node.names]
+                )
+
+    return graph

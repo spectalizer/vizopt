@@ -8,6 +8,7 @@ import pytest
 from vizopt.introspection import (
     build_class_hierarchy,
     build_file_tree,
+    build_import_graph,
     compute_subtree_sizes,
     parse_module_ast,
     treemap_layout,
@@ -248,3 +249,147 @@ def test_build_class_hierarchy_subscripted_base_falls_back_to_unparse(tmp_path):
 
     assert set(graph.nodes) == {"Generic[int]", "Child"}
     assert list(graph.successors("Generic[int]")) == ["Child"]
+
+
+def test_build_import_graph_relative_sibling_import(tmp_path):
+    (tmp_path / "a.py").write_text("from .b import X\n")
+    (tmp_path / "b.py").write_text("X = 1\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert set(graph.nodes) == {Path("a.py"), Path("b.py")}
+    assert list(graph.successors(Path("a.py"))) == [Path("b.py")]
+
+
+def test_build_import_graph_relative_import_climbs_to_parent(tmp_path):
+    (tmp_path / "top.py").write_text("TOP = 1\n")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "__init__.py").write_text("")
+    (sub / "mod.py").write_text("from ..top import TOP\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.successors(Path("sub/mod.py"))) == [Path("top.py")]
+
+
+def test_build_import_graph_prefers_specific_submodule(tmp_path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "sub.py").write_text("SUB = 1\n")
+    (tmp_path / "user.py").write_text("from .pkg import sub\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.successors(Path("user.py"))) == [Path("pkg/sub.py")]
+
+
+def test_build_import_graph_falls_back_to_package_when_name_is_not_a_submodule(
+    tmp_path,
+):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("VALUE = 1\n")
+    (tmp_path / "user.py").write_text("from .pkg import VALUE\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.successors(Path("user.py"))) == [Path("pkg")]
+    assert Path("pkg") in graph.nodes  # the package directory itself is the target
+
+
+def test_build_import_graph_resolves_absolute_imports_against_root_name(tmp_path):
+    root = tmp_path / "mypkg"
+    root.mkdir()
+    (root / "a.py").write_text("import mypkg.b\n")
+    (root / "b.py").write_text("B = 1\n")
+
+    graph = build_import_graph(root)
+
+    assert list(graph.successors(Path("a.py"))) == [Path("b.py")]
+
+
+def test_build_import_graph_ignores_external_imports(tmp_path):
+    (tmp_path / "a.py").write_text("import os\nimport numpy as np\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.nodes) == [Path("a.py")]
+    assert list(graph.edges) == []
+
+
+def test_build_import_graph_skips_imports_escaping_root(tmp_path):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "mod.py").write_text("from ... import something\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.edges) == []
+
+
+def test_build_import_graph_bare_package_import_targets_root(tmp_path):
+    root = tmp_path / "mypkg"
+    root.mkdir()
+    (root / "a.py").write_text("import mypkg\n")
+
+    graph = build_import_graph(root)
+
+    assert list(graph.successors(Path("a.py"))) == [Path(".")]
+
+
+def test_build_import_graph_unresolvable_relative_import_yields_no_edge(tmp_path):
+    (tmp_path / "a.py").write_text("from .does_not_exist import X\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.nodes) == [Path("a.py")]
+    assert list(graph.edges) == []
+
+
+def test_build_import_graph_subpackage_import_targets_directory(tmp_path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    subpkg = pkg / "subpkg"
+    subpkg.mkdir()
+    (subpkg / "__init__.py").write_text("")
+    (tmp_path / "user.py").write_text("from .pkg import subpkg\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert list(graph.successors(Path("user.py"))) == [Path("pkg/subpkg")]
+
+
+def test_build_import_graph_resolves_absolute_from_import(tmp_path):
+    root = tmp_path / "mypkg"
+    root.mkdir()
+    (root / "a.py").write_text("from mypkg.b import VALUE\n")
+    (root / "b.py").write_text("VALUE = 1\n")
+
+    graph = build_import_graph(root)
+
+    assert list(graph.successors(Path("a.py"))) == [Path("b.py")]
+
+
+def test_build_import_graph_ignores_external_absolute_from_import(tmp_path):
+    root = tmp_path / "mypkg"
+    root.mkdir()
+    (root / "a.py").write_text("from otherpkg.b import VALUE\n")
+
+    graph = build_import_graph(root)
+
+    assert list(graph.nodes) == [Path("a.py")]
+    assert list(graph.edges) == []
+
+
+def test_build_import_graph_ignores_non_python_files(tmp_path):
+    (tmp_path / "a.py").write_text("from .b import X\n")
+    (tmp_path / "b.py").write_text("X = 1\n")
+    (tmp_path / "README.md").write_text("not python\n")
+
+    graph = build_import_graph(tmp_path)
+
+    assert Path("README.md") not in graph.nodes
+    assert list(graph.successors(Path("a.py"))) == [Path("b.py")]
