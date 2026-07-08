@@ -219,6 +219,70 @@ def plot_treemap(
     return ax
 
 
+_DEFAULT_ARROW_PROPS = {
+    "arrowstyle": "->",
+    "color": "#8f52e0",
+    "lw": 1.0,
+    "alpha": 0.6,
+    "shrinkA": 5,
+    "shrinkB": 5,
+    "connectionstyle": "arc3,rad=0.15",
+}
+
+
+def plot_treemap_with_imports(
+    file_graph: nx.DiGraph,
+    import_graph: nx.DiGraph,
+    root: Path = Path("."),
+    *,
+    padding: float = 0.0,
+    ax: Axes | None = None,
+    arrow_props: dict | None = None,
+) -> Axes:
+    """Plot a file-tree treemap with import edges overlaid.
+
+    Draws the treemap via plot_treemap, then, for every edge in
+    import_graph whose endpoints both have a rectangle in the treemap,
+    draws a curved arrow between the centers of those rectangles
+    (importer -> imported). Edges with an endpoint outside the plotted
+    subtree (e.g. filtered out by root, or resolving to a node absent
+    from file_graph) are silently skipped, as are self-loops.
+
+    Args:
+        file_graph: Directed graph as returned by build_file_tree.
+        import_graph: Directed graph as returned by build_import_graph,
+            built from the same root directory as file_graph so node
+            paths line up with the treemap rectangles.
+        root: Node to plot the subtree of.
+        padding: Forwarded to plot_treemap and treemap_layout.
+        ax: Axes to draw on. A new figure and axes are created if None.
+        arrow_props: Keyword arguments forwarded to matplotlib's
+            Axes.annotate as arrowprops, merged over the default style
+            (a semi-transparent red curved arrow). Keys given here
+            override the corresponding default.
+
+    Returns:
+        The axes the treemap and import edges were drawn on.
+    """
+    ax = plot_treemap(file_graph, root, padding=padding, ax=ax)
+    rects = treemap_layout(file_graph, root, padding=padding)
+    centers = {
+        node: ((x0 + x1) / 2, (y0 + y1) / 2) for node, (x0, y0, x1, y1) in rects.items()
+    }
+    resolved_arrow_props = {**_DEFAULT_ARROW_PROPS, **(arrow_props or {})}
+
+    for source, target in import_graph.edges:
+        if source == target or source not in centers or target not in centers:
+            continue
+        ax.annotate(
+            "",
+            xy=centers[target],
+            xytext=centers[source],
+            arrowprops=resolved_arrow_props,
+        )
+    return ax
+
+
 def parse_module_ast(path: str | Path) -> ast.Module:
     """Parse a Python module file into its abstract syntax tree.
 

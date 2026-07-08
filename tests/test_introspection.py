@@ -3,6 +3,10 @@
 import ast
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+
 import pytest
 
 from vizopt.introspection import (
@@ -11,6 +15,7 @@ from vizopt.introspection import (
     build_import_graph,
     compute_subtree_sizes,
     parse_module_ast,
+    plot_treemap_with_imports,
     treemap_layout,
 )
 
@@ -393,3 +398,32 @@ def test_build_import_graph_ignores_non_python_files(tmp_path):
 
     assert Path("README.md") not in graph.nodes
     assert list(graph.successors(Path("a.py"))) == [Path("b.py")]
+
+
+def _arrow_annotations(ax):
+    return [t for t in ax.texts if t.get_text() == ""]
+
+
+def test_plot_treemap_with_imports_draws_one_arrow_per_resolvable_edge(tmp_path):
+    (tmp_path / "a.py").write_text("from .b import X\n")
+    (tmp_path / "b.py").write_text("X = 1\n")
+    file_tree = build_file_tree(tmp_path)
+    import_graph = build_import_graph(tmp_path)
+
+    ax = plot_treemap_with_imports(file_tree, import_graph)
+
+    assert len(_arrow_annotations(ax)) == 1
+
+
+def test_plot_treemap_with_imports_skips_edges_outside_plotted_subtree(tmp_path):
+    (tmp_path / "a.py").write_text("from .b import X\n")
+    (tmp_path / "b.py").write_text("X = 1\n")
+    file_tree = build_file_tree(tmp_path)
+    import_graph = build_import_graph(tmp_path)
+    # An edge referencing a node that has no rectangle in the treemap
+    # (e.g. resolved against a different root) must be silently skipped.
+    import_graph.add_edge(Path("a.py"), Path("unrelated.py"))
+
+    ax = plot_treemap_with_imports(file_tree, import_graph)
+
+    assert len(_arrow_annotations(ax)) == 1
