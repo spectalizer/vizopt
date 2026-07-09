@@ -10,6 +10,8 @@ are inside — the ray/slab intersection method used here is the vectorised
 equivalent of that check.
 """
 
+from typing import Any
+
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -576,7 +578,7 @@ class EulerDiagramRect(VizOptimizer):
         weight_label_top: float = 1.0,
         term_schedules=None,
         set_names: list[str] | None = None,
-        leaf_names: list | None = None,
+        leaf_names: list[Any] | None = None,
     ):
         self.rectangles = np.asarray(rectangles, dtype=np.float32)
         if self.rectangles.ndim == 1:
