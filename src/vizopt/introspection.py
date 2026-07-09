@@ -4,10 +4,12 @@ import ast
 from pathlib import Path
 
 import networkx as nx
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
 
+from .templates.euler.stars_vs_rectangles import EulerDiagramRect
 from .treemap import squarify_layout
 
 _DEFAULT_IGNORE = {".git", "__pycache__", ".mypy_cache", ".pytest_cache", ".venv"}
@@ -280,6 +282,144 @@ def plot_treemap_with_imports(
             xytext=centers[source],
             arrowprops=resolved_arrow_props,
         )
+    return ax
+
+
+def build_euler_diagram(
+    file_graph: nx.DiGraph,
+    root: Path = Path("."),
+    *,
+    padding: float = 0.0,
+    **kwargs,
+) -> EulerDiagramRect:
+    """Build a star-shaped Euler diagram optimizer for a file tree.
+
+    Seeds each file's rectangle from a squarified treemap layout of
+    file_graph (see treemap_layout) and wraps every directory in a convex
+    star-shaped boundary via EulerDiagramRect.from_graph, so nested
+    directories become nested/overlapping blobs rather than nested
+    rectangles. Files whose subtree has zero size (e.g. empty files) have
+    no treemap rectangle and are silently omitted, mirroring
+    treemap_layout's own convention.
+
+    Args:
+        file_graph: Directed graph as returned by build_file_tree.
+        root: Node to build the subtree of.
+        padding: Forwarded to treemap_layout; only affects the initial
+            (pre-optimization) seed positions and sizes.
+        **kwargs: Forwarded to EulerDiagramRect.from_graph (e.g. weight_*
+            terms, offsets, k_angles, term_schedules).
+
+    Returns:
+        An unfitted EulerDiagramRect. Call .optimize() before plotting it
+        with plot_euler_diagram_with_imports.
+    """
+    rects = treemap_layout(file_graph, root, padding=padding)
+    sub_nodes = set(rects)
+
+    inclusion_graph: nx.DiGraph = nx.DiGraph()
+    inclusion_graph.add_nodes_from(sub_nodes)
+    inclusion_graph.add_edges_from(
+        (u, v) for u, v in file_graph.edges if u in sub_nodes and v in sub_nodes
+    )
+    for node in sub_nodes:
+        if file_graph.nodes[node]["is_dir"]:
+            continue
+        x0, y0, x1, y1 = rects[node]
+        inclusion_graph.nodes[node]["center"] = [(x0 + x1) / 2, (y0 + y1) / 2]
+        inclusion_graph.nodes[node]["hw"] = (x1 - x0) / 2
+        inclusion_graph.nodes[node]["hh"] = (y1 - y0) / 2
+
+    return EulerDiagramRect.from_graph(inclusion_graph, **kwargs)
+
+
+def plot_euler_diagram_with_imports(
+    optim: EulerDiagramRect,
+    import_graph: nx.DiGraph,
+    *,
+    ax: Axes | None = None,
+    arrow_props: dict | None = None,
+) -> Axes:
+    """Plot a fitted file-tree Euler diagram with import edges overlaid.
+
+    Draws each directory's star-shaped boundary (optim.sets_) and each
+    file's rectangle (optim.rects_), then, for every edge in import_graph
+    whose endpoints both correspond to a leaf rectangle in optim, draws a
+    curved arrow between rectangle centers (importer -> imported). Edges
+    with an endpoint outside optim.leaf_names (e.g. a zero-size file
+    dropped by build_euler_diagram, or a node outside the plotted
+    subtree) are silently skipped, as are self-loops.
+
+    Args:
+        optim: An EulerDiagramRect built via build_euler_diagram, with
+            .optimize() already called.
+        import_graph: Directed graph as returned by build_import_graph,
+            built from the same root directory as the file tree optim
+            was seeded from.
+        ax: Axes to draw on. A new figure and axes are created if None.
+        arrow_props: Keyword arguments forwarded to matplotlib's
+            Axes.annotate as arrowprops, merged over the same default
+            style used by plot_treemap_with_imports. Keys given here
+            override the corresponding default.
+
+    Returns:
+        The axes the diagram and import edges were drawn on.
+
+    Raises:
+        ValueError: If optim.optimize() has not been called yet.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 7))
+    assert ax is not None
+
+    for res in reversed(optim.sets_):
+        cx, cy = res["center"]
+        xs = cx + res["radii"] * np.cos(res["angles"])
+        ys = cy + res["radii"] * np.sin(res["angles"])
+        xs, ys = np.append(xs, xs[0]), np.append(ys, ys[0])
+        ax.fill(xs, ys, alpha=0.12, color="#4472c4")
+        ax.plot(xs, ys, color="#4472c4", lw=1.5)
+
+    centers: dict[Path, tuple[float, float]] = {}
+    for name, (cx, cy, hw, hh) in zip(optim.leaf_names, optim.rects_):
+        ax.add_patch(
+            Rectangle(
+                (cx - hw, cy - hh),
+                2 * hw,
+                2 * hh,
+                facecolor="#4472c4",
+                edgecolor="white",
+                alpha=0.85,
+                linewidth=1,
+            )
+        )
+        ax.text(
+            cx,
+            cy,
+            name.name,
+            ha="center",
+            va="center",
+            fontsize=6.5,
+            color="white",
+            fontweight="bold",
+            clip_on=True,
+        )
+        centers[name] = (cx, cy)
+
+    resolved_arrow_props = {**_DEFAULT_ARROW_PROPS, **(arrow_props or {})}
+    for source, target in import_graph.edges:
+        if source == target or source not in centers or target not in centers:
+            continue
+        ax.annotate(
+            "",
+            xy=centers[target],
+            xytext=centers[source],
+            arrowprops=resolved_arrow_props,
+        )
+
+    ax.set_aspect("equal")
+    ax.autoscale()
+    ax.set_axis_off()
     return ax
 
 
