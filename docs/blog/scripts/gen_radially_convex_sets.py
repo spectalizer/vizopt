@@ -1,4 +1,7 @@
-"""Generate the radially convex sets illustration for the blog post."""
+"""Generate the radially convex sets illustration for the blog post.
+
+Run with `uv run python docs/blog/scripts/gen_radially_convex_sets.py`
+"""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,10 +43,15 @@ def draw_star_region(ax, r_fn, title):
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.8))
 fig.patch.set_facecolor("white")
 
-# (a) Convex blob
+# (a) Convex blob: rotated ellipse (always convex) with a small harmonic wobble
+# layered on top; amplitudes were checked numerically to stay within the
+# convexity margin (edge cross-products keep a single sign).
 draw_star_region(
     axes[0],
-    lambda t: 1.0 + 0.28 * np.cos(2 * t) + 0.12 * np.sin(3 * t + 0.7),
+    lambda t: (
+        1.0 / np.sqrt((np.cos(t - 0.4) / 1.15) ** 2 + (np.sin(t - 0.4) / 0.9) ** 2)
+    )
+    * (1 + 0.07 * np.cos(2 * t) + 0.03 * np.sin(3 * t + 0.7)),
     "(a) Convex",
 )
 
