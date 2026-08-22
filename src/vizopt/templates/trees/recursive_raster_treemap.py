@@ -95,6 +95,36 @@ def _term_contained_in_frozen_parent(optim_vars, input_params):
 # ---------------------------------------------------------------------------
 
 
+def _branching_buckets(graph: nx.DiGraph, sizes: dict) -> list[int]:
+    """Sorted distinct branching factors across every non-empty node in graph.
+
+    A node's branching factor is its number of positive-weight children.
+    Used to pad each sibling group to the smallest *observed* branching
+    factor that covers it, rather than a single tree-wide maximum: the
+    raster exclusion term is O(n_sets^2 x H x W), so padding a 2-child
+    directory up to the tree's largest (e.g. 12-child) node wastes real
+    compute every iteration, not just compile time. Padding to the next
+    actual branching factor present in the tree is never worse than the
+    global-max scheme for any node (the node that IS the max still gets
+    padded to exactly its own size) and is a strict generalization: passing
+    a single-element override reproduces the old uniform-padding behaviour.
+    """
+    counts = {
+        len([c for c in graph.successors(n) if sizes.get(c, 0) > 0])
+        for n in graph.nodes
+        if sizes.get(n, 0) > 0 and graph.out_degree(n) > 0
+    }
+    return sorted(counts)
+
+
+def _bucket_size(n: int, buckets: list[int]) -> int:
+    """Smallest value in buckets that is >= n."""
+    for b in buckets:
+        if b >= n:
+            return b
+    return n
+
+
 def _pad_siblings(nodes, target_areas, initial_centers, n_pad_to):
     """Pad a sibling group to a fixed size with near-zero-area dummy domains.
 
@@ -201,14 +231,18 @@ class RasterTreemapOptimizer:
             allowed to target. Below 1.0, leaving slack for packing
             inefficiency (gaps at corners, exclusion margins) rather than
             forcing children to claim area they can't actually occupy.
-        max_branching: Fixed `n_sets` every sibling-group optimization is
-            padded to (see `_pad_siblings`). Defaults to the largest number of
-            positive-weight children any node in `graph` has. Fixing this
-            across every call is a prerequisite for eventually reusing one
-            JIT compilation across calls; under the current
-            `~vizopt.jaxopt.optimize_gradient_descent` (a fresh closure
-            rebuilt on every `optimize()` call) it does not yet save any
-            compilation.
+        branching_buckets: Sorted list of `n_sets` values every sibling-group
+            optimization may be padded to (see `_pad_siblings`); each group is
+            padded to the smallest bucket that covers it. Defaults to the
+            sorted distinct branching factors actually present in `graph`
+            (see `_branching_buckets`), so a small sibling group is never
+            padded up to the tree's largest node. Pass a single-element list
+            to reproduce old-style uniform padding to one fixed `n_sets`
+            (e.g. for a future JIT-compile-reuse experiment, which needs a
+            fixed shape across calls; under the current
+            `~vizopt.jaxopt.optimize_gradient_descent`, a fresh closure
+            rebuilt on every `optimize()` call, no padding scheme saves
+            compilation today).
         grid_resolution, n_iters, learning_rate, exclusion_offset,
             containment_offset, weight_compactness, weight_containment,
             weight_target_area, weight_area, weight_perimeter,
@@ -225,7 +259,7 @@ class RasterTreemapOptimizer:
         root=None,
         mean_leaf_area: float = 3.0,
         fill_fraction: float = 0.85,
-        max_branching: int | None = None,
+        branching_buckets: list[int] | None = None,
         grid_resolution: int = 48,
         n_iters: int = 1200,
         learning_rate: float = 0.01,
@@ -249,7 +283,7 @@ class RasterTreemapOptimizer:
         )
         self.mean_leaf_area = mean_leaf_area
         self.fill_fraction = fill_fraction
-        self.max_branching = max_branching
+        self.branching_buckets = branching_buckets
         self.grid_resolution = grid_resolution
         self.n_iters = n_iters
         self.learning_rate = learning_rate
@@ -274,16 +308,9 @@ class RasterTreemapOptimizer:
         """
         graph, sizes, root = self.graph, self.sizes, self.root
 
-        max_branching = self.max_branching
-        if max_branching is None:
-            max_branching = max(
-                (
-                    len([c for c in graph.successors(n) if sizes.get(c, 0) > 0])
-                    for n in graph.nodes
-                    if sizes.get(n, 0) > 0 and graph.out_degree(n) > 0
-                ),
-                default=0,
-            )
+        buckets = self.branching_buckets
+        if buckets is None:
+            buckets = _branching_buckets(graph, sizes)
 
         root_children = [c for c in graph.successors(root) if sizes.get(c, 0) > 0]
         root_area = self.mean_leaf_area * len(root_children)
@@ -331,8 +358,9 @@ class RasterTreemapOptimizer:
                 dtype=np.float32,
             )
 
+            pad_to = _bucket_size(len(children), buckets)
             padded_names, padded_targets, padded_centers = _pad_siblings(
-                children, target_areas, initial_centers, max_branching
+                children, target_areas, initial_centers, pad_to
             )
             fitted = _fit_siblings(
                 padded_names,

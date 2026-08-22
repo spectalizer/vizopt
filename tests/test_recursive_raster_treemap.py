@@ -5,7 +5,11 @@ import numpy as np
 import pytest
 
 from vizopt.components.stars import radius_at_angle, star_polygon_area
-from vizopt.templates.trees.recursive_raster_treemap import RasterTreemapOptimizer
+from vizopt.templates.trees.recursive_raster_treemap import (
+    RasterTreemapOptimizer,
+    _branching_buckets,
+    _bucket_size,
+)
 
 _FAST = dict(grid_resolution=16, n_iters=30, learning_rate=0.02)
 _MODERATE = dict(grid_resolution=24, n_iters=600, learning_rate=0.02)
@@ -41,6 +45,59 @@ def _small_tree_and_sizes():
     leaf_weights = {"a1": 3.0, "a2": 1.0, "b1": 2.0, "c1": 1.0, "c2": 1.0, "c3": 2.0}
     sizes = _subtree_sizes(g, "root", leaf_weights)
     return g, sizes
+
+
+# ---------------------------------------------------------------------------
+# Branching-factor bucketing
+# ---------------------------------------------------------------------------
+
+
+def _lopsided_tree_and_sizes():
+    """root has 5 children; one of them ("a") has only 2 children."""
+    g = nx.DiGraph()
+    g.add_edges_from(
+        [
+            ("root", "a"),
+            ("root", "b"),
+            ("root", "c"),
+            ("root", "d"),
+            ("root", "e"),
+            ("a", "a1"),
+            ("a", "a2"),
+        ]
+    )
+    leaf_weights = {"a1": 1.0, "a2": 1.0, "b": 1.0, "c": 1.0, "d": 1.0, "e": 1.0}
+    sizes = _subtree_sizes(g, "root", leaf_weights)
+    return g, sizes
+
+
+def test_branching_buckets_are_sorted_distinct_observed_counts():
+    g, sizes = _lopsided_tree_and_sizes()
+    # root has 5 children, "a" has 2 -> observed branching factors are {2, 5}.
+    assert _branching_buckets(g, sizes) == [2, 5]
+
+
+def test_bucket_size_never_exceeds_the_tree_wide_max():
+    g, sizes = _lopsided_tree_and_sizes()
+    buckets = _branching_buckets(g, sizes)
+    # "a"'s 2 real children get padded to 2, not root's 5 -- the whole point
+    # of bucketing instead of a single tree-wide max.
+    assert _bucket_size(2, buckets) == 2
+    assert _bucket_size(5, buckets) == 5
+
+
+def test_single_element_override_reproduces_uniform_padding():
+    g, sizes = _lopsided_tree_and_sizes()
+    assert _bucket_size(2, [5]) == 5
+    assert _bucket_size(5, [5]) == 5
+
+
+def test_optimize_with_lopsided_tree_pads_small_group_below_tree_max():
+    g, sizes = _lopsided_tree_and_sizes()
+    optimizer = RasterTreemapOptimizer(g, sizes, **_FAST)
+    optimizer.optimize()
+    # No pad nodes should leak regardless of how much padding each group got.
+    assert all(not str(n).startswith("__pad_") for n in optimizer.node_shapes_)
 
 
 # ---------------------------------------------------------------------------
