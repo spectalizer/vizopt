@@ -10,20 +10,16 @@ from vizopt.templates.trees.recursive_raster_treemap import (
     _branching_buckets,
     _bucket_size,
 )
+from vizopt.treemap import subtree_sizes as _subtree_sizes_from_attr
 
 _FAST = dict(grid_resolution=16, n_iters=30, learning_rate=0.02)
 _MODERATE = dict(grid_resolution=24, n_iters=600, learning_rate=0.02)
 
 
 def _subtree_sizes(graph: nx.DiGraph, root, leaf_weights: dict) -> dict:
-    """Sum leaf_weights up the tree, generic over the graph's node types."""
-    sizes: dict = {}
-    for node in nx.dfs_postorder_nodes(graph, source=root):
-        children = list(graph.successors(node))
-        sizes[node] = (
-            leaf_weights[node] if not children else sum(sizes[c] for c in children)
-        )
-    return sizes
+    """Sum leaf_weights up the tree, via vizopt.treemap.subtree_sizes."""
+    nx.set_node_attributes(graph, leaf_weights, "size")
+    return _subtree_sizes_from_attr(graph, root)
 
 
 def _small_tree_and_sizes():
