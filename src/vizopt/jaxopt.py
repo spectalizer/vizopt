@@ -30,6 +30,7 @@ def optimize_gradient_descent(
         b2: Adam beta2.
         n_iters: Number of optimization steps.
         callback: Called each iteration with (i_iter, loss, params, grads).
+            May return a truthy value to stop early, after that iteration.
         decay_lr_to: Final learning rate as a fraction of `learning_rate`.
             0.0 means full cosine decay to zero; 1.0 means constant rate.
     """
@@ -61,6 +62,7 @@ def optimize_gradient_descent(
             params, opt_state, step
         )
         if callback is not None:
-            callback(i_iter, loss_value, params, grads)
+            if callback(i_iter, loss_value, params, grads):
+                break
 
     return params, float(loss_value)

@@ -11,7 +11,14 @@ from jax import numpy as jnp
 OptimVars = TypeVar("OptimVars")
 InputParams = TypeVar("InputParams")
 
-Callback = Callable[[int, Array, Any, Any], None]
+Callback = Callable[[int, Array, Any, Any], bool | None]
+"""A per-iteration optimization callback.
+
+Called as `callback(i_iter, loss_value, optim_vars, grads)`. A callback may
+return a truthy value to request the optimizer stop after the current
+iteration; returning `None` (the common case — most callbacks just print or
+record a snapshot) means "keep going".
+"""
 
 
 @dataclass
@@ -28,6 +35,16 @@ class OptimConfig:
         seed: Base random seed passed to `initialize`. Restart `i`
             receives `seed + i`.
         track_every: Record per-term history every this many iterations.
+        early_stop_patience: If set, stop once the (unscheduled) total loss
+            hasn't improved by at least a relative `early_stop_tol` fraction
+            over the last `early_stop_patience` iterations. Checked at
+            `track_every` granularity (piggybacking on the history recording
+            that already happens then, so this adds no extra device syncs);
+            values smaller than `track_every` are rounded up to it. `None`
+            (default) disables early stopping.
+        early_stop_tol: Relative-improvement threshold for early stopping;
+            see `early_stop_patience`. Ignored when `early_stop_patience` is
+            `None`.
     """
 
     n_iters: int = 1000
@@ -38,6 +55,8 @@ class OptimConfig:
     n_restarts: int = 1
     seed: int = 0
     track_every: int = 10
+    early_stop_patience: int | None = None
+    early_stop_tol: float = 1e-4
 
 
 @dataclass
@@ -47,9 +66,12 @@ class OptimizationResult(Generic[OptimVars]):
     Attributes:
         optim_vars: Optimized variables in physical (un-scaled) space.
         history: Per-iteration records. Each dict has keys `"iteration"`,
-            `"total"`, one key per term name (schedule-weighted value), one
-            per term name suffixed `_unscheduled` (end-weighted), and one per
-            term name suffixed `_unweighted` (raw, un-multiplied value).
+            `"total"`, `"total_unscheduled"` (sum of every term's
+            end-weighted value; used for `early_stop_patience` plateau
+            detection, since it isn't confounded by schedule ramping), one
+            key per term name (schedule-weighted value), one per term name
+            suffixed `_unscheduled` (end-weighted), and one per term name
+            suffixed `_unweighted` (raw, un-multiplied value).
         final_loss: Scalar loss of the best run at the last iteration.
     """
 
@@ -318,7 +340,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                 grads: Any,
                 _history: list[dict] = history,
                 _last_unscheduled: list[float] = _last_unscheduled,
-            ) -> None:
+            ) -> bool | None:
                 if self.var_scales is not None:
                     physical_vars = {
                         k: v * self.var_scales.get(k, 1.0)
@@ -326,6 +348,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                     }
                 else:
                     physical_vars = optim_vars
+                plateau_stop = False
                 if (i_iter % config.track_every == 0) or i_iter == config.n_iters - 1:
                     record: dict = {"iteration": i_iter, "total": float(loss_value)}
                     step = jnp.int32(i_iter)
@@ -349,10 +372,24 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                         )
                         record[f"{term.name}_unweighted"] = raw
                         unscheduled_total += raw * term.multiplier * end_sched
+                    record["total_unscheduled"] = unscheduled_total
                     _last_unscheduled[0] = unscheduled_total
                     _history.append(record)
+
+                    if config.early_stop_patience is not None:
+                        window = max(
+                            1, config.early_stop_patience // config.track_every
+                        )
+                        if len(_history) > window:
+                            prev_total = _history[-window - 1]["total_unscheduled"]
+                            curr_total = _history[-1]["total_unscheduled"]
+                            plateau_stop = (
+                                prev_total - curr_total
+                                < config.early_stop_tol * abs(prev_total)
+                            )
+                user_stop = None
                 if user_callback is not None:
-                    user_callback(i_iter, loss_value, physical_vars, grads)
+                    user_stop = user_callback(i_iter, loss_value, physical_vars, grads)
                 elif (
                     has_schedules
                     and (i_iter % 100 == 0)
@@ -362,6 +399,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
                         f"Iteration {i_iter}: loss = {float(loss_value):.6f}"
                         f"  unscheduled loss = {_last_unscheduled[0]:.6f}"
                     )
+                return plateau_stop or bool(user_stop)
 
             optim_vars = self.initialize(self.input_parameters, config.seed + restart)
             if self.var_scales is not None:

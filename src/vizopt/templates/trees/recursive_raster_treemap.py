@@ -167,6 +167,8 @@ def _fit_siblings(
     weight_exclusion=10.0,
     weight_smoothness=1.0,
     temperature=0.08,
+    early_stop_patience=300,
+    early_stop_tol=1e-3,
 ):
     """Fit RasterStarOptimizer to one sibling group, optionally contained in a frozen parent."""
     avg_radius = float(np.sqrt(np.mean(target_areas) / np.pi))
@@ -200,7 +202,12 @@ def _fit_siblings(
             )
         )
     optimizer.result_ = optimizer.problem_.optimize(
-        OptimConfig(n_iters=n_iters, learning_rate=learning_rate),
+        OptimConfig(
+            n_iters=n_iters,
+            learning_rate=learning_rate,
+            early_stop_patience=early_stop_patience,
+            early_stop_tol=early_stop_tol,
+        ),
         callback=lambda *_: None,
     )
     return dict(zip(nodes, optimizer.sets_))
@@ -243,6 +250,14 @@ class RasterTreemapOptimizer:
             `~vizopt.jaxopt.optimize_gradient_descent`, a fresh closure
             rebuilt on every `optimize()` call, no padding scheme saves
             compilation today).
+        early_stop_patience, early_stop_tol: Forwarded to every sibling-group
+            fit's `~vizopt.base.OptimConfig`. Most sibling groups (especially
+            small ones, now that `branching_buckets` no longer pads them up
+            to the tree's largest node) converge well before `n_iters`;
+            defaults on here since a recursive treemap runs many independent
+            fits where this reliably saves iterations, unlike the general
+            `OptimConfig` default (`None`, off) meant for a single
+            hand-tuned run. Pass `early_stop_patience=None` to disable.
         grid_resolution, n_iters, learning_rate, exclusion_offset,
             containment_offset, weight_compactness, weight_containment,
             weight_target_area, weight_area, weight_perimeter,
@@ -273,6 +288,8 @@ class RasterTreemapOptimizer:
         weight_exclusion: float = 10.0,
         weight_smoothness: float = 1.0,
         temperature: float = 0.08,
+        early_stop_patience: int | None = 300,
+        early_stop_tol: float = 1e-3,
     ):
         self.graph = graph
         self.sizes = sizes
@@ -297,6 +314,8 @@ class RasterTreemapOptimizer:
         self.weight_exclusion = weight_exclusion
         self.weight_smoothness = weight_smoothness
         self.temperature = temperature
+        self.early_stop_patience = early_stop_patience
+        self.early_stop_tol = early_stop_tol
 
     def optimize(self) -> dict:
         """Run the recursive layout.
@@ -329,6 +348,8 @@ class RasterTreemapOptimizer:
             weight_exclusion=self.weight_exclusion,
             weight_smoothness=self.weight_smoothness,
             temperature=self.temperature,
+            early_stop_patience=self.early_stop_patience,
+            early_stop_tol=self.early_stop_tol,
         )
 
         results: dict = {}

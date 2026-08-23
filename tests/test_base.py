@@ -202,3 +202,67 @@ def test_optimize_callback_called_every_iteration():
         callback=lambda i, *_: calls.append(i),
     )
     assert calls == [0, 1, 2, 3, 4]
+
+
+# --- early stopping ---
+
+
+def _problem_with_floor(x0: float = 5.0) -> OptimizationProblem:
+    """Minimize (x - 1)^2 + 0.5.
+
+    The loss floor (0.5) is approached asymptotically but never reached, so
+    once x is close to 1 the *relative* improvement per step vanishes even
+    though x keeps inching closer -- unlike a bare x^2, whose relative
+    per-step improvement stays roughly constant under gradient descent and
+    would never trigger plateau detection.
+    """
+    term = ObjectiveTerm(
+        name="floor_sq", compute=lambda v, p: (v["x"] - 1.0) ** 2 + 0.5, multiplier=1.0
+    )
+    template = OptimizationProblemTemplate(
+        terms=[term],
+        initialize=lambda p, seed: {"x": jnp.array(p.get("x0", 1.0))},
+    )
+    return template.instantiate({"x0": x0})
+
+
+def test_early_stop_stops_before_n_iters():
+    result = _problem_with_floor().optimize(
+        OptimConfig(
+            n_iters=2000,
+            learning_rate=0.05,
+            track_every=5,
+            early_stop_patience=50,
+            early_stop_tol=1e-4,
+        ),
+        callback=_NO_PRINT,
+    )
+    assert result.history[-1]["iteration"] < 1999
+
+
+def test_early_stop_disabled_by_default_runs_full_n_iters():
+    result = _problem_with_floor().optimize(
+        OptimConfig(n_iters=50, learning_rate=0.05, track_every=5), callback=_NO_PRINT
+    )
+    assert result.history[-1]["iteration"] == 49
+
+
+def test_history_has_total_unscheduled_key():
+    result = _problem_with_floor().optimize(
+        OptimConfig(n_iters=20, learning_rate=0.05, track_every=5), callback=_NO_PRINT
+    )
+    assert all("total_unscheduled" in record for record in result.history)
+
+
+def test_callback_can_request_early_stop_directly():
+    """Any callback -- not just built-in plateau detection -- can stop the run."""
+    calls = []
+
+    def stop_after_three(i_iter, *_):
+        calls.append(i_iter)
+        return i_iter >= 2
+
+    _simple_problem().optimize(
+        OptimConfig(n_iters=100, learning_rate=0.01), callback=stop_after_three
+    )
+    assert calls == [0, 1, 2]
