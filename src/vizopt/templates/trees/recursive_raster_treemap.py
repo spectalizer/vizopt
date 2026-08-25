@@ -23,7 +23,12 @@ from matplotlib import pyplot as plt
 
 from ...base import ObjectiveTerm, OptimConfig
 from ...components.common import calculate_total_width_penalty_for_circular_layout
-from ...components.stars import radius_at_angle, star_polygon_area
+from ...components.stars import (
+    Discrete,
+    StarRepresentation,
+    radius_at_angle,
+    star_polygon_area,
+)
 from ...treemap import squarify_layout
 from ..raster_stars import RasterStarOptimizer
 from ..star_vs_star import _dist_and_angle
@@ -152,6 +157,7 @@ def _fit_siblings(
     target_areas,
     initial_centers,
     *,
+    representation=None,
     parent_center=None,
     parent_radii=None,
     grid_resolution=48,
@@ -175,6 +181,7 @@ def _fit_siblings(
     optimizer = RasterStarOptimizer(
         n_sets=len(nodes),
         initial_centers=initial_centers,
+        representation=representation,
         target_areas=target_areas,
         initial_radius=avg_radius,
         grid_resolution=grid_resolution,
@@ -187,8 +194,14 @@ def _fit_siblings(
         temperature=temperature,
     )
     optimizer.problem_ = optimizer._build_problem()
+    angles_jnp = jnp.array(optimizer.problem_.input_parameters["angles"])
+    wrap = optimizer.representation.wrap
     optimizer.problem_.terms.append(
-        ObjectiveTerm("compactness", _term_compactness, multiplier=weight_compactness)
+        ObjectiveTerm(
+            "compactness",
+            wrap(_term_compactness, angles_jnp),
+            multiplier=weight_compactness,
+        )
     )
     if parent_center is not None:
         optimizer.problem_.input_parameters["parent_center"] = jnp.array(parent_center)
@@ -197,7 +210,7 @@ def _fit_siblings(
         optimizer.problem_.terms.append(
             ObjectiveTerm(
                 "contained_in_parent",
-                _term_contained_in_frozen_parent,
+                wrap(_term_contained_in_frozen_parent, angles_jnp),
                 multiplier=weight_containment,
             )
         )
@@ -238,6 +251,12 @@ class RasterTreemapOptimizer:
             allowed to target. Below 1.0, leaving slack for packing
             inefficiency (gaps at corners, exclusion margins) rather than
             forcing children to claim area they can't actually occupy.
+        representation: A `~vizopt.components.stars.StarRepresentation` instance
+            (`Discrete`, `Fourier`, or `BSpline`) controlling the boundary
+            parametrisation, shared across every level of the recursion (so a
+            parent's frozen `parent_radii` — interpolated on its own
+            `k_angles` grid — always lines up with the `k_angles` its
+            children optimize against). Defaults to `Discrete(k_angles=64)`.
         branching_buckets: Sorted list of `n_sets` values every sibling-group
             optimization may be padded to (see `_pad_siblings`); each group is
             padded to the smallest bucket that covers it. Defaults to the
@@ -274,6 +293,7 @@ class RasterTreemapOptimizer:
         root=None,
         mean_leaf_area: float = 3.0,
         fill_fraction: float = 0.85,
+        representation: StarRepresentation | None = None,
         branching_buckets: list[int] | None = None,
         grid_resolution: int = 48,
         n_iters: int = 1200,
@@ -300,6 +320,9 @@ class RasterTreemapOptimizer:
         )
         self.mean_leaf_area = mean_leaf_area
         self.fill_fraction = fill_fraction
+        self.representation = (
+            representation if representation is not None else Discrete()
+        )
         self.branching_buckets = branching_buckets
         self.grid_resolution = grid_resolution
         self.n_iters = n_iters
@@ -335,6 +358,7 @@ class RasterTreemapOptimizer:
         root_area = self.mean_leaf_area * len(root_children)
 
         fit_kwargs = dict(
+            representation=self.representation,
             grid_resolution=self.grid_resolution,
             n_iters=self.n_iters,
             learning_rate=self.learning_rate,

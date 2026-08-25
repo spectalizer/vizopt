@@ -4,7 +4,7 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from vizopt.components.stars import radius_at_angle, star_polygon_area
+from vizopt.components.stars import Fourier, radius_at_angle, star_polygon_area
 from vizopt.templates.trees.recursive_raster_treemap import (
     RasterTreemapOptimizer,
     _branching_buckets,
@@ -151,6 +151,26 @@ def test_plot_returns_axes_with_a_label_per_node():
     optimizer.optimize()
     ax = optimizer.plot()
     assert len(ax.texts) == len(optimizer.node_shapes_)
+
+
+# ---------------------------------------------------------------------------
+# representation
+# ---------------------------------------------------------------------------
+
+
+def test_optimize_with_non_default_representation():
+    # Exercises the compactness/containment terms' representation.wrap() path,
+    # which the default Discrete representation bypasses (identity wrap).
+    g, sizes = _small_tree_and_sizes()
+    representation = Fourier(k_angles=16, n_harmonics=3)
+    optimizer = RasterTreemapOptimizer(g, sizes, representation=representation, **_FAST)
+    optimizer.optimize()
+
+    expected = set(g.nodes) - {"root"}
+    assert set(optimizer.node_shapes_) == expected
+    for res in optimizer.node_shapes_.values():
+        assert res["radii"].shape == (16,)
+        assert "fourier_coeffs" in res
 
 
 # ---------------------------------------------------------------------------
