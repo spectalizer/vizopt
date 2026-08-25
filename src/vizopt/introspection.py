@@ -89,7 +89,7 @@ def compute_subtree_sizes(graph: nx.DiGraph, root: Path = Path(".")) -> dict[Pat
     """
     sizes: dict[Path, int] = {}
     for node in nx.dfs_postorder_nodes(graph, source=root):
-        if graph.nodes[node]["is_dir"]:
+        if graph.out_degree(node) > 0:
             sizes[node] = sum(sizes[child] for child in graph.successors(node))
         else:
             sizes[node] = graph.nodes[node]["size"]
