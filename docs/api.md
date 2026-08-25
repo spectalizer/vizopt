@@ -30,6 +30,16 @@
 
 ---
 
+## vizopt.components.bands
+
+::: vizopt.components.bands
+    options:
+      members: true
+      filters:
+        - "!^_"
+
+---
+
 ## vizopt.schedules
 
 ::: vizopt.schedules

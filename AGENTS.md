@@ -103,6 +103,15 @@ High-level functions can pass a `var_scales` dict to `OptimizationProblemTemplat
 - Two variants: fixed circle positions or jointly optimized circle positions
 - Boundaries are parametrized as center + K radii at uniformly-spaced angles (star polygon)
 
+#### Convex Band Sets (components/bands.py, templates/band_vs_band.py)
+
+Complementary to the star-shaped representation: a convex planar region is exactly the area between a concave upper boundary y2(x) and a convex lower boundary y1(x) over x in [x_min, x_max], so containment/overlap checks reduce to pointwise comparisons instead of general polygon clipping — at the cost of only being able to represent convex shapes.
+
+- `BandDomainOptimizer` (`templates/band_vs_band.py`) is the convex-only analog of `StarDomainOptimizer` (`templates/star_vs_star.py`): pure region layout, no underlying circles, with enclosure/exclusion masks and optional per-set target areas
+- Each boundary is parametrized as `x_bounds` (`[x_min, x_max]`, itself an optimization variable) plus K `(upper, lower)` pairs at uniformly-spaced columns — the `Discrete` representation in `components/bands.py` (the `BandRepresentation` ABC mirrors `StarRepresentation` for future smooth variants)
+- Multi-objective loss: target/plain area, perimeter, smoothness, convexity (optional), min-width/min-thickness guards, and band-vs-band enclosure/exclusion
+- Enclosure/exclusion evaluate a point against a target band by interpolating its `upper`/`lower` arrays at the point's x (linear interpolation over the K columns, clamped outside `[x_min, x_max]`), then comparing y — the band analog of the star representation's angle-interpolated radius comparison
+
 #### Template Module Structure
 
 A template module lives under `src/vizopt/templates/` and exposes one or more `VizOptimizer` subclasses. The constructor accepts domain inputs (data arrays, graphs) and hyperparameters (weights, representation choices) as named arguments and stores them as instance attributes — no computation happens yet. `_build_problem()` is the single method subclasses must implement: it converts all non-JAX inputs to numpy arrays, builds the list of `ObjectiveTerm`s, constructs an `OptimizationProblemTemplate`, and returns the result of `.instantiate(input_parameters, var_scales=...)`. Result properties (named with a trailing underscore, e.g. `sets_`, `circles_`, `positions_`) extract meaningful domain outputs from `self.result_.optim_vars` and raise `ValueError` if called before `optimize()`. When the problem is naturally specified by a graph, a `from_graph()` classmethod provides an ergonomic entry point that derives circles/rectangles and set membership from the graph topology and then delegates to `__init__`. Private helper functions for loss terms and plot configuration live in the same file or a companion file in `components/`; nothing from these helpers is re-exported at the package level.
