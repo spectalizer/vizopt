@@ -1,5 +1,38 @@
 """Squarified treemap layout algorithm (Bruls et al. 2000)."""
 
+import networkx as nx
+
+
+def subtree_sizes(graph: nx.DiGraph, root, weight_key: str = "size") -> dict:
+    """Sum a leaf weight attribute up an arbitrary tree.
+
+    Generic counterpart to `~vizopt.introspection.compute_subtree_sizes`,
+    which is file-tree-specific (it branches on an `is_dir` node attribute).
+    Here, leaves are simply nodes with out-degree 0 (the project-wide
+    convention; see AGENTS.md's Graph Conventions), and every leaf must carry
+    `weight_key`; internal nodes need not (their value is the sum of their
+    children's).
+
+    Args:
+        graph: A tree (arborescence) with parent -> child edges.
+        root: Node to start from. Only nodes reachable from root are included.
+        weight_key: Node attribute holding each leaf's weight.
+
+    Returns:
+        Dict mapping every node in the subtree rooted at root to the sum of
+        `weight_key` over its descendant leaves (its own value, if it is
+        itself a leaf).
+    """
+    sizes: dict = {}
+    for node in nx.dfs_postorder_nodes(graph, source=root):
+        children = list(graph.successors(node))
+        sizes[node] = (
+            graph.nodes[node][weight_key]
+            if not children
+            else sum(sizes[c] for c in children)
+        )
+    return sizes
+
 
 def _worst_ratio_strip(row, row_sum, W, H, total):
     """Worst aspect ratio among tiles in a candidate strip."""

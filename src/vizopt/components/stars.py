@@ -181,6 +181,43 @@ def _multi_term_area(optim_vars, input_params):
     return 0.5 * jnp.sin(delta_theta) * jnp.sum(radii * jnp.roll(radii, -1, axis=1))
 
 
+def star_polygon_area(radii: np.ndarray) -> float:
+    """Area of a single star polygon with uniformly-spaced radii.
+
+    Plain-numpy counterpart to the per-set term summed by `_multi_term_area`,
+    for use outside JAX tracing (e.g. measuring an already-fitted result).
+
+    Args:
+        radii: Radii at K uniformly-spaced angles, shape (K,).
+
+    Returns:
+        Polygon area.
+    """
+    K = radii.shape[0]
+    delta_theta = 2 * np.pi / K
+    return float(0.5 * np.sin(delta_theta) * np.sum(radii * np.roll(radii, -1)))
+
+
+def radius_at_angle(radii: np.ndarray, angle: float) -> float:
+    """Linearly interpolate a star's radius at an arbitrary angle.
+
+    Args:
+        radii: Radii at K uniformly-spaced angles (starting at angle 0),
+            shape (K,).
+        angle: Angle in radians to interpolate at.
+
+    Returns:
+        Interpolated radius.
+    """
+    K = radii.shape[0]
+    delta_theta = 2 * np.pi / K
+    frac_idx = (angle % (2 * np.pi)) / delta_theta
+    idx_lo = int(np.floor(frac_idx)) % K
+    idx_hi = (idx_lo + 1) % K
+    w_hi = frac_idx - np.floor(frac_idx)
+    return float((1.0 - w_hi) * radii[idx_lo] + w_hi * radii[idx_hi])
+
+
 def _multi_term_perimeter(optim_vars, input_params):
     """Sum of star-polygon perimeters over all sets."""
     centers = optim_vars["centers"]  # (S, 2)
