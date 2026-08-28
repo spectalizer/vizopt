@@ -116,7 +116,7 @@ def _term_parent_centering(optim_vars, input_params):
     if len(edge_indices) == 0:
         return jnp.array(0.0)
 
-    node_xys = optim_vars["node_xys"]
+    node_xys = jnp.asarray(optim_vars["node_xys"])
     cross_dir = jnp.array(input_params["cross_direction"])
     cross_coord = node_xys @ cross_dir  # (N,)
 

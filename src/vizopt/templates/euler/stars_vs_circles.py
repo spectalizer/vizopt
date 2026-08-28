@@ -8,6 +8,8 @@ General star-domain loss terms and helpers live in
 :mod:`vizopt.components.stars`.
 """
 
+from typing import Any
+
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -247,7 +249,7 @@ class EulerDiagram(VizOptimizer):
         ).copy()
 
         has_label = self.label_rect_size is not None
-        if has_label:
+        if self.label_rect_size is not None:
             label_hw = np.full(S, self.label_rect_size[0], dtype=np.float32)
             label_hh = np.full(S, self.label_rect_size[1], dtype=np.float32)
             k_top = int(np.argmin(np.abs(angles - np.pi / 2)))
@@ -278,15 +280,18 @@ class EulerDiagram(VizOptimizer):
         )
         rad_scale = float(initial_radii.mean())
         pos_scale_arr = np.array([pos_scale_x, pos_scale_y], dtype=np.float32)
-        var_scales = {"centers": pos_scale_arr, "circle_positions": pos_scale_arr}
+        var_scales: dict[str, Any] = {
+            "centers": pos_scale_arr,
+            "circle_positions": pos_scale_arr,
+        }
         for key in init_vars:
             if key != "centers":
                 var_scales[key] = np.float32(rad_scale)
         if has_label:
             var_scales["label_positions"] = pos_scale_arr
 
+        initial_label_positions = initial_centers.copy()
         if has_label:
-            initial_label_positions = initial_centers.copy()
             initial_label_positions[:, 1] += initial_radii[:, k_top] - label_hh
 
         def initialize(_, seed):
@@ -499,7 +504,7 @@ def _make_plot_configuration(
         colors = (
             set_colors
             if set_colors is not None
-            else plt.cm.tab10(np.linspace(0, 0.9, S))
+            else plt.get_cmap("tab10")(np.linspace(0, 0.9, S))
         )
 
         _own_figure = ax is None

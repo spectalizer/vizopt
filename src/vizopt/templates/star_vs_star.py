@@ -31,7 +31,7 @@ from ..components.stars import (
 )
 
 
-def _dist_and_angle(diff):
+def _dist_and_angle(diff: jnp.ndarray):
     """Compute distance and angle for an array of 2-D displacement vectors.
 
     Uses the "double where" trick so that both the value and the gradient of
@@ -194,7 +194,7 @@ def _multi_term_target_area(optim_vars, input_params):
     input_params keys: "target_areas" (n_sets,)  — nan where unspecified
     """
     radii = optim_vars["radii"]  # (n_sets, K)
-    target = input_params["target_areas"]  # (n_sets,)
+    target = jnp.asarray(input_params["target_areas"])  # (n_sets,)
     K = radii.shape[1]
     delta_theta = 2 * jnp.pi / K
     areas = (

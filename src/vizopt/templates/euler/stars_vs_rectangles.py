@@ -610,7 +610,7 @@ class EulerDiagramRect(VizOptimizer):
         self.set_names = (
             set_names if set_names is not None else [f"Set {s}" for s in range(S)]
         )
-        self.leaf_names = leaf_names if leaf_names is not None else list(range(N))
+        self.leaf_names: list = leaf_names if leaf_names is not None else list(range(N))
 
     @classmethod
     def from_graph(

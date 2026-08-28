@@ -67,9 +67,9 @@ def make_pixel_grid(x_min, x_max, y_min, y_max, resolution):
 
 
 def soft_rasterize_star(
-    centers,
+    centers: jnp.ndarray,
     radii,
-    grid_xy,
+    grid_xy: jnp.ndarray,
     temperature=0.05,
     offset=0.0,
 ):
@@ -136,8 +136,8 @@ def raster_collision_loss(optim_vars, input_params):
     centers = optim_vars["centers"]
     radii = optim_vars["radii"]
     grid_xy = input_params["grid_xy"]
-    pixel_area = input_params["pixel_area"]
-    mask = input_params["exclusion_mask"]
+    pixel_area = jnp.asarray(input_params["pixel_area"])
+    mask = jnp.asarray(input_params["exclusion_mask"])
     temperature = input_params.get("temperature", 0.05)
     exclusion_offset = input_params.get("exclusion_offset", 0.0)
 
@@ -156,9 +156,9 @@ def raster_collision_loss(optim_vars, input_params):
 
 
 def soft_rasterize_star_fourier(
-    centers,
+    centers: jnp.ndarray,
     fourier_coeffs,
-    grid_xy,
+    grid_xy: jnp.ndarray,
     temperature=0.05,
     offset=0.0,
 ):
@@ -214,8 +214,8 @@ def raster_collision_loss_fourier(optim_vars, input_params):
     centers = optim_vars["centers"]
     fourier_coeffs = optim_vars["fourier_coeffs"]
     grid_xy = input_params["grid_xy"]
-    pixel_area = input_params["pixel_area"]
-    mask = input_params["exclusion_mask"]
+    pixel_area = jnp.asarray(input_params["pixel_area"])
+    mask = jnp.asarray(input_params["exclusion_mask"])
     temperature = input_params.get("temperature", 0.05)
     exclusion_offset = input_params.get("exclusion_offset", 0.0)
 
@@ -279,7 +279,7 @@ class RasterStarOptimizer(VizOptimizer):
         n_sets: int,
         initial_centers,
         *,
-        representation: StarRepresentation = None,
+        representation: StarRepresentation | None = None,
         target_areas=None,
         initial_radius: float = 1.0,
         weight_target_area: float = 20.0,

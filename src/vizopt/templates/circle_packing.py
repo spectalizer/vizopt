@@ -56,7 +56,7 @@ def plot_circles(positions, radii):
     positions = np.asarray(positions)
     radii = list(radii)
     n = len(radii)
-    colors = plt.colormaps["tab20"].colors
+    colors = _TAB20
     _, ax = plt.subplots(figsize=(5, 5))
     for i in range(n):
         ax.add_patch(
@@ -211,5 +211,5 @@ class CirclePackingOptimizer(VizOptimizer):
         if not hasattr(self, "result_"):
             raise ValueError("No result yet — call optimize() first.")
         return [
-            tuple(float(c) for c in xy) for xy in self.result_.optim_vars["node_xys"]
+            (float(xy[0]), float(xy[1])) for xy in self.result_.optim_vars["node_xys"]
         ]

@@ -80,7 +80,7 @@ def _interp_band_bounds(x_bounds, upper, lower, px):
     return upper_interp, lower_interp, x_min, x_max
 
 
-def _band_areas(x_bounds, upper, lower):
+def _band_areas(x_bounds: jnp.ndarray, upper: jnp.ndarray, lower: jnp.ndarray):
     """Per-set band area via the trapezoid rule over K uniformly-spaced columns.
 
     Args:
@@ -120,7 +120,7 @@ def _multi_term_target_area(optim_vars, input_params):
     areas = _band_areas(
         optim_vars["x_bounds"], optim_vars["upper"], optim_vars["lower"]
     )
-    target = input_params["target_areas"]  # (S,)
+    target = jnp.asarray(input_params["target_areas"])  # (S,)
     has_target = jnp.isfinite(target)
     # Replace nan targets with current area so the true branch stays finite;
     # without this, (areas - nan)**2 = nan and 0*nan = nan in the backward pass.

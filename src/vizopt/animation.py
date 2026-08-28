@@ -273,6 +273,8 @@ def _loss_curve_svg_lines(
     losses = [float(d["total"]) for d in history]
 
     min_iter, max_iter = min(iters), max(iters)
+    _log_min = 0.0
+    _log_range = 1.0
     if log_scale:
         _log_min = math.floor(math.log10(min(losses)))
         _log_max = math.ceil(math.log10(max(losses)))

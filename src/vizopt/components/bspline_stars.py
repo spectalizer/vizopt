@@ -113,9 +113,9 @@ def _wrap_bspline_term(fn, angles):
 
 
 def soft_rasterize_star_bspline(
-    centers,
+    centers: jnp.ndarray,
     ctrl_pts,
-    grid_xy,
+    grid_xy: jnp.ndarray,
     temperature=0.05,
     offset=0.0,
 ):
@@ -159,8 +159,8 @@ def raster_collision_loss_bspline(optim_vars, input_params):
     centers = optim_vars["centers"]
     ctrl_pts = optim_vars["bspline_ctrl"]
     grid_xy = input_params["grid_xy"]
-    pixel_area = input_params["pixel_area"]
-    mask = input_params["exclusion_mask"]
+    pixel_area = jnp.asarray(input_params["pixel_area"])
+    mask = jnp.asarray(input_params["exclusion_mask"])
     temperature = input_params.get("temperature", 0.05)
     exclusion_offset = input_params.get("exclusion_offset", 0.0)
 
