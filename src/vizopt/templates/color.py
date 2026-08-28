@@ -10,7 +10,6 @@ from vizopt.base import (
     ObjectiveTerm,
     OptimizationProblem,
     OptimizationProblemTemplate,
-    OptimConfig,
     VizOptimizer,
 )
 

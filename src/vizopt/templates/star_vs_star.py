@@ -12,9 +12,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..base import (
-    Callback,
     ObjectiveTerm,
-    OptimConfig,
     OptimizationProblem,
     OptimizationProblemTemplate,
     VizOptimizer,
