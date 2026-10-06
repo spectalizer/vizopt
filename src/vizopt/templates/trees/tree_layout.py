@@ -328,7 +328,6 @@ def make_tree_input_params(
     root = next(n for n in graph.nodes if graph.in_degree(n) == 0)
 
     node_names = _dfs_preorder(graph, root)
-    n = len(node_names)
     node_name_to_id = {name: i for i, name in enumerate(node_names)}
 
     depths_dict = nx.single_source_shortest_path_length(graph, root)
