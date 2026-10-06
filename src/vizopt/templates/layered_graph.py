@@ -171,7 +171,7 @@ def _svg_configuration(snapshots, input_params, size):
 
     node_r = 6  # node circle radius in SVG pixels
 
-    elements = [
+    elements: list[dict] = [
         {
             "tag": "defs",
             "_text": (

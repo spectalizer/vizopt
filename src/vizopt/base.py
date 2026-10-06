@@ -3,13 +3,19 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from jax import Array, jit
 from jax import numpy as jnp
+from pydantic import BaseModel
 
-OptimVars = TypeVar("OptimVars")
-InputParams = TypeVar("InputParams")
+# `optim_vars` and `input_parameters` are always plain dicts (JAX-compatible
+# pytrees); these aliases document that contract. Values are left as `Any`
+# because `initialize` may hand back numpy arrays that JAX only converts once
+# tracing starts. `input_params_class` on a template validates the dict against
+# a Pydantic model but never replaces it.
+OptimVars = dict[str, Any]
+InputParams = dict[str, Any]
 
 Callback = Callable[[int, Array, Any, Any], bool | None]
 """A per-iteration optimization callback.
@@ -60,7 +66,7 @@ class OptimConfig:
 
 
 @dataclass
-class OptimizationResult(Generic[OptimVars]):
+class OptimizationResult:
     """Result returned by [`OptimizationProblem.optimize`][vizopt.base.OptimizationProblem.optimize].
 
     Attributes:
@@ -146,7 +152,7 @@ def build_objective(
 
 
 @dataclass
-class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
+class OptimizationProblemTemplate:
     """A template for a class of optimization problems.
 
     An instance represents a specific *type* of optimization problem
@@ -175,7 +181,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
 
     terms: list[ObjectiveTerm]
     initialize: Callable[[InputParams, int], OptimVars]
-    input_params_class: type[InputParams] | None = None
+    input_params_class: type[BaseModel] | None = None
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
 
@@ -184,7 +190,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
         input_parameters: InputParams,
         weight_overrides: dict[str, float] | None = None,
         var_scales: dict | None = None,
-    ) -> "OptimizationProblem[InputParams, OptimVars]":
+    ) -> "OptimizationProblem":
         """Create a runnable problem instance from concrete input parameters.
 
         If `input_params_class` is set, validates `input_parameters` via
@@ -211,7 +217,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
         """
         if self.input_params_class is not None:
             # validate only
-            self.input_params_class.model_validate(input_parameters)  # type: ignore
+            self.input_params_class.model_validate(input_parameters)
         terms = self.terms
         if weight_overrides:
             term_names = {term.name for term in terms}
@@ -235,7 +241,7 @@ class OptimizationProblemTemplate(Generic[InputParams, OptimVars]):
 
 
 @dataclass
-class OptimizationProblem(Generic[InputParams, OptimVars]):
+class OptimizationProblem:
     """An optimization problem.
 
     Attributes:
@@ -258,9 +264,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
     var_scales: dict | None = None
-    result: "OptimizationResult[OptimVars] | None" = field(
-        default=None, init=False, repr=False
-    )
+    result: "OptimizationResult | None" = field(default=None, init=False, repr=False)
 
     def plot(self, **kwargs) -> None:
         """Plot the last optimization result using `plot_configuration`.
@@ -282,7 +286,7 @@ class OptimizationProblem(Generic[InputParams, OptimVars]):
         self,
         optim_config: OptimConfig | None = None,
         callback: Callback | None = None,
-    ) -> "OptimizationResult[OptimVars]":
+    ) -> "OptimizationResult":
         """Run gradient descent to minimize the objective.
 
         When `optim_config.n_restarts > 1`, the optimization is run that

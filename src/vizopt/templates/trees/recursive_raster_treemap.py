@@ -16,6 +16,8 @@ together, so none of VizOptimizer's `_build_problem`/`plot`/`animate`
 contract applies.
 """
 
+from typing import Any
+
 import networkx as nx
 import numpy as np
 from jax import numpy as jnp
@@ -357,7 +359,7 @@ class RasterTreemapOptimizer:
         root_children = [c for c in graph.successors(root) if sizes.get(c, 0) > 0]
         root_area = self.mean_leaf_area * len(root_children)
 
-        fit_kwargs = dict(
+        fit_kwargs: dict[str, Any] = dict(
             representation=self.representation,
             grid_resolution=self.grid_resolution,
             n_iters=self.n_iters,

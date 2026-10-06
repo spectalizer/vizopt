@@ -365,7 +365,7 @@ def _multi_term_circle_collision(optim_vars, input_params):
     """
     positions = optim_vars["circle_positions"]  # (N, 2)
     radii = input_params["circle_radii"]  # (N,)
-    alpha = input_params["circle_collision_alpha"]
+    alpha = jnp.asarray(input_params["circle_collision_alpha"])
 
     diff = positions[:, None, :] - positions[None, :, :]  # (N, N, 2)
     dist = jnp.sqrt(jnp.sum(diff**2, axis=2) + 1e-12)  # (N, N)
@@ -594,7 +594,7 @@ def _multi_term_label_label_collision(optim_vars, input_params):
     positions = optim_vars["label_positions"]  # (S, 2)
     hw = input_params["label_rect_hw"]  # (S,)
     hh = input_params["label_rect_hh"]  # (S,)
-    alpha = input_params.get("rect_collision_alpha", 0.0)
+    alpha = jnp.asarray(input_params.get("rect_collision_alpha", 0.0))
     S = hw.shape[0]
 
     dx = jnp.abs(positions[:, None, 0] - positions[None, :, 0])  # (S, S)

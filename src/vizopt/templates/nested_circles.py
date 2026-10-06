@@ -24,7 +24,6 @@ from jax import numpy as jnp
 
 from ..base import (
     ObjectiveTerm,
-    OptimConfig,
     OptimizationProblem,
     OptimizationProblemTemplate,
     VizOptimizer,

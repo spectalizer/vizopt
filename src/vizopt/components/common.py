@@ -1,10 +1,9 @@
 import jax
 import numpy as np
 from jax import numpy as jnp
-from jax.typing import ArrayLike
 
 
-def multiple_bbox_intersections(bbox_matrix: ArrayLike, other_bbox_matrix: ArrayLike):
+def multiple_bbox_intersections(bbox_matrix: jax.Array, other_bbox_matrix: jax.Array):
     """Calculate the pairwise intersections of two sets of bounding boxes
 
     This vectorized implementation is more efficient than the avoided double for loop
@@ -49,7 +48,7 @@ def calculate_total_width_penalty_ignoring_radii(node_xys: np.ndarray):
 
 
 def calculate_total_width_penalty_for_circular_layout(
-    node_xys: np.ndarray, node_radii: np.ndarray
+    node_xys: np.ndarray | jax.Array, node_radii: np.ndarray | jax.Array
 ):
     """A penalty for the overall width and height of the drawing with circular nodes.
 

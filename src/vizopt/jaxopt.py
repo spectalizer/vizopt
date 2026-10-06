@@ -56,6 +56,7 @@ def optimize_gradient_descent(
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss_value, grads
 
+    loss_value = jnp.asarray(float("nan"))
     for i_iter in range(n_iters):
         step = jnp.int32(i_iter)
         params, opt_state, loss_value, grads = perform_optim_step(
