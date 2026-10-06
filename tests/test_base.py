@@ -119,6 +119,18 @@ def test_instantiate_weight_overrides():
     assert problem.terms[0].multiplier == 5.0
 
 
+def test_instantiate_weight_overrides_keep_schedule():
+    def schedule(step):
+        return jnp.minimum(step / 10.0, 1.0)
+
+    term = ObjectiveTerm(name="s", compute=lambda v, p: v["x"], schedule=schedule)
+    template = OptimizationProblemTemplate(
+        terms=[term], initialize=lambda p, seed: {"x": jnp.array(1.0)}
+    )
+    problem = template.instantiate({}, weight_overrides={"s": 2.0})
+    assert problem.terms[0].schedule is schedule
+
+
 def test_instantiate_unknown_weight_override_raises():
     with pytest.raises(KeyError, match="unknown_term"):
         _make_simple_template().instantiate({}, weight_overrides={"unknown_term": 1.0})

@@ -31,13 +31,15 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
 
 1. **[base.py](src/vizopt/base.py)** - Core abstractions for the optimization framework
    - `ObjectiveTerm`: A named, weighted term in a composite loss function (name, compute, multiplier)
-   - `build_objective()`: Combines a list of `ObjectiveTerm`s into a single `fun(optim_vars) -> scalar`
+   - `build_objective()`: Combines a list of `ObjectiveTerm`s into a single `fun(optim_vars, step, weights=None) -> scalar`
    - `OptimizationProblemTemplate`: A reusable template for a class of problems — holds terms, an `initialize` function, optional Pydantic `input_params_class` for validation, and optional `plot_configuration`
-   - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.optimize()` which returns an `OptimizationResult` (fields: `optim_vars`, `history`, `final_loss`)
+   - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.session()` (a steppable run) and `.optimize()` (a batch run on top of a session) which returns an `OptimizationResult` (fields: `optim_vars`, `history`, `final_loss`)
 
-2. **[jaxopt.py](src/vizopt/jaxopt.py)** - Generic gradient descent optimizer
-   - `optimize_gradient_descent()`: Wraps Optax's Adam optimizer with JAX JIT compilation
-   - Low-level entry point; normally called indirectly via `OptimizationProblem.optimize()`
+2. **[session.py](src/vizopt/session.py)** - Steppable, steerable gradient descent
+   - `OptimizationSession`: Owns one run's Adam state; `step(n)`, `vars` (physical space), `pin`/`unpin`/`set_value` (hold or move variable entries), `set_weight`, `reheat` (restart the cosine learning-rate decay), `record()` (per-term history record)
+   - Everything that may change between steps (weights, learning rate, pin masks/values) is a `controls` pytree passed as an argument to the jitted step, so steering never recompiles. The jitted step is cached on the `OptimizationProblem` per `(b1, b2)`, so restarts and new sessions reuse it
+   - Pinning is a projection after the Adam update (gradients are not masked), so Adam's moments keep tracking the force on a pinned entry and it does not jump when released
+   - Foundation for interactive frontends (drag an element while the optimization keeps running)
 
 3. **[components.py](src/vizopt/components.py)** - Reusable JAX loss components
    - `multiple_bbox_intersections()`: Vectorized pairwise bounding-box intersection areas; shape `(n, 2, 2)` inputs, returns `(n, m)` matrix
@@ -64,7 +66,7 @@ The framework separates *problem definition* from *problem instantiation*:
 1. Define `ObjectiveTerm`s (loss components with names, compute functions, and multipliers)
 2. Create an `OptimizationProblemTemplate` with those terms, an `initialize` function, optional Pydantic class for input validation, and optional `plot_configuration`
 3. Call `template.instantiate(input_parameters)` → `OptimizationProblem`
-4. Call `problem.optimize(n_iters, learning_rate, callback, track_every)` → `OptimizationResult`
+4. Call `problem.optimize(optim_config, callback)` → `OptimizationResult`, or `problem.session(optim_config)` → `OptimizationSession` to step and steer the run yourself
 
 `OptimizationResult` has fields `optim_vars`, `history`, and `final_loss`. `history` is a list of dicts with keys `"iteration"`, `"total"`, and one key per term name (weighted values), recorded every `track_every` iterations.
 
@@ -76,7 +78,7 @@ Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to lo
 
 - **Pre-processing**: All non-JAX data (e.g., NetworkX graphs) is converted to numpy arrays before optimization to avoid Python loops in JAX-traced functions
 - **Vectorization**: Loss components use fully vectorized array operations rather than loops
-- **JIT compilation**: The composite loss function built by `build_objective()` is JIT-compiled via `jaxopt.optimize_gradient_descent()`
+- **JIT compilation**: The composite loss function built by `build_objective()` is JIT-compiled into the Adam step of `session.make_step_function()`; values that change between steps (weights, pins, learning rate) are passed as traced arguments, never closed over
 - **Parameter dictionaries**: `optim_vars` are plain dicts (e.g., `{"rectangle_positions": ...}`)
 
 #### Variable Normalization
@@ -120,7 +122,7 @@ A template module lives under `src/vizopt/templates/` and exposes one or more `V
 
 1. Define terms and template (problem class definition)
 2. Call `template.instantiate(input_parameters)` — validates inputs, creates `OptimizationProblem`
-3. Call `problem.optimize()` — initializes vars, JIT-compiles loss, runs Adam, records history
+3. Call `problem.optimize()` — creates a session per restart (initializes vars, JIT-compiles the step once per problem), steps it with Adam, records history
 4. Optionally use `SnapshotCallback` + `animate()` for animated visualization
 
 ## Python Environment

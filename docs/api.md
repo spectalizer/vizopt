@@ -10,6 +10,16 @@
 
 ---
 
+## vizopt.session
+
+::: vizopt.session
+    options:
+      members: true
+      filters:
+        - "!^_"
+
+---
+
 ## vizopt.animation
 
 ::: vizopt.animation

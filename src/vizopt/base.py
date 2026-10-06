@@ -2,12 +2,14 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from jax import Array, jit
 from jax import numpy as jnp
 from pydantic import BaseModel
+
+from .session import OptimizationSession, StepFunction, make_step_function
 
 # `optim_vars` and `input_parameters` are always plain dicts (JAX-compatible
 # pytrees); these aliases document that contract. Values are left as `Any`
@@ -113,7 +115,7 @@ def build_objective(
     terms: list[ObjectiveTerm],
     input_parameters: Any,
     var_scales: dict | None = None,
-) -> Callable[[OptimVars, Array], Array]:
+) -> Callable[..., Array]:
     """Build a composite objective function from a list of terms.
 
     Args:
@@ -128,20 +130,26 @@ def build_objective(
             unscaled.
 
     Returns:
-        A callable `fun(optim_vars, step) -> scalar` suitable for gradient
-        descent. `step` is the current iteration as a JAX int32 array and
-        is passed to each term's `schedule` (if any).
+        A callable `fun(optim_vars, step, weights=None) -> scalar` suitable
+        for gradient descent. `step` is the current iteration as a JAX int32
+        array and is passed to each term's `schedule` (if any). `weights`
+        optionally maps term names to multipliers that replace the terms'
+        own `multiplier`; passing them as (traced) arguments lets weights
+        change between steps without recompiling. Terms with
+        `multiplier=0.0` are excluded entirely, whatever `weights` says.
     """
 
     active_terms = [t for t in terms if t.multiplier != 0.0]
 
-    def fun_to_minimize(optim_vars: OptimVars, step: Array) -> Array:
+    def fun_to_minimize(
+        optim_vars: OptimVars, step: Array, weights: dict | None = None
+    ) -> Array:
         if var_scales is not None:
             optim_vars = {k: v * var_scales.get(k, 1.0) for k, v in optim_vars.items()}
         return sum(
             (
                 term.compute(optim_vars, input_parameters)
-                * term.multiplier
+                * (term.multiplier if weights is None else weights[term.name])
                 * (term.schedule(step) if term.schedule is not None else 1.0)
                 for term in active_terms
             ),
@@ -225,9 +233,7 @@ class OptimizationProblemTemplate:
             if unknown:
                 raise KeyError(f"Unknown term name(s) in weight_overrides: {unknown}")
             terms = [
-                ObjectiveTerm(
-                    t.name, t.compute, weight_overrides.get(t.name, t.multiplier)
-                )
+                replace(t, multiplier=weight_overrides.get(t.name, t.multiplier))
                 for t in terms
             ]
         return OptimizationProblem(
@@ -265,6 +271,27 @@ class OptimizationProblem:
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
     var_scales: dict | None = None
     result: "OptimizationResult | None" = field(default=None, init=False, repr=False)
+    _step_functions: dict = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        terms = self.terms
+        input_parameters = self.input_parameters
+
+        @jit
+        def compute_all_terms(physical_vars: OptimVars) -> dict[str, Array]:
+            return {
+                term.name: term.compute(physical_vars, input_parameters)
+                for term in terms
+            }
+
+        self._compute_all_terms = compute_all_terms
+
+    def _step_function(self, b1: float, b2: float) -> tuple[StepFunction, Any]:
+        """Jitted Adam step for this problem, compiled once per (b1, b2)."""
+        if (b1, b2) not in self._step_functions:
+            fun = build_objective(self.terms, self.input_parameters, self.var_scales)
+            self._step_functions[(b1, b2)] = make_step_function(fun, b1, b2)
+        return self._step_functions[(b1, b2)]
 
     def plot(self, **kwargs) -> None:
         """Plot the last optimization result using `plot_configuration`.
@@ -282,12 +309,38 @@ class OptimizationProblem:
             raise ValueError("No result yet — call optimize() first.")
         self.plot_configuration(self.result.optim_vars, self.input_parameters, **kwargs)
 
+    def session(
+        self, optim_config: OptimConfig | None = None, seed: int | None = None
+    ) -> OptimizationSession:
+        """Start a steppable optimization run.
+
+        Use this instead of `optimize` to drive the optimizer step by step
+        and steer it in between (pin or move variables, change weights,
+        reheat the learning rate), e.g. from an interactive frontend.
+        `n_restarts`, `track_every` and early stopping are not used by a
+        session; they belong to `optimize`.
+
+        Args:
+            optim_config: Optimizer settings. Uses
+                [OptimConfig][vizopt.base.OptimConfig] defaults when `None`.
+            seed: Seed for `initialize`; defaults to `optim_config.seed`.
+
+        Returns:
+            A fresh [OptimizationSession][vizopt.session.OptimizationSession]
+            at iteration 0.
+        """
+        return OptimizationSession(self, optim_config or OptimConfig(), seed)
+
     def optimize(
         self,
         optim_config: OptimConfig | None = None,
         callback: Callback | None = None,
     ) -> "OptimizationResult":
         """Run gradient descent to minimize the objective.
+
+        A batch run on top of [session][vizopt.base.OptimizationProblem.session]:
+        steps a fresh session `n_iters` times, recording history and checking
+        for early stopping along the way.
 
         When `optim_config.n_restarts > 1`, the optimization is run that
         many times with seeds `seed`, `seed + 1`, …. The result with the
@@ -304,130 +357,62 @@ class OptimizationProblem:
             An [OptimizationResult][vizopt.base.OptimizationResult] with the
             optimized variables, per-term history, and final loss of the best run.
         """
-        from . import jaxopt  # lazy import to avoid circular dependency
-
         config = optim_config or OptimConfig()
         has_schedules = any(t.schedule is not None for t in self.terms)
-        final_step = jnp.int32(config.n_iters - 1)
 
-        # When schedules are active and no user callback is provided, tracking_callback
-        # handles printing (showing both scheduled and unscheduled totals). Otherwise
-        # fall back to the standard print callback.
+        # When schedules are active and no user callback is provided, the loop
+        # prints both scheduled and unscheduled totals. Otherwise fall back to
+        # the standard print callback.
         user_callback = callback
         if user_callback is None and not has_schedules:
-            user_callback = jaxopt.default_print_callback
-
-        fun = build_objective(self.terms, self.input_parameters, self.var_scales)
-
-        _terms = self.terms
-        _input_parameters = self.input_parameters
-
-        @jit
-        def _compute_all_terms(physical_vars):
-            return {
-                term.name: term.compute(physical_vars, _input_parameters)
-                for term in _terms
-            }
+            user_callback = default_print_callback
 
         best_vars: OptimVars | None = None
         best_history: list[dict] = []
         best_loss = float("inf")
 
         for restart in range(config.n_restarts):
+            session = self.session(config, seed=config.seed + restart)
             history: list[dict] = []
-            _last_unscheduled = [0.0]  # updated every track_every steps
+            last_unscheduled = 0.0
+            for i_iter in range(config.n_iters):
+                step_result = session.step()
+                physical_vars = session.vars
+                is_last = i_iter == config.n_iters - 1
 
-            def tracking_callback(
-                i_iter: int,
-                loss_value: Array,
-                optim_vars: OptimVars,
-                grads: Any,
-                _history: list[dict] = history,
-                _last_unscheduled: list[float] = _last_unscheduled,
-            ) -> bool | None:
-                if self.var_scales is not None:
-                    physical_vars = {
-                        k: v * self.var_scales.get(k, 1.0)
-                        for k, v in optim_vars.items()
-                    }
-                else:
-                    physical_vars = optim_vars
                 plateau_stop = False
-                if (i_iter % config.track_every == 0) or i_iter == config.n_iters - 1:
-                    record: dict = {"iteration": i_iter, "total": float(loss_value)}
-                    step = jnp.int32(i_iter)
-                    term_values = _compute_all_terms(physical_vars)
-                    unscheduled_total = 0.0
-                    for term in self.terms:
-                        raw = float(term_values[term.name])
-                        sched = (
-                            float(term.schedule(step))
-                            if term.schedule is not None
-                            else 1.0
-                        )
-                        end_sched = (
-                            float(term.schedule(final_step))
-                            if term.schedule is not None
-                            else 1.0
-                        )
-                        record[term.name] = raw * term.multiplier * sched
-                        record[f"{term.name}_unscheduled"] = (
-                            raw * term.multiplier * end_sched
-                        )
-                        record[f"{term.name}_unweighted"] = raw
-                        unscheduled_total += raw * term.multiplier * end_sched
-                    record["total_unscheduled"] = unscheduled_total
-                    _last_unscheduled[0] = unscheduled_total
-                    _history.append(record)
-
+                if i_iter % config.track_every == 0 or is_last:
+                    history.append(session.record())
+                    last_unscheduled = history[-1]["total_unscheduled"]
                     if config.early_stop_patience is not None:
                         window = max(
                             1, config.early_stop_patience // config.track_every
                         )
-                        if len(_history) > window:
-                            prev_total = _history[-window - 1]["total_unscheduled"]
-                            curr_total = _history[-1]["total_unscheduled"]
+                        if len(history) > window:
+                            prev_total = history[-window - 1]["total_unscheduled"]
                             plateau_stop = (
-                                prev_total - curr_total
+                                prev_total - last_unscheduled
                                 < config.early_stop_tol * abs(prev_total)
                             )
+
                 user_stop = None
                 if user_callback is not None:
-                    user_stop = user_callback(i_iter, loss_value, physical_vars, grads)
-                elif (
-                    has_schedules
-                    and (i_iter % 100 == 0)
-                    or i_iter == config.n_iters - 1
-                ):
-                    print(
-                        f"Iteration {i_iter}: loss = {float(loss_value):.6f}"
-                        f"  unscheduled loss = {_last_unscheduled[0]:.6f}"
+                    user_stop = user_callback(
+                        i_iter, step_result.loss, physical_vars, step_result.grads
                     )
-                return plateau_stop or bool(user_stop)
+                elif i_iter % 100 == 0 or is_last:
+                    print(
+                        f"Iteration {i_iter}: loss = {float(step_result.loss):.6f}"
+                        f"  unscheduled loss = {last_unscheduled:.6f}"
+                    )
+                if plateau_stop or user_stop:
+                    break
 
-            optim_vars = self.initialize(self.input_parameters, config.seed + restart)
-            if self.var_scales is not None:
-                optim_vars = {
-                    k: v / self.var_scales.get(k, 1.0) for k, v in optim_vars.items()
-                }
-            optim_vars_result, final_loss = jaxopt.optimize_gradient_descent(
-                optim_vars,
-                fun,
-                n_iters=config.n_iters,
-                learning_rate=config.learning_rate,
-                b1=config.b1,
-                b2=config.b2,
-                decay_lr_to=config.decay_lr_to,
-                callback=tracking_callback,
-            )
-            if self.var_scales is not None:
-                optim_vars_result = {
-                    k: v * self.var_scales.get(k, 1.0)
-                    for k, v in optim_vars_result.items()
-                }
+            assert session.last_step is not None
+            final_loss = float(session.last_step.loss)
             if best_vars is None or final_loss < best_loss:
                 best_loss = final_loss
-                best_vars = optim_vars_result
+                best_vars = session.vars
                 best_history = history
 
         assert best_vars is not None
@@ -476,6 +461,26 @@ class VizOptimizer(ABC):
             optim_config, callback=callback
         )
         return self.result_
+
+    def session(
+        self, optim_config: OptimConfig | None = None, seed: int | None = None
+    ) -> OptimizationSession:
+        """Build the problem and start a steppable optimization run.
+
+        See [OptimizationProblem.session][vizopt.base.OptimizationProblem.session].
+        The built problem is stored in `problem_`; `result_` is not set, since
+        a session has no natural end.
+
+        Args:
+            optim_config: Optimizer settings. Uses :class:`OptimConfig` defaults
+                when `None`.
+            seed: Seed for `initialize`; defaults to `optim_config.seed`.
+
+        Returns:
+            A fresh [OptimizationSession][vizopt.session.OptimizationSession].
+        """
+        self.problem_ = self._build_problem()
+        return self.problem_.session(optim_config, seed)
 
     def plot(self, **kwargs) -> None:
         """Plot the last optimization result.
