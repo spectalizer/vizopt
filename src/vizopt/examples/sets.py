@@ -12,11 +12,13 @@ def graph_to_optimizer_inputs(G):
 
     Returns:
         Tuple of `(set_names, idx, enclosures, target_areas, initial_centers)`
-        for `StarDomainOptimizer` and `RasterStarOptimizer`.
+        for `StarDomainOptimizer` and `RasterStarOptimizer`. `enclosures`
+        holds one `(inner_idx, outer_idx)` pair per edge, i.e.
+        `(child, parent)`, the order those optimizers expect.
     """
     set_names = list(G.nodes)
     idx = {name: i for i, name in enumerate(set_names)}
-    enclosures = [(idx[u], idx[v]) for u, v in G.edges]
+    enclosures = [(idx[child], idx[parent]) for parent, child in G.edges]
     target_areas = [G.nodes[n].get("target_area") for n in set_names]
     initial_centers = np.array(
         [G.nodes[n]["center"] for n in set_names], dtype=np.float32
