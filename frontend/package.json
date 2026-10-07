@@ -1,0 +1,29 @@
+{
+  "name": "vizopt-live",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Browser frontend for vizopt's live optimization server",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "codegen": "uv run --project .. python ../scripts/export_protocol_schema.py && npm run gen:types",
+    "gen:types": "json2ts -i src/protocol/protocol.schema.json -o src/protocol/protocol.ts --no-additionalProperties --bannerComment \"/* Generated from protocol.schema.json by json-schema-to-typescript; run 'npm run codegen' to update. */\""
+  },
+  "dependencies": {
+    "d3-drag": "^3.0.0",
+    "d3-scale": "^4.0.2",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-selection": "^3.0.12",
+    "@types/d3-zoom": "^3.0.9",
+    "json-schema-to-typescript": "^16.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3"
+  }
+}

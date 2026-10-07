@@ -30,6 +30,30 @@
 
 ---
 
+## vizopt.server
+
+Requires the `server` extra.
+
+::: vizopt.server.app
+    options:
+      members: true
+      filters:
+        - "!^_"
+
+::: vizopt.server.live
+    options:
+      members: true
+      filters:
+        - "!^_"
+
+::: vizopt.server.protocol
+    options:
+      members: true
+      filters:
+        - "!^_"
+
+---
+
 ## vizopt.animation
 
 ::: vizopt.animation

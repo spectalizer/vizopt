@@ -12,6 +12,12 @@ Read the documentation [https://spectalizer.github.io/vizopt/](https://spectaliz
 pip install vizopt
 ```
 
+To run optimizations live in the browser (drag elements while the optimization keeps going):
+
+```bash
+pip install "vizopt[server]"
+```
+
 To use Optuna-based schedule search (e.g. the `star_curriculum` notebook):
 
 ```bash
@@ -46,11 +52,26 @@ session.reheat()
 session.step(500)
 ```
 
+### Live in the browser
+
+```python
+import networkx as nx
+from vizopt.base import OptimConfig
+from vizopt.server import serve
+from vizopt.templates.layered_graph import LayeredGraphOptimizer
+
+dag = nx.DiGraph([("A", "B"), ("A", "C"), ("B", "D"), ("C", "D")])
+serve(LayeredGraphOptimizer(dag, min_distance=1.5), OptimConfig(n_iters=2000, learning_rate=3e-3))
+```
+
+This opens `http://127.0.0.1:8765`, where the layout optimizes live: drag a node and the rest re-flows around it (shift-drop keeps it pinned, double-click unpins), pause, reheat or reset. Templates support this by providing a `scene_configuration`; so far the layered graph layout does.
+
 ## Features
 
 - Multi-objective optimization (edge lengths, compactness, collision avoidance, inclusion constraints)
 - Efficient JAX-based gradient descent with JIT compilation
 - Steppable optimization sessions: pin or move variables, change term weights and reheat the learning rate between steps, without recompiling
+- Live browser frontend (FastAPI + WebSocket server, TypeScript + D3 app) to watch and steer optimizations interactively
 - Handles arbitrary hierarchical inclusion relationships
 - Automatic per-variable normalization so optimizer performance is independent of input coordinate scale
 - NetworkX integration with a consistent DiGraph convention: **parent → child edges** (`(u, v)` means `v ⊂ u`)
@@ -80,6 +101,20 @@ uv run python scripts/convert_all_notebooks_to_py.py
 ```
 
 This converts each notebook to a temporary `.py` file, runs `pyright` across all of them, then deletes the generated files. Pass `--no-cleanup` to keep them for inspection.
+
+### Frontend
+
+The live frontend lives in `frontend/` (Vite + TypeScript + D3). With Node 24+:
+
+```bash
+cd frontend
+npm install
+npm run build    # bundles into src/vizopt/server/static/, served by vizopt.server
+npm run dev      # hot-reloading dev server; proxies /ws to a running serve(...) on port 8765
+npm run codegen  # after changing src/vizopt/scene.py or src/vizopt/server/protocol.py
+```
+
+The built bundle is gitignored but packaged into wheels: run `npm run build` before building a release.
 
 ### Documentation
 

@@ -25,7 +25,17 @@ uv run jupyter notebook notebooks/examples/layered_graph_layouts.ipynb
 uv run jupyter notebook notebooks/experiments/examples_with_bubbles.ipynb
 ```
 
-Optional dependency groups: `uv sync --group milp` (PuLP/HiGHS, for `milp_euler_rectangles.py`) and `uv sync --group hyperoptim` (Optuna, for schedule search notebooks).
+Optional dependency groups: `uv sync --group milp` (PuLP/HiGHS, for `milp_euler_rectangles.py`) and `uv sync --group hyperoptim` (Optuna, for schedule search notebooks). The `server` extra (FastAPI, uvicorn) powers `vizopt.server` and is included in the `dev` group.
+
+Frontend (Node 24+, in `frontend/`):
+
+```bash
+cd frontend
+npm install
+npm run build      # type-check + bundle into src/vizopt/server/static/ (served by vizopt.server)
+npm run dev        # Vite dev server with hot reload; proxies /ws to a running serve(...) on port 8765
+npm run codegen    # after changing scene.py or server/protocol.py: re-export the schema, regenerate TS types
+```
 
 ## Architecture
 
@@ -50,7 +60,7 @@ Optional dependency groups: `uv sync --group milp` (PuLP/HiGHS, for `milp_euler_
    - Positions in data coordinates; sizes in data units unless the field ends in `_px` / says `"px"`
    - A `DragBinding` means the element's anchor point is `optim_vars[var][index]`, so a frontend turns a drag into `session.pin(var, index, value=[x, y])` with no template-specific code
    - Templates opt in via `scene_configuration(optim_vars, input_parameters) -> Scene`; exposed as `problem.scene()` and `session.scene()`. Implemented so far by `LayeredGraphOptimizer`
-   - `scripts/export_scene_schema.py` writes the JSON Schema to `frontend/src/protocol/scene.schema.json` for TypeScript codegen; re-run it after changing the models
+   - Its JSON Schema is exported as part of the live-server protocol (see `server/`); re-run `npm run codegen` in `frontend/` after changing the models
 
 3. **[components/](src/vizopt/components/)** - Reusable JAX loss components and shape representations
    - [common.py](src/vizopt/components/common.py): generic penalties — `multiple_bbox_intersections()` (vectorized pairwise bbox intersection areas, `(n, 2, 2)` inputs → `(n, m)` matrix), `calculate_collision_penalty()`, width penalties, `should_be_positive_activation()`
@@ -74,7 +84,20 @@ Optional dependency groups: `uv sync --group milp` (PuLP/HiGHS, for `milp_euler_
    - `warmup()` / `cooldown()`: JAX-compatible schedule factories that ramp a term's weight up or down over a fraction of the run
    - `make_term_schedules()`: Builds a `TermSchedules` from a flat parameter dict, for the `term_schedules` argument of `EulerDiagram` / `EulerDiagramRect`
 
-7. **Other modules**
+7. **[server/](src/vizopt/server/)** - Live, interactive optimization in the browser (`server` extra)
+   - `serve(optimizer, optim_config)`: starts a session and serves it with uvicorn at `http://127.0.0.1:8765`, including the built frontend
+   - [live.py](src/vizopt/server/live.py) `LiveSession`: synchronous state machine (`validate`, `apply`, `tick`, `frame`) turning protocol messages into session steering, plus a worker thread that steps at a target fps and publishes latest-only frames. Each interaction reheats; after `settle_iters` iterations the run settles (idles) like d3-force
+   - [protocol.py](src/vizopt/server/protocol.py): Pydantic WebSocket messages, discriminated by `type` — server sends `hello`, then `frame`s (scene, metrics, pinned entries, weights) and `error`s; clients send `drag_start`/`drag`/`drag_end`, `unpin`, `pause`/`resume`, `reheat`, `set_weight`, `reset`
+   - [app.py](src/vizopt/server/app.py) `create_app()`: FastAPI app with the `/ws` endpoint (one sender task per client, so frames and errors never interleave) and the static frontend at `/`
+   - The protocol JSON Schema (`scripts/export_protocol_schema.py` → `frontend/src/protocol/protocol.schema.json`) is committed; `tests/test_server.py` fails when it is out of date with the models
+
+8. **[frontend/](frontend/)** - The browser app: Vite + TypeScript + D3 (d3-selection/zoom/drag/scale), no framework
+   - `src/protocol/protocol.ts` is generated from the schema (json-schema-to-typescript) — never edit it by hand
+   - `src/view.ts` `SceneView`: renders any `Scene` generically (keyed data join on element ids, data → screen scales with fit, zoom and pan; `_px` sizes stay fixed on zoom), and turns drags on elements with a `DragBinding` into data-space positions
+   - `src/main.ts`: toolbar, loss panel, WebSocket wiring (`src/connection.ts` reconnects with backoff); drag moves are coalesced to one message per animation frame
+   - The built bundle (`src/vizopt/server/static/`) is gitignored but included in wheels, so run `npm run build` before `uv build`
+
+9. **Other modules**
    - [treemap.py](src/vizopt/treemap.py): classic squarified treemap layout (non-optimization baseline)
    - [milp_euler_rectangles.py](src/vizopt/milp_euler_rectangles.py): MILP-based Euler diagram with rectangular sets (needs the `milp` group)
    - [introspection.py](src/vizopt/introspection.py): visualizes this project's own structure (file treemaps, import/class graphs)
@@ -152,8 +175,8 @@ A template module lives under `src/vizopt/templates/` and exposes one or more `V
 ## Python Environment
 
 - Requires Python 3.13+
-- Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas, pydantic
-- Dev dependencies: black (formatting), ruff (linting), pyright (type checking), pytest + pytest-cov (testing), ipykernel / nbconvert / nbformat (notebooks), zensical + mkdocstrings-python (docs)
+- Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas, pydantic; `server` extra: FastAPI, uvicorn
+- Dev dependencies: black (formatting), ruff (linting), pyright (type checking), pytest + pytest-cov + httpx2 (testing, incl. FastAPI's TestClient), ipykernel / nbconvert / nbformat (notebooks), zensical + mkdocstrings-python (docs), the `server` extra
 
 ## Documentation
 

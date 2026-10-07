@@ -19,17 +19,47 @@ Conventions:
   a 2D `[x, y]` position, so a frontend can turn a drag into
   `session.pin(drag.var, drag.index, value=[x, y])`.
 
-The JSON Schema of `Scene` (`Scene.model_json_schema()`) is exported for the
-frontend's generated TypeScript types by `scripts/export_scene_schema.py`.
+The JSON Schema of `Scene` is exported, as part of the live-server protocol
+(`vizopt.server.protocol`), for the frontend's generated TypeScript types by
+`scripts/export_protocol_schema.py`.
 """
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
+
+_DISCRIMINATORS = ("type", "kind")
+
+
+def _mark_discriminators_required(schema: dict) -> None:
+    """List `type` / `kind` as required in a model's JSON Schema.
+
+    They have defaults (so Python callers can omit them), which would make
+    them optional in the schema and in the generated TypeScript types, where
+    discriminated unions can then no longer be narrowed. They are always
+    present in serialized messages.
+    """
+    required = schema.setdefault("required", [])
+    for key in _DISCRIMINATORS:
+        if key in schema.get("properties", {}) and key not in required:
+            required.insert(0, key)
 
 
 class _SceneModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra=_mark_discriminators_required
+    )
+
+
+Point = Annotated[
+    tuple[float, float],
+    # Plain-array form; `prefixItems` (pydantic's default for tuples) is not
+    # understood by json-schema-to-typescript.
+    WithJsonSchema(
+        {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+    ),
+]
+"""An `[x, y]` pair in data coordinates."""
 
 
 class Style(_SceneModel):
@@ -116,7 +146,7 @@ class Polygon(_Element):
     """
 
     kind: Literal["polygon"] = "polygon"
-    points: list[tuple[float, float]]
+    points: list[Point]
 
 
 class Text(_Element):

@@ -1,0 +1,230 @@
+:root {
+  --bg: #ffffff;
+  --panel: #f6f7f9;
+  --border: #dcdfe4;
+  --text: #1f2328;
+  --muted: #656d76;
+  --node: #4682b4;
+  --edge: #8c959f;
+  --pinned: #e8590c;
+  --ok: #2da44e;
+  --warn: #d4a72c;
+  --bad: #cf222e;
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8d96a0;
+    --node: #6ca4d6;
+    --edge: #6e7681;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--muted);
+}
+
+.status {
+  min-width: 14em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.dot.open {
+  background: var(--ok);
+}
+
+.dot.closed {
+  background: var(--bad);
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.stage {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.sidebar {
+  width: 260px;
+  padding: 12px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+}
+
+.sidebar h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.metrics {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics th {
+  text-align: left;
+  font-weight: normal;
+  color: var(--muted);
+  padding: 2px 0;
+}
+
+.metrics td {
+  text-align: right;
+}
+
+.metrics tr.total th,
+.metrics tr.total td {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--bad);
+  color: white;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.toast.visible {
+  opacity: 1;
+}
+
+/* --- scene --- */
+
+svg.scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: move;
+}
+
+svg.scene.dragging,
+svg.scene.dragging .draggable {
+  cursor: grabbing;
+}
+
+.el-circle {
+  fill: var(--node);
+}
+
+.el-line {
+  stroke: var(--edge);
+  stroke-width: 1.5px;
+}
+
+.arrow-head {
+  fill: var(--edge);
+}
+
+.el-polygon {
+  fill: none;
+  stroke: var(--text);
+}
+
+.el-text {
+  fill: var(--text);
+  user-select: none;
+}
+
+.draggable {
+  cursor: grab;
+}
+
+.el-circle.pinned {
+  stroke: var(--pinned);
+  stroke-width: 3px;
+}
+
+.el-text.pinned {
+  fill: var(--pinned);
+}

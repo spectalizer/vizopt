@@ -1,0 +1,912 @@
+{
+  "$defs": {
+    "Circle": {
+      "additionalProperties": false,
+      "description": "A circle (or point marker).\n\nAttributes:\n    cx: Center x, data coordinates.\n    cy: Center y, data coordinates.\n    r: Radius, in `radius_units`.\n    radius_units: `\"data\"` (scales with zoom) or `\"px\"` (fixed marker size).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "drag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DragBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tooltip"
+        },
+        "kind": {
+          "const": "circle",
+          "default": "circle",
+          "title": "Kind",
+          "type": "string"
+        },
+        "cx": {
+          "title": "Cx",
+          "type": "number"
+        },
+        "cy": {
+          "title": "Cy",
+          "type": "number"
+        },
+        "r": {
+          "title": "R",
+          "type": "number"
+        },
+        "radius_units": {
+          "default": "data",
+          "enum": [
+            "data",
+            "px"
+          ],
+          "title": "Radius Units",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "cx",
+        "cy",
+        "r"
+      ],
+      "title": "Circle",
+      "type": "object"
+    },
+    "DragBinding": {
+      "additionalProperties": false,
+      "description": "Ties an element's anchor point to a 2D position optimization variable.\n\nAttributes:\n    var: Name of the optimization variable, e.g. `\"node_xys\"`.\n    index: Index of the `[x, y]` row in that variable.",
+      "properties": {
+        "var": {
+          "title": "Var",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "var",
+        "index"
+      ],
+      "title": "DragBinding",
+      "type": "object"
+    },
+    "DragEndMessage": {
+      "additionalProperties": false,
+      "description": "The user released a grabbed element.\n\nAttributes:\n    var: Variable name, from the element's `DragBinding`.\n    index: Entry index, from the element's `DragBinding`.\n    keep_pinned: Leave the element pinned where it was dropped instead\n        of releasing it back to the optimizer.",
+      "properties": {
+        "type": {
+          "const": "drag_end",
+          "default": "drag_end",
+          "title": "Type",
+          "type": "string"
+        },
+        "var": {
+          "title": "Var",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "keep_pinned": {
+          "default": false,
+          "title": "Keep Pinned",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "var",
+        "index"
+      ],
+      "title": "DragEndMessage",
+      "type": "object"
+    },
+    "DragMessage": {
+      "additionalProperties": false,
+      "description": "The user moved a grabbed element to `(x, y)`, in data coordinates.\n\nAttributes:\n    var: Variable name, from the element's `DragBinding`.\n    index: Entry index, from the element's `DragBinding`.\n    x: New x position.\n    y: New y position.",
+      "properties": {
+        "type": {
+          "const": "drag",
+          "default": "drag",
+          "title": "Type",
+          "type": "string"
+        },
+        "var": {
+          "title": "Var",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "var",
+        "index",
+        "x",
+        "y"
+      ],
+      "title": "DragMessage",
+      "type": "object"
+    },
+    "DragStartMessage": {
+      "additionalProperties": false,
+      "description": "The user grabbed a draggable element: pin it where it is.\n\nAttributes:\n    var: Variable name, from the element's `DragBinding`.\n    index: Entry index, from the element's `DragBinding`.",
+      "properties": {
+        "type": {
+          "const": "drag_start",
+          "default": "drag_start",
+          "title": "Type",
+          "type": "string"
+        },
+        "var": {
+          "title": "Var",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "var",
+        "index"
+      ],
+      "title": "DragStartMessage",
+      "type": "object"
+    },
+    "ErrorMessage": {
+      "additionalProperties": false,
+      "description": "A client message could not be applied.\n\nAttributes:\n    message: Human-readable reason.",
+      "properties": {
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "message"
+      ],
+      "title": "ErrorMessage",
+      "type": "object"
+    },
+    "FrameMessage": {
+      "additionalProperties": false,
+      "description": "The current state of the optimization.\n\nAttributes:\n    iteration: Number of optimization steps performed so far.\n    running: Whether the optimizer is currently stepping (neither paused\n        by the user nor settled after its learning-rate decay).\n    paused: Whether the user paused the optimizer.\n    scene: The current configuration, ready to render.\n    metrics: Loss values, or `None` before the first step.\n    pinned: Per variable name, the indices of pinned entries.\n    weights: Current multiplier per term.",
+      "properties": {
+        "type": {
+          "const": "frame",
+          "default": "frame",
+          "title": "Type",
+          "type": "string"
+        },
+        "iteration": {
+          "title": "Iteration",
+          "type": "integer"
+        },
+        "running": {
+          "title": "Running",
+          "type": "boolean"
+        },
+        "paused": {
+          "title": "Paused",
+          "type": "boolean"
+        },
+        "scene": {
+          "$ref": "#/$defs/Scene"
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pinned": {
+          "additionalProperties": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Pinned",
+          "type": "object"
+        },
+        "weights": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Weights",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "iteration",
+        "running",
+        "paused",
+        "scene"
+      ],
+      "title": "FrameMessage",
+      "type": "object"
+    },
+    "HelloMessage": {
+      "additionalProperties": false,
+      "description": "Sent once on connection: what can be steered.\n\nAttributes:\n    terms: Names of all objective terms, in definition order.\n    weights: Current multiplier per term.\n    adjustable_terms: Terms whose weight can be changed live (those\n        with a non-zero multiplier when the problem was built).\n    learning_rate: Current peak learning rate.\n    steps_per_frame: Optimization steps between two frames.",
+      "properties": {
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Type",
+          "type": "string"
+        },
+        "terms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Terms",
+          "type": "array"
+        },
+        "weights": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Weights",
+          "type": "object"
+        },
+        "adjustable_terms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Adjustable Terms",
+          "type": "array"
+        },
+        "learning_rate": {
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "steps_per_frame": {
+          "title": "Steps Per Frame",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "terms",
+        "weights",
+        "adjustable_terms",
+        "learning_rate",
+        "steps_per_frame"
+      ],
+      "title": "HelloMessage",
+      "type": "object"
+    },
+    "Line": {
+      "additionalProperties": false,
+      "description": "A straight segment, optionally with an arrowhead at its end.\n\nAttributes:\n    x1: Start x, data coordinates.\n    y1: Start y, data coordinates.\n    x2: End x, data coordinates.\n    y2: End y, data coordinates.\n    arrow_end: Draw an arrowhead at `(x2, y2)`.\n    shorten_start_px: Screen pixels to trim from the start, e.g. the\n        radius of a pixel-sized node marker the line starts from.\n    shorten_end_px: Screen pixels to trim from the end.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "drag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DragBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tooltip"
+        },
+        "kind": {
+          "const": "line",
+          "default": "line",
+          "title": "Kind",
+          "type": "string"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        },
+        "x2": {
+          "title": "X2",
+          "type": "number"
+        },
+        "y2": {
+          "title": "Y2",
+          "type": "number"
+        },
+        "arrow_end": {
+          "default": false,
+          "title": "Arrow End",
+          "type": "boolean"
+        },
+        "shorten_start_px": {
+          "default": 0.0,
+          "title": "Shorten Start Px",
+          "type": "number"
+        },
+        "shorten_end_px": {
+          "default": 0.0,
+          "title": "Shorten End Px",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "title": "Line",
+      "type": "object"
+    },
+    "Metrics": {
+      "additionalProperties": false,
+      "description": "Loss values at the frame's iteration.\n\nAttributes:\n    total: Total (schedule-weighted) loss.\n    terms: Weighted value per term name.",
+      "properties": {
+        "total": {
+          "title": "Total",
+          "type": "number"
+        },
+        "terms": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Terms",
+          "type": "object"
+        }
+      },
+      "required": [
+        "total",
+        "terms"
+      ],
+      "title": "Metrics",
+      "type": "object"
+    },
+    "PauseMessage": {
+      "additionalProperties": false,
+      "description": "Stop stepping until resumed.",
+      "properties": {
+        "type": {
+          "const": "pause",
+          "default": "pause",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "PauseMessage",
+      "type": "object"
+    },
+    "Polygon": {
+      "additionalProperties": false,
+      "description": "A closed polygon, e.g. a sampled star-shaped or band boundary.\n\nAttributes:\n    points: Vertices as `[x, y]` pairs, data coordinates.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "drag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DragBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tooltip"
+        },
+        "kind": {
+          "const": "polygon",
+          "default": "polygon",
+          "title": "Kind",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "points"
+      ],
+      "title": "Polygon",
+      "type": "object"
+    },
+    "ReheatMessage": {
+      "additionalProperties": false,
+      "description": "Restart the learning-rate decay so the layout re-settles.",
+      "properties": {
+        "type": {
+          "const": "reheat",
+          "default": "reheat",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ReheatMessage",
+      "type": "object"
+    },
+    "ResetMessage": {
+      "additionalProperties": false,
+      "description": "Start over from a fresh initialization.\n\nAttributes:\n    seed: Seed for the problem's `initialize`; `None` uses the next seed.",
+      "properties": {
+        "type": {
+          "const": "reset",
+          "default": "reset",
+          "title": "Type",
+          "type": "string"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ResetMessage",
+      "type": "object"
+    },
+    "ResumeMessage": {
+      "additionalProperties": false,
+      "description": "Resume stepping after a pause.",
+      "properties": {
+        "type": {
+          "const": "resume",
+          "default": "resume",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ResumeMessage",
+      "type": "object"
+    },
+    "Scene": {
+      "additionalProperties": false,
+      "description": "A renderable description of one configuration.\n\nAttributes:\n    elements: Drawing primitives, painted in list order (later on top).\n    y_axis: `\"up\"` for mathematical orientation (as in matplotlib), or\n        `\"down\"` for screen orientation.\n    equal_aspect: Whether x and y data units must have the same length\n        on screen.",
+      "properties": {
+        "elements": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "circle": "#/$defs/Circle",
+                "line": "#/$defs/Line",
+                "polygon": "#/$defs/Polygon",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Circle"
+              },
+              {
+                "$ref": "#/$defs/Line"
+              },
+              {
+                "$ref": "#/$defs/Polygon"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              }
+            ]
+          },
+          "title": "Elements",
+          "type": "array"
+        },
+        "y_axis": {
+          "default": "up",
+          "enum": [
+            "up",
+            "down"
+          ],
+          "title": "Y Axis",
+          "type": "string"
+        },
+        "equal_aspect": {
+          "default": true,
+          "title": "Equal Aspect",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "title": "Scene",
+      "type": "object"
+    },
+    "SetWeightMessage": {
+      "additionalProperties": false,
+      "description": "Change a term's multiplier.\n\nAttributes:\n    name: Term name.\n    value: New multiplier.",
+      "properties": {
+        "type": {
+          "const": "set_weight",
+          "default": "set_weight",
+          "title": "Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "value"
+      ],
+      "title": "SetWeightMessage",
+      "type": "object"
+    },
+    "Style": {
+      "additionalProperties": false,
+      "description": "Paint attributes of an element; `None` leaves the frontend default.\n\nAttributes:\n    fill: CSS color of the interior, or `\"none\"`.\n    stroke: CSS color of the outline, or `\"none\"`.\n    stroke_width_px: Outline width in screen pixels.\n    opacity: Overall opacity in `[0, 1]`.",
+      "properties": {
+        "fill": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fill"
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke"
+        },
+        "stroke_width_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke Width Px"
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Opacity"
+        }
+      },
+      "required": [],
+      "title": "Style",
+      "type": "object"
+    },
+    "Text": {
+      "additionalProperties": false,
+      "description": "A text label.\n\nAttributes:\n    x: Anchor x, data coordinates.\n    y: Anchor y, data coordinates.\n    text: The label content.\n    dx_px: Horizontal offset from the anchor, screen pixels.\n    dy_px: Vertical offset from the anchor, screen pixels (positive is up).\n    anchor: Horizontal alignment relative to the offset anchor.\n    font_size_px: Font size in screen pixels.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "drag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DragBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tooltip"
+        },
+        "kind": {
+          "const": "text",
+          "default": "text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "dx_px": {
+          "default": 0.0,
+          "title": "Dx Px",
+          "type": "number"
+        },
+        "dy_px": {
+          "default": 0.0,
+          "title": "Dy Px",
+          "type": "number"
+        },
+        "anchor": {
+          "default": "start",
+          "enum": [
+            "start",
+            "middle",
+            "end"
+          ],
+          "title": "Anchor",
+          "type": "string"
+        },
+        "font_size_px": {
+          "default": 12.0,
+          "title": "Font Size Px",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "x",
+        "y",
+        "text"
+      ],
+      "title": "Text",
+      "type": "object"
+    },
+    "UnpinMessage": {
+      "additionalProperties": false,
+      "description": "Release a pinned entry, or every entry of `var` when `index` is `None`.\n\nAttributes:\n    var: Variable name.\n    index: Entry index, or `None` for the whole variable.",
+      "properties": {
+        "type": {
+          "const": "unpin",
+          "default": "unpin",
+          "title": "Type",
+          "type": "string"
+        },
+        "var": {
+          "title": "Var",
+          "type": "string"
+        },
+        "index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index"
+        }
+      },
+      "required": [
+        "type",
+        "var"
+      ],
+      "title": "UnpinMessage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root holding both directions, so one schema defines every message.",
+  "properties": {
+    "server_message": {
+      "discriminator": {
+        "mapping": {
+          "error": "#/$defs/ErrorMessage",
+          "frame": "#/$defs/FrameMessage",
+          "hello": "#/$defs/HelloMessage"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HelloMessage"
+        },
+        {
+          "$ref": "#/$defs/FrameMessage"
+        },
+        {
+          "$ref": "#/$defs/ErrorMessage"
+        }
+      ],
+      "title": "Server Message"
+    },
+    "client_message": {
+      "discriminator": {
+        "mapping": {
+          "drag": "#/$defs/DragMessage",
+          "drag_end": "#/$defs/DragEndMessage",
+          "drag_start": "#/$defs/DragStartMessage",
+          "pause": "#/$defs/PauseMessage",
+          "reheat": "#/$defs/ReheatMessage",
+          "reset": "#/$defs/ResetMessage",
+          "resume": "#/$defs/ResumeMessage",
+          "set_weight": "#/$defs/SetWeightMessage",
+          "unpin": "#/$defs/UnpinMessage"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DragStartMessage"
+        },
+        {
+          "$ref": "#/$defs/DragMessage"
+        },
+        {
+          "$ref": "#/$defs/DragEndMessage"
+        },
+        {
+          "$ref": "#/$defs/UnpinMessage"
+        },
+        {
+          "$ref": "#/$defs/PauseMessage"
+        },
+        {
+          "$ref": "#/$defs/ResumeMessage"
+        },
+        {
+          "$ref": "#/$defs/ReheatMessage"
+        },
+        {
+          "$ref": "#/$defs/SetWeightMessage"
+        },
+        {
+          "$ref": "#/$defs/ResetMessage"
+        }
+      ],
+      "title": "Client Message"
+    }
+  },
+  "required": [
+    "server_message",
+    "client_message"
+  ],
+  "title": "Protocol",
+  "type": "object"
+}

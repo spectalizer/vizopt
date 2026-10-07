@@ -138,7 +138,7 @@ session.record()                                # per-term values, like a histor
 
 Weights, pins and the learning rate are passed to the jitted step as arguments, so none of these calls trigger a recompilation. `VizOptimizer.session()` builds the problem and returns a session in one call.
 
-### Scenes
+### Scenes and the live server
 
 For rendering outside of Python, a template can describe a configuration as a `vizopt.scene.Scene`: a JSON-serializable list of circles, lines, polygons and text in data coordinates. Elements that can be dragged carry a `DragBinding(var, index)`, telling a frontend which variable entry to pin when the user drags them:
 
@@ -148,6 +148,8 @@ payload = scene.to_json_dict()   # send to the browser
 # on drag of an element with element.drag = DragBinding(var="node_xys", index=3):
 session.pin("node_xys", 3, value=[x, y])
 ```
+
+`vizopt.server.serve(optimizer, optim_config)` (requires `pip install "vizopt[server]"`) does exactly this for you: it runs the session in a background thread, streams scenes and loss values over a WebSocket at about 30 frames per second, and serves a browser app that renders them and sends drags, pause, reheat, weight and reset commands back. Each interaction reheats the learning rate; after `optim_config.n_iters` quiet iterations the run settles and stops using CPU until the next interaction.
 
 ## JAX Design Patterns
 
