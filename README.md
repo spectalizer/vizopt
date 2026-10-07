@@ -114,7 +114,7 @@ npm run dev      # hot-reloading dev server; proxies /ws to a running serve(...)
 npm run codegen  # after changing src/vizopt/scene.py or src/vizopt/server/protocol.py
 ```
 
-The built bundle is gitignored but packaged into wheels: run `npm run build` before building a release.
+The built bundle is gitignored but packaged into wheels; the publish workflow builds it before `uv build`. Run `npm run build` yourself before a local `uv build`.
 
 ### Documentation
 

@@ -56,6 +56,11 @@ ignore_missing_imports = true
 requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+# uv_build packages everything under src/vizopt/ regardless of .gitignore,
+# so keep local tool caches out of sdists and wheels.
+source-exclude = ["**/.mypy_cache", "**/__pycache__"]
+
 [tool.pytest.ini_options]
 addopts = "--cov=vizopt --cov-report=html --cov-report=term-missing"
 

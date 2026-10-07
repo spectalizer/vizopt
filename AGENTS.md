@@ -95,7 +95,8 @@ npm run codegen    # after changing scene.py or server/protocol.py: re-export th
    - `src/protocol/protocol.ts` is generated from the schema (json-schema-to-typescript) — never edit it by hand
    - `src/view.ts` `SceneView`: renders any `Scene` generically (keyed data join on element ids, data → screen scales with fit, zoom and pan; `_px` sizes stay fixed on zoom), and turns drags on elements with a `DragBinding` into data-space positions
    - `src/main.ts`: toolbar, loss panel, WebSocket wiring (`src/connection.ts` reconnects with backoff); drag moves are coalesced to one message per animation frame
-   - The built bundle (`src/vizopt/server/static/`) is gitignored but included in wheels, so run `npm run build` before `uv build`
+   - The built bundle (`src/vizopt/server/static/`) is gitignored but included in wheels, so run `npm run build` before a local `uv build`; the `publish.yml` workflow does this before building releases
+   - `[tool.uv.build-backend] source-exclude` keeps `.mypy_cache` / `__pycache__` out of sdists and wheels (uv_build ignores `.gitignore`)
 
 9. **Other modules**
    - [treemap.py](src/vizopt/treemap.py): classic squarified treemap layout (non-optimization baseline)
