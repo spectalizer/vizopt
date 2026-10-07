@@ -55,7 +55,7 @@ Optional dependency groups: `uv sync --group milp` (PuLP/HiGHS, for `milp_euler_
 3. **[components/](src/vizopt/components/)** - Reusable JAX loss components and shape representations
    - [common.py](src/vizopt/components/common.py): generic penalties — `multiple_bbox_intersections()` (vectorized pairwise bbox intersection areas, `(n, 2, 2)` inputs → `(n, m)` matrix), `calculate_collision_penalty()`, width penalties, `should_be_positive_activation()`
    - [stars.py](src/vizopt/components/stars.py): star-shaped (radially convex) domains — the `StarRepresentation` ABC with `Discrete`, `Fourier` and `BSpline` parametrizations, plus the shared private loss terms (enclosure, exclusion, area, perimeter, smoothness, convexity, labels, …) and SVG helpers used by the star templates
-   - [bspline_stars.py](src/vizopt/components/bspline_stars.py): B-spline boundary math and raster soft-membership; also still holds legacy functional optimizers (`optimize_multiple_radially_convex_sets_bspline*`) predating the `BSpline` representation
+   - [bspline_stars.py](src/vizopt/components/bspline_stars.py): B-spline boundary math behind the `BSpline` representation, and B-spline raster soft-membership for `RasterStarOptimizer`
    - [bands.py](src/vizopt/components/bands.py): convex vertical-band domains (see Convex Band Sets)
 
 4. **[templates/](src/vizopt/templates/)** - User-facing `VizOptimizer` subclasses, one problem family per module

@@ -260,6 +260,14 @@ def test_graph_to_optimizer_inputs_enclosures_valid():
         assert u != v
 
 
+def test_graph_to_optimizer_inputs_enclosures_are_inner_outer():
+    """Pairs follow the optimizers' (inner_idx, outer_idx) convention."""
+    G = make_british_islands_graph()
+    _, idx, enclosures, _, _ = graph_to_optimizer_inputs(G)
+    assert (idx["England"], idx["Great Britain"]) in enclosures
+    assert (idx["Great Britain"], idx["England"]) not in enclosures
+
+
 def test_graph_to_optimizer_inputs_centers_dtype():
     G = make_british_islands_graph()
     _, _, _, _, initial_centers = graph_to_optimizer_inputs(G)

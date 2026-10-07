@@ -13,6 +13,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from ..utils import _SVG_SET_COLORS
+from .bspline_stars import _wrap_bspline_term, bspline_to_radii
 
 _MIN_RADIUS = 0.1
 _SLAB_EPS = 1e-7
@@ -1174,13 +1175,9 @@ class BSpline(StarRepresentation):
         return {"centers": initial_centers.copy(), "bspline_ctrl": ctrl}
 
     def wrap(self, fn, angles_jnp):
-        from vizopt.components.bspline_stars import _wrap_bspline_term
-
         return _wrap_bspline_term(fn, angles_jnp)
 
     def to_radii(self, optim_vars, angles_jnp):
-        from vizopt.components.bspline_stars import bspline_to_radii
-
         return bspline_to_radii(optim_vars["bspline_ctrl"], angles_jnp)
 
     def extra_results(self, s, optim_vars):
