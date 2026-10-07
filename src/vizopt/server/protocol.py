@@ -38,8 +38,18 @@ class Metrics(_Message):
     terms: dict[str, float]
 
 
+class HistoryPoint(Metrics):
+    """Loss values at a past iteration.
+
+    Attributes:
+        iteration: The iteration the values were recorded at.
+    """
+
+    iteration: int
+
+
 class HelloMessage(_Message):
-    """Sent once on connection: what can be steered.
+    """Sent once on connection: what can be steered, and what happened so far.
 
     Attributes:
         terms: Names of all objective terms, in definition order.
@@ -48,6 +58,9 @@ class HelloMessage(_Message):
             with a non-zero multiplier when the problem was built).
         learning_rate: Current peak learning rate.
         steps_per_frame: Optimization steps between two frames.
+        history: Loss values of the current run at past published frames,
+            oldest first (thinned to a bounded length), so that a client
+            joining late, or reloading, sees the whole curve.
     """
 
     type: Literal["hello"] = "hello"
@@ -56,6 +69,7 @@ class HelloMessage(_Message):
     adjustable_terms: list[str]
     learning_rate: float
     steps_per_frame: int
+    history: list[HistoryPoint] = Field(default_factory=list)
 
 
 class FrameMessage(_Message):

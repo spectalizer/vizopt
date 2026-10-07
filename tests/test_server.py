@@ -257,3 +257,36 @@ def test_websocket_reports_invalid_messages(client):
         ws.send_json({"type": "set_weight", "name": "nope", "value": 1})
         error = _receive_until(ws, lambda m: m["type"] == "error")
         assert "nope" in error["message"]
+
+
+# --- history ---
+
+
+def test_publish_records_history_for_new_clients(live):
+    live.publish()  # before any step: no metrics, no history
+    assert live.hello().history == []
+    for _ in range(3):
+        live.tick()
+        live.publish()
+    live.publish()  # same iteration again: not recorded twice
+    history = live.hello().history
+    assert [p.iteration for p in history] == [5, 10, 15]
+    assert set(history[0].terms) == set(live.hello().terms)
+
+
+def test_history_is_thinned_to_its_bound():
+    live = LiveSession(_session(), steps_per_frame=1, settle_iters=50, max_history=8)
+    while live.tick():
+        live.publish()
+    history = live.hello().history
+    assert len(history) <= 8
+    assert history[-1].iteration == 50
+    iterations = [p.iteration for p in history]
+    assert iterations == sorted(iterations)
+
+
+def test_reset_clears_history(live):
+    live.tick()
+    live.publish()
+    live.apply(ResetMessage())
+    assert live.hello().history == []

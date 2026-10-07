@@ -59,7 +59,9 @@ npm run codegen    # after changing scene.py or server/protocol.py: re-export th
    - Pydantic primitives `Circle`, `Line`, `Polygon`, `Text` (discriminated by `kind`, each with a frame-stable `id`, a `Style`, and an optional `DragBinding(var, index)`) inside a `Scene`
    - Positions in data coordinates; sizes in data units unless the field ends in `_px` / says `"px"`
    - A `DragBinding` means the element's anchor point is `optim_vars[var][index]`, so a frontend turns a drag into `session.pin(var, index, value=[x, y])` with no template-specific code
-   - Templates opt in via `scene_configuration(optim_vars, input_parameters) -> Scene`; exposed as `problem.scene()` and `session.scene()`. Implemented so far by `LayeredGraphOptimizer`
+   - Templates opt in via `scene_configuration(optim_vars, input_parameters) -> Scene`; exposed as `problem.scene()` and `session.scene()`. Implemented by `LayeredGraphOptimizer`, `TreeLayoutOptimizer`, `CirclePackingOptimizer` and `EulerDiagram` (star regions as translucent `Polygon`s, circles and floating set labels draggable)
+   - `node_link_scene()` builds a draggable node-link diagram (edges, pixel-sized nodes, labels) from positions and edge indices; the layered graph and tree layout scenes are thin wrappers around it
+   - `tests/test_scene.py` checks every template's scene generically (unique ids, JSON round trip, every `DragBinding` sitting exactly at its variable entry) — add new templates to its `_TEMPLATES` table
    - Its JSON Schema is exported as part of the live-server protocol (see `server/`); re-run `npm run codegen` in `frontend/` after changing the models
 
 3. **[components/](src/vizopt/components/)** - Reusable JAX loss components and shape representations
@@ -87,14 +89,15 @@ npm run codegen    # after changing scene.py or server/protocol.py: re-export th
 7. **[server/](src/vizopt/server/)** - Live, interactive optimization in the browser (`server` extra)
    - `serve(optimizer, optim_config)`: starts a session and serves it with uvicorn at `http://127.0.0.1:8765`, including the built frontend
    - [live.py](src/vizopt/server/live.py) `LiveSession`: synchronous state machine (`validate`, `apply`, `tick`, `frame`) turning protocol messages into session steering, plus a worker thread that steps at a target fps and publishes latest-only frames. Each interaction reheats; after `settle_iters` iterations the run settles (idles) like d3-force
-   - [protocol.py](src/vizopt/server/protocol.py): Pydantic WebSocket messages, discriminated by `type` — server sends `hello`, then `frame`s (scene, metrics, pinned entries, weights) and `error`s; clients send `drag_start`/`drag`/`drag_end`, `unpin`, `pause`/`resume`, `reheat`, `set_weight`, `reset`
+   - [protocol.py](src/vizopt/server/protocol.py): Pydantic WebSocket messages, discriminated by `type` — server sends `hello` (terms, weights, and the run's loss history so far, so late joiners see the whole curve), then `frame`s (scene, metrics, pinned entries, weights) and `error`s; clients send `drag_start`/`drag`/`drag_end`, `unpin`, `pause`/`resume`, `reheat`, `set_weight`, `reset`
    - [app.py](src/vizopt/server/app.py) `create_app()`: FastAPI app with the `/ws` endpoint (one sender task per client, so frames and errors never interleave) and the static frontend at `/`
    - The protocol JSON Schema (`scripts/export_protocol_schema.py` → `frontend/src/protocol/protocol.schema.json`) is committed; `tests/test_server.py` fails when it is out of date with the models
 
 8. **[frontend/](frontend/)** - The browser app: Vite + TypeScript + D3 (d3-selection/zoom/drag/scale), no framework
    - `src/protocol/protocol.ts` is generated from the schema (json-schema-to-typescript) — never edit it by hand
    - `src/view.ts` `SceneView`: renders any `Scene` generically (keyed data join on element ids, data → screen scales with fit, zoom and pan; `_px` sizes stay fixed on zoom), and turns drags on elements with a `DragBinding` into data-space positions
-   - `src/main.ts`: toolbar, loss panel, WebSocket wiring (`src/connection.ts` reconnects with backoff); drag moves are coalesced to one message per animation frame
+   - `src/main.ts`: toolbar, terms panel (per-term value, log-scale weight slider sending `set_weight`, toggle to plot the term), WebSocket wiring (`src/connection.ts` reconnects with backoff); drag moves and slider changes are coalesced to one message per animation frame
+   - `src/chart.ts` `LossChart`: loss over iterations on a log y-axis with crosshair tooltip — the total plus up to 3 selected terms; series colors are slots 1-3 of the dataviz reference palette (CSS `--series-*`, validated for CVD/normal vision against the sidebar surface in light and dark mode)
    - The built bundle (`src/vizopt/server/static/`) is gitignored but included in wheels, so run `npm run build` before a local `uv build`; the `publish.yml` workflow does this before building releases
    - `[tool.uv.build-backend] source-exclude` keeps `.mypy_cache` / `__pycache__` out of sdists and wheels (uv_build ignores `.gitignore`)
 

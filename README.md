@@ -64,7 +64,7 @@ dag = nx.DiGraph([("A", "B"), ("A", "C"), ("B", "D"), ("C", "D")])
 serve(LayeredGraphOptimizer(dag, min_distance=1.5), OptimConfig(n_iters=2000, learning_rate=3e-3))
 ```
 
-This opens `http://127.0.0.1:8765`, where the layout optimizes live: drag a node and the rest re-flows around it (shift-drop keeps it pinned, double-click unpins), pause, reheat or reset. Templates support this by providing a `scene_configuration`; so far the layered graph layout does.
+This opens `http://127.0.0.1:8765`, where the layout optimizes live: drag a node and the rest re-flows around it (shift-drop keeps it pinned, double-click unpins), pause, reheat or reset, tune term weights with sliders and watch the per-term losses. Templates support this by providing a `scene_configuration`; the layered graph, tree layout, circle packing and Euler diagram (`EulerDiagram`) templates do.
 
 ## Features
 

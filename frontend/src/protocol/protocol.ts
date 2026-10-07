@@ -6,8 +6,11 @@ export type Terms = string[];
 export type AdjustableTerms = string[];
 export type LearningRate = number;
 export type StepsPerFrame = number;
-export type Type1 = "frame";
+export type Total = number;
 export type Iteration = number;
+export type History = HistoryPoint[];
+export type Type1 = "frame";
+export type Iteration1 = number;
 export type Running = boolean;
 export type Paused = boolean;
 export type Id = string;
@@ -15,6 +18,7 @@ export type Fill = string | null;
 export type Stroke = string | null;
 export type StrokeWidthPx = number | null;
 export type Opacity = number | null;
+export type FillOpacity = number | null;
 export type Var = string;
 export type Index = number;
 export type Tooltip = string | null;
@@ -50,7 +54,7 @@ export type FontSizePx = number;
 export type Elements = (Circle | Line | Polygon | Text)[];
 export type YAxis = "up" | "down";
 export type EqualAspect = boolean;
-export type Total = number;
+export type Total1 = number;
 export type Type2 = "error";
 export type Message = string;
 export type ClientMessage =
@@ -95,7 +99,7 @@ export interface Protocol {
   client_message: ClientMessage;
 }
 /**
- * Sent once on connection: what can be steered.
+ * Sent once on connection: what can be steered, and what happened so far.
  *
  * Attributes:
  *     terms: Names of all objective terms, in definition order.
@@ -104,6 +108,9 @@ export interface Protocol {
  *         with a non-zero multiplier when the problem was built).
  *     learning_rate: Current peak learning rate.
  *     steps_per_frame: Optimization steps between two frames.
+ *     history: Loss values of the current run at past published frames,
+ *         oldest first (thinned to a bounded length), so that a client
+ *         joining late, or reloading, sees the whole curve.
  */
 export interface HelloMessage {
   type: Type;
@@ -112,8 +119,23 @@ export interface HelloMessage {
   adjustable_terms: AdjustableTerms;
   learning_rate: LearningRate;
   steps_per_frame: StepsPerFrame;
+  history?: History;
 }
 export interface Weights {
+  [k: string]: number;
+}
+/**
+ * Loss values at a past iteration.
+ *
+ * Attributes:
+ *     iteration: The iteration the values were recorded at.
+ */
+export interface HistoryPoint {
+  total: Total;
+  terms: Terms1;
+  iteration: Iteration;
+}
+export interface Terms1 {
   [k: string]: number;
 }
 /**
@@ -131,7 +153,7 @@ export interface Weights {
  */
 export interface FrameMessage {
   type: Type1;
-  iteration: Iteration;
+  iteration: Iteration1;
   running: Running;
   paused: Paused;
   scene: Scene;
@@ -182,12 +204,15 @@ export interface Circle {
  *     stroke: CSS color of the outline, or `"none"`.
  *     stroke_width_px: Outline width in screen pixels.
  *     opacity: Overall opacity in `[0, 1]`.
+ *     fill_opacity: Opacity of the interior only, in `[0, 1]`, e.g. for
+ *         translucent regions with a solid outline.
  */
 export interface Style {
   fill?: Fill;
   stroke?: Stroke;
   stroke_width_px?: StrokeWidthPx;
   opacity?: Opacity;
+  fill_opacity?: FillOpacity;
 }
 /**
  * Ties an element's anchor point to a 2D position optimization variable.
@@ -275,10 +300,10 @@ export interface Text {
  *     terms: Weighted value per term name.
  */
 export interface Metrics {
-  total: Total;
-  terms: Terms1;
+  total: Total1;
+  terms: Terms2;
 }
-export interface Terms1 {
+export interface Terms2 {
   [k: string]: number;
 }
 export interface Pinned {

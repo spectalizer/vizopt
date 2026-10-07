@@ -276,7 +276,7 @@
     },
     "HelloMessage": {
       "additionalProperties": false,
-      "description": "Sent once on connection: what can be steered.\n\nAttributes:\n    terms: Names of all objective terms, in definition order.\n    weights: Current multiplier per term.\n    adjustable_terms: Terms whose weight can be changed live (those\n        with a non-zero multiplier when the problem was built).\n    learning_rate: Current peak learning rate.\n    steps_per_frame: Optimization steps between two frames.",
+      "description": "Sent once on connection: what can be steered, and what happened so far.\n\nAttributes:\n    terms: Names of all objective terms, in definition order.\n    weights: Current multiplier per term.\n    adjustable_terms: Terms whose weight can be changed live (those\n        with a non-zero multiplier when the problem was built).\n    learning_rate: Current peak learning rate.\n    steps_per_frame: Optimization steps between two frames.\n    history: Loss values of the current run at past published frames,\n        oldest first (thinned to a bounded length), so that a client\n        joining late, or reloading, sees the whole curve.",
       "properties": {
         "type": {
           "const": "hello",
@@ -312,6 +312,13 @@
         "steps_per_frame": {
           "title": "Steps Per Frame",
           "type": "integer"
+        },
+        "history": {
+          "items": {
+            "$ref": "#/$defs/HistoryPoint"
+          },
+          "title": "History",
+          "type": "array"
         }
       },
       "required": [
@@ -323,6 +330,34 @@
         "steps_per_frame"
       ],
       "title": "HelloMessage",
+      "type": "object"
+    },
+    "HistoryPoint": {
+      "additionalProperties": false,
+      "description": "Loss values at a past iteration.\n\nAttributes:\n    iteration: The iteration the values were recorded at.",
+      "properties": {
+        "total": {
+          "title": "Total",
+          "type": "number"
+        },
+        "terms": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Terms",
+          "type": "object"
+        },
+        "iteration": {
+          "title": "Iteration",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "terms",
+        "iteration"
+      ],
+      "title": "HistoryPoint",
       "type": "object"
     },
     "Line": {
@@ -653,7 +688,7 @@
     },
     "Style": {
       "additionalProperties": false,
-      "description": "Paint attributes of an element; `None` leaves the frontend default.\n\nAttributes:\n    fill: CSS color of the interior, or `\"none\"`.\n    stroke: CSS color of the outline, or `\"none\"`.\n    stroke_width_px: Outline width in screen pixels.\n    opacity: Overall opacity in `[0, 1]`.",
+      "description": "Paint attributes of an element; `None` leaves the frontend default.\n\nAttributes:\n    fill: CSS color of the interior, or `\"none\"`.\n    stroke: CSS color of the outline, or `\"none\"`.\n    stroke_width_px: Outline width in screen pixels.\n    opacity: Overall opacity in `[0, 1]`.\n    fill_opacity: Opacity of the interior only, in `[0, 1]`, e.g. for\n        translucent regions with a solid outline.",
       "properties": {
         "fill": {
           "anyOf": [
@@ -702,6 +737,18 @@
           ],
           "default": null,
           "title": "Opacity"
+        },
+        "fill_opacity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fill Opacity"
         }
       },
       "required": [],

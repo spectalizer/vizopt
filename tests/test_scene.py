@@ -9,8 +9,22 @@ import pytest
 from pydantic import ValidationError
 
 from vizopt.base import ObjectiveTerm, OptimConfig, OptimizationProblemTemplate
-from vizopt.scene import Circle, DragBinding, Line, Polygon, Scene, Style, Text
+from vizopt.components.stars import BSpline, Fourier
+from vizopt.examples.sets import make_animals_graph
+from vizopt.scene import (
+    Circle,
+    DragBinding,
+    Line,
+    Polygon,
+    Scene,
+    Style,
+    Text,
+    node_link_scene,
+)
+from vizopt.templates.circle_packing import CirclePackingOptimizer
+from vizopt.templates.euler.stars_vs_circles import EulerDiagram
 from vizopt.templates.layered_graph import LayeredGraphOptimizer
+from vizopt.templates.trees.tree_layout import TreeLayoutOptimizer
 
 
 def _NO_PRINT(*_):
@@ -179,3 +193,92 @@ def test_layered_graph_edges_follow_nodes(layered_session):
     edge = _element(scene, "edge/0", Line)
     source = _element(scene, "node/0", Circle)
     assert (edge.x1, edge.y1) == (source.cx, source.cy)
+
+
+# --- node_link_scene ---
+
+
+def test_node_link_scene_undirected_has_no_arrows():
+    scene = node_link_scene(np.zeros((2, 2)), [[0, 1]], directed=False)
+    assert _element(scene, "edge/0", Line).arrow_end is False
+
+
+def test_node_link_scene_without_names_has_no_labels():
+    scene = node_link_scene(np.zeros((3, 2)), np.zeros((0, 2), dtype=int))
+    assert [e.kind for e in scene.elements] == ["circle"] * 3
+
+
+# --- every template with a scene ---
+
+_TEMPLATES = {
+    "layered_graph": lambda: LayeredGraphOptimizer(
+        nx.DiGraph([("a", "b"), ("a", "c")])
+    ),
+    "tree_layout": lambda: TreeLayoutOptimizer(
+        nx.balanced_tree(2, 2, create_using=nx.DiGraph)
+    ),
+    "circle_packing": lambda: CirclePackingOptimizer([0.3, 0.5, 0.8]),
+    "euler": lambda: EulerDiagram.from_graph(make_animals_graph()),
+    "euler_labels": lambda: EulerDiagram.from_graph(
+        make_animals_graph(), label_rect_size=(0.6, 0.2)
+    ),
+    "euler_fourier": lambda: EulerDiagram.from_graph(
+        make_animals_graph(), representation=Fourier()
+    ),
+    "euler_bspline": lambda: EulerDiagram.from_graph(
+        make_animals_graph(), representation=BSpline()
+    ),
+}
+
+
+@pytest.fixture(params=list(_TEMPLATES))
+def template_session(request):
+    session = _TEMPLATES[request.param]().session(OptimConfig(learning_rate=0.01))
+    session.step(3)
+    return session
+
+
+def test_template_scene_ids_are_unique(template_session):
+    elements = template_session.scene().elements
+    assert len({e.id for e in elements}) == len(elements)
+
+
+def test_template_scene_is_json_serializable(template_session):
+    payload = json.loads(json.dumps(template_session.scene().to_json_dict()))
+    assert Scene.model_validate(payload) == template_session.scene()
+
+
+def test_template_drag_bindings_point_at_anchors(template_session):
+    """Each bound circle / text sits exactly at the entry it is bound to."""
+    variables = {k: np.asarray(v) for k, v in template_session.vars.items()}
+    bound = [e for e in template_session.scene().elements if e.drag is not None]
+    assert bound
+    for element in bound:
+        assert element.drag is not None
+        expected = variables[element.drag.var][element.drag.index]
+        if isinstance(element, Circle):
+            actual = [element.cx, element.cy]
+        else:
+            assert isinstance(element, Text)
+            actual = [element.x, element.y]
+        np.testing.assert_allclose(actual, expected, rtol=1e-6)
+
+
+def test_euler_scene_has_one_region_per_set():
+    optimizer = EulerDiagram.from_graph(make_animals_graph())
+    session = optimizer.session(OptimConfig())
+    regions = [e for e in session.scene().elements if isinstance(e, Polygon)]
+    assert len(regions) == len(optimizer.set_names)
+    assert [r.tooltip for r in regions] == [str(n) for n in optimizer.set_names]
+    assert all(r.style.fill_opacity is not None for r in regions)
+    k_angles = len(session.problem.input_parameters["angles"])
+    assert all(len(r.points) == k_angles for r in regions)
+
+
+def test_euler_scene_uses_custom_set_colors():
+    graph = make_animals_graph()
+    n_sets = len(EulerDiagram.from_graph(graph).set_names)
+    optimizer = EulerDiagram.from_graph(graph, set_colors=["red"] * n_sets)
+    scene = optimizer.session(OptimConfig()).scene()
+    region = _element(scene, "set/0", Polygon)
+    assert region.style.fill == "#ff0000"

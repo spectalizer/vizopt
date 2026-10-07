@@ -288,6 +288,7 @@ function applyStyle(node: SVGElement, d: SceneElement): void {
   node.style.stroke = style.stroke ?? "";
   node.style.strokeWidth = style.stroke_width_px != null ? `${style.stroke_width_px}px` : "";
   node.style.opacity = style.opacity != null ? String(style.opacity) : "";
+  node.style.fillOpacity = style.fill_opacity != null ? String(style.fill_opacity) : "";
 }
 
 function setTooltip(node: SVGElement, tooltip: string | null): void {

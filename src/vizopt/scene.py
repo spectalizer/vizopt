@@ -24,7 +24,10 @@ The JSON Schema of `Scene` is exported, as part of the live-server protocol
 `scripts/export_protocol_schema.py`.
 """
 
+from collections.abc import Sequence
 from typing import Annotated, Literal
+
+import numpy as np
 
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
@@ -70,12 +73,15 @@ class Style(_SceneModel):
         stroke: CSS color of the outline, or `"none"`.
         stroke_width_px: Outline width in screen pixels.
         opacity: Overall opacity in `[0, 1]`.
+        fill_opacity: Opacity of the interior only, in `[0, 1]`, e.g. for
+            translucent regions with a solid outline.
     """
 
     fill: str | None = None
     stroke: str | None = None
     stroke_width_px: float | None = None
     opacity: float | None = None
+    fill_opacity: float | None = None
 
 
 class DragBinding(_SceneModel):
@@ -194,3 +200,81 @@ class Scene(_SceneModel):
     def to_json_dict(self) -> dict:
         """Serialize to a JSON-compatible dict, omitting unset optional fields."""
         return self.model_dump(mode="json", exclude_none=True)
+
+
+def node_link_scene(
+    node_xys,
+    edge_indices,
+    node_names: Sequence | None = None,
+    *,
+    var: str = "node_xys",
+    directed: bool = True,
+    node_radius_px: float = 6.0,
+    node_fill: str = "steelblue",
+    edge_stroke: str = "gray",
+) -> Scene:
+    """Build the scene of a node-link diagram with draggable nodes.
+
+    Edges are painted below nodes, and node labels (when names are given)
+    above them. Nodes and their labels are bound to `var`, so dragging either
+    moves the node.
+
+    Args:
+        node_xys: `(N, 2)` node positions, data coordinates.
+        edge_indices: `(E, 2)` pairs of node indices, `(source, target)`.
+        node_names: Optional labels, one per node; also used as tooltips.
+        var: Name of the position variable the nodes are bound to.
+        directed: Draw an arrowhead at each edge's target.
+        node_radius_px: Node marker radius, screen pixels. Edges are trimmed
+            by it so that arrowheads touch the marker.
+        node_fill: CSS color of the node markers.
+        edge_stroke: CSS color of the edges.
+
+    Returns:
+        A scene with ids `edge/<e>`, `node/<k>` and `label/<k>`.
+    """
+    node_xys = np.asarray(node_xys, dtype=float)
+    edges = [
+        Line(
+            id=f"edge/{e}",
+            x1=node_xys[i, 0],
+            y1=node_xys[i, 1],
+            x2=node_xys[j, 0],
+            y2=node_xys[j, 1],
+            arrow_end=directed,
+            shorten_start_px=node_radius_px,
+            shorten_end_px=node_radius_px,
+            style=Style(stroke=edge_stroke, stroke_width_px=1.5),
+        )
+        for e, (i, j) in enumerate(np.asarray(edge_indices).reshape(-1, 2))
+    ]
+    nodes = [
+        Circle(
+            id=f"node/{k}",
+            cx=x,
+            cy=y,
+            r=node_radius_px,
+            radius_units="px",
+            style=Style(fill=node_fill),
+            drag=DragBinding(var=var, index=k),
+            tooltip=None if node_names is None else str(node_names[k]),
+        )
+        for k, (x, y) in enumerate(node_xys)
+    ]
+    labels = (
+        []
+        if node_names is None
+        else [
+            Text(
+                id=f"label/{k}",
+                x=x,
+                y=y,
+                text=str(name),
+                dx_px=node_radius_px + 2,
+                dy_px=4.0,
+                drag=DragBinding(var=var, index=k),
+            )
+            for k, ((x, y), name) in enumerate(zip(node_xys, node_names))
+        ]
+    )
+    return Scene(elements=[*edges, *nodes, *labels])

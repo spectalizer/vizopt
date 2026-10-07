@@ -13,6 +13,7 @@ from ..components.common import (
     calculate_collision_penalty,
     calculate_total_width_penalty_for_circular_layout,
 )
+from ..scene import Circle, DragBinding, Scene, Style
 from ..utils import _TAB20
 
 # ---------------------------------------------------------------------------
@@ -84,6 +85,23 @@ def plot_circles(positions, radii):
 
 def _plot_configuration(optim_vars, input_params):
     plot_circles(optim_vars["node_xys"], input_params["node_radii"])
+
+
+def _scene_configuration(optim_vars, input_params) -> Scene:
+    node_xys = np.asarray(optim_vars["node_xys"], dtype=float)
+    return Scene(
+        elements=[
+            Circle(
+                id=f"circle/{k}",
+                cx=x,
+                cy=y,
+                r=float(r),
+                style=Style(fill=_TAB20[k % len(_TAB20)], fill_opacity=0.85),
+                drag=DragBinding(var="node_xys", index=k),
+            )
+            for k, ((x, y), r) in enumerate(zip(node_xys, input_params["node_radii"]))
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +217,7 @@ class CirclePackingOptimizer(VizOptimizer):
             initialize=initialize,
             plot_configuration=_plot_configuration,
             svg_configuration=_svg_configuration,
+            scene_configuration=_scene_configuration,
         ).instantiate(input_parameters)
 
     @property

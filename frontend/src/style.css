@@ -10,6 +10,13 @@
   --ok: #2da44e;
   --warn: #d4a72c;
   --bad: #cf222e;
+  /* Loss chart: categorical slots 1-3 of the dataviz reference palette,
+     validated (CVD + normal vision) against --panel in both modes. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --chart-total: #52514e;
+  --grid: #e3e5e8;
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
   font-size: 14px;
@@ -24,6 +31,11 @@
     --muted: #8d96a0;
     --node: #6ca4d6;
     --edge: #6e7681;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --chart-total: #c3c2b7;
+    --grid: #262c34;
   }
 }
 
@@ -116,7 +128,7 @@ button:hover {
 }
 
 .sidebar {
-  width: 260px;
+  width: 320px;
   padding: 12px;
   border-left: 1px solid var(--border);
   background: var(--panel);
@@ -131,27 +143,153 @@ button:hover {
   margin: 0 0 8px;
 }
 
-.metrics {
+.sidebar h2:not(:first-child) {
+  margin-top: 16px;
+}
+
+/* --- loss chart --- */
+
+.chart {
+  position: relative;
+}
+
+.chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.chart .axis text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.chart .axis .domain {
+  stroke: var(--border);
+}
+
+.chart .grid {
+  stroke: var(--grid);
+}
+
+.chart .series {
+  fill: none;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart .crosshair {
+  stroke: var(--muted);
+  stroke-dasharray: 2 2;
+}
+
+.chart .hover-dot {
+  stroke: var(--panel);
+  stroke-width: 2px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+  pointer-events: none;
+  display: none;
+}
+
+.chart-tooltip.visible {
+  display: block;
+}
+
+.chart-tooltip-title {
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+/* --- terms panel --- */
+
+.terms {
   width: 100%;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
 
-.metrics th {
+.terms th {
   text-align: left;
   font-weight: normal;
-  color: var(--muted);
-  padding: 2px 0;
+  color: var(--text);
+  padding: 4px 0 0;
+  overflow-wrap: anywhere;
 }
 
-.metrics td {
+.terms td {
+  padding: 4px 0 0;
+}
+
+.terms td:first-child {
+  width: 22px;
+}
+
+.terms td.value {
   text-align: right;
+  color: var(--muted);
 }
 
-.metrics tr.total th,
-.metrics tr.total td {
+.terms tr.total th,
+.terms tr.total td.value {
   font-weight: 600;
   color: var(--text);
+}
+
+.terms tr.weight-row td {
+  padding-top: 0;
+}
+
+.weight-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weight-control input {
+  flex: 1;
+  min-width: 0;
+}
+
+.weight-control input:disabled {
+  opacity: 0.4;
+}
+
+.weight {
+  min-width: 4.5em;
+  text-align: right;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid var(--muted);
+  border-radius: 3px;
+  background: transparent;
+  vertical-align: middle;
+}
+
+.swatch.on {
+  border-color: transparent;
+}
+
+button.swatch {
+  cursor: pointer;
 }
 
 .hint {
@@ -214,17 +352,26 @@ svg.scene.dragging .draggable {
 .el-text {
   fill: var(--text);
   user-select: none;
+  /* Halo so labels stay readable over regions and edges. */
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .draggable {
   cursor: grab;
 }
 
+/* Pinned state wins over an element's own (inline) style. */
 .el-circle.pinned {
-  stroke: var(--pinned);
-  stroke-width: 3px;
+  stroke: var(--pinned) !important;
+  stroke-width: 3px !important;
 }
 
-.el-text.pinned {
-  fill: var(--pinned);
+.chart-tooltip .swatch {
+  margin-right: 6px;
+  border: none;
+  width: 10px;
+  height: 10px;
 }

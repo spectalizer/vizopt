@@ -28,6 +28,7 @@ from .protocol import (
     DragStartMessage,
     FrameMessage,
     HelloMessage,
+    HistoryPoint,
     Metrics,
     PauseMessage,
     ReheatMessage,
@@ -51,6 +52,8 @@ class LiveSession:
         settle_iters: Iterations to run after each interaction before
             idling; defaults to the session config's `n_iters` (the length
             of its learning-rate decay).
+        max_history: Bound on the loss history kept for new clients; when
+            exceeded, every other point is dropped (keeping the latest).
 
     Raises:
         ValueError: If the problem has no `scene_configuration`.
@@ -62,6 +65,7 @@ class LiveSession:
         steps_per_frame: int = 10,
         fps: float = 30.0,
         settle_iters: int | None = None,
+        max_history: int = 2000,
     ) -> None:
         if session.problem.scene_configuration is None:
             raise ValueError("LiveSession needs a problem with a scene_configuration.")
@@ -72,6 +76,8 @@ class LiveSession:
         self.paused = False
         self._seed = session.config.seed
         self._settle_at = session.iteration + self.settle_iters
+        self.max_history = max_history
+        self._history: list[HistoryPoint] = []
 
         self._commands: queue.Queue[ClientMessage] = queue.Queue()
         self._lock = threading.Lock()
@@ -99,7 +105,13 @@ class LiveSession:
             ],
             learning_rate=float(self.session.config.learning_rate),
             steps_per_frame=self.steps_per_frame,
+            history=self.history(),
         )
+
+    def history(self) -> list[HistoryPoint]:
+        """Loss values of the current run at past published frames (thread-safe)."""
+        with self._lock:
+            return list(self._history)
 
     def frame(self) -> FrameMessage:
         """Snapshot of the current state."""
@@ -191,6 +203,8 @@ class LiveSession:
                 self._seed = self._seed + 1 if seed is None else seed
                 self.session = session.problem.session(session.config, self._seed)
                 self._settle_at = self.session.iteration + self.settle_iters
+                with self._lock:
+                    self._history = []
                 return
         self.reheat()
 
@@ -240,11 +254,23 @@ class LiveSession:
 
     def publish(self) -> None:
         """Serialize the current frame and notify subscribers."""
-        payload = self.frame().model_dump(mode="json", exclude_none=True)
+        frame = self.frame()
+        payload = frame.model_dump(mode="json", exclude_none=True)
         with self._lock:
             self._latest = payload
             self._version += 1
             subscribers = list(self._subscribers)
+            if frame.metrics is not None and (
+                not self._history or self._history[-1].iteration != frame.iteration
+            ):
+                self._history.append(
+                    HistoryPoint(
+                        iteration=frame.iteration, **frame.metrics.model_dump()
+                    )
+                )
+                if len(self._history) > self.max_history:
+                    last = self._history[-1]
+                    self._history = self._history[:-1:2] + [last]
         for callback in subscribers:
             callback()
 
