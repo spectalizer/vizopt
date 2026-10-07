@@ -12,6 +12,7 @@ from ..base import (
     VizOptimizer,
 )
 from ..components.common import should_be_positive_activation
+from ..scene import Circle, DragBinding, Line, Scene, Style, Text
 
 # ---------------------------------------------------------------------------
 # Preprocessing
@@ -245,6 +246,59 @@ def _svg_configuration(snapshots, input_params, size):
     return elements
 
 
+_NODE_RADIUS_PX = 6.0
+
+
+def _scene_configuration(optim_vars, input_params) -> Scene:
+    node_xys = np.asarray(optim_vars["node_xys"], dtype=float)
+    node_names = input_params.get("node_names", None)
+
+    edges = [
+        Line(
+            id=f"edge/{e}",
+            x1=node_xys[i, 0],
+            y1=node_xys[i, 1],
+            x2=node_xys[j, 0],
+            y2=node_xys[j, 1],
+            arrow_end=True,
+            shorten_start_px=_NODE_RADIUS_PX,
+            shorten_end_px=_NODE_RADIUS_PX,
+            style=Style(stroke="gray", stroke_width_px=1.5),
+        )
+        for e, (i, j) in enumerate(input_params["edge_indices"])
+    ]
+    nodes = [
+        Circle(
+            id=f"node/{k}",
+            cx=x,
+            cy=y,
+            r=_NODE_RADIUS_PX,
+            radius_units="px",
+            style=Style(fill="steelblue"),
+            drag=DragBinding(var="node_xys", index=k),
+            tooltip=None if node_names is None else str(node_names[k]),
+        )
+        for k, (x, y) in enumerate(node_xys)
+    ]
+    labels = (
+        []
+        if node_names is None
+        else [
+            Text(
+                id=f"label/{k}",
+                x=x,
+                y=y,
+                text=str(name),
+                dx_px=_NODE_RADIUS_PX + 2,
+                dy_px=4.0,
+                drag=DragBinding(var="node_xys", index=k),
+            )
+            for k, ((x, y), name) in enumerate(zip(node_xys, node_names))
+        ]
+    )
+    return Scene(elements=[*edges, *nodes, *labels])
+
+
 def _plot_configuration(optim_vars, input_params):
     node_xys = optim_vars["node_xys"]
     edge_indices = input_params["edge_indices"]
@@ -412,6 +466,7 @@ class LayeredGraphOptimizer(VizOptimizer):
             initialize=_initialize,
             plot_configuration=_plot_configuration,
             svg_configuration=_svg_configuration,
+            scene_configuration=_scene_configuration,
         ).instantiate(input_parameters)
 
     @property

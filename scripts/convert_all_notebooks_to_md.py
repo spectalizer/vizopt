@@ -1,8 +1,8 @@
-"""Convert all notebooks in the examples/ folder to Markdown.
+"""Convert all notebooks in notebooks/examples/ to Markdown pages in docs/examples/.
 
 Usage:
-    uv run python scripts/convert_all_notebooks.py
-    uv run python scripts/convert_all_notebooks.py --execute
+    uv run python scripts/convert_all_notebooks_to_md.py
+    uv run python scripts/convert_all_notebooks_to_md.py --execute
 """
 
 import argparse
@@ -66,7 +66,7 @@ def main():
 
     notebooks = sorted(examples_dir.glob("*.ipynb"))
     if not notebooks:
-        print("No notebooks found in examples/")
+        print("No notebooks found in notebooks/examples/")
         return
 
     md_files = []

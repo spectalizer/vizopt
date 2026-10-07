@@ -9,6 +9,7 @@ from jax import Array, jit
 from jax import numpy as jnp
 from pydantic import BaseModel
 
+from .scene import Scene
 from .session import OptimizationSession, StepFunction, make_step_function
 
 # `optim_vars` and `input_parameters` are always plain dicts (JAX-compatible
@@ -185,6 +186,10 @@ class OptimizationProblemTemplate:
             `svg_configuration(snapshots, input_parameters, size) -> list[dict]`
             where each dict has a `"tag"` key and SVG attribute keys; list
             values are animated per-frame, scalar values are static.
+        scene_configuration: Optional callable describing a configuration as
+            a [Scene][vizopt.scene.Scene], for rendering outside of Python
+            (e.g. a live browser frontend). Signature:
+            `scene_configuration(optim_vars, input_parameters) -> Scene`.
     """
 
     terms: list[ObjectiveTerm]
@@ -192,6 +197,7 @@ class OptimizationProblemTemplate:
     input_params_class: type[BaseModel] | None = None
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
+    scene_configuration: Callable[[OptimVars, InputParams], Scene] | None = None
 
     def instantiate(
         self,
@@ -237,12 +243,13 @@ class OptimizationProblemTemplate:
                 for t in terms
             ]
         return OptimizationProblem(
-            input_parameters,
-            terms,
-            self.initialize,
-            self.plot_configuration,
-            self.svg_configuration,
-            var_scales,
+            input_parameters=input_parameters,
+            terms=terms,
+            initialize=self.initialize,
+            plot_configuration=self.plot_configuration,
+            svg_configuration=self.svg_configuration,
+            scene_configuration=self.scene_configuration,
+            var_scales=var_scales,
         )
 
 
@@ -260,6 +267,9 @@ class OptimizationProblem:
         svg_configuration: Optional callable to produce SVG element specs for
             animation. Signature:
             `svg_configuration(snapshots, input_parameters, size) -> list[dict]`.
+        scene_configuration: Optional callable describing a configuration as
+            a [Scene][vizopt.scene.Scene]. Signature:
+            `scene_configuration(optim_vars, input_parameters) -> Scene`.
         var_scales: Optional per-variable scale factors. See
             :func:`build_objective` for details.
     """
@@ -269,6 +279,7 @@ class OptimizationProblem:
     initialize: Callable[[InputParams, int], OptimVars]
     plot_configuration: Callable[[OptimVars, InputParams], None] | None = None
     svg_configuration: Callable[[list, InputParams, int], list[dict]] | None = None
+    scene_configuration: Callable[[OptimVars, InputParams], Scene] | None = None
     var_scales: dict | None = None
     result: "OptimizationResult | None" = field(default=None, init=False, repr=False)
     _step_functions: dict = field(default_factory=dict, init=False, repr=False)
@@ -308,6 +319,28 @@ class OptimizationProblem:
         if self.result is None:
             raise ValueError("No result yet — call optimize() first.")
         self.plot_configuration(self.result.optim_vars, self.input_parameters, **kwargs)
+
+    def scene(self, optim_vars: OptimVars | None = None) -> Scene:
+        """Describe a configuration as a [Scene][vizopt.scene.Scene].
+
+        Args:
+            optim_vars: Physical-space variables to describe; defaults to the
+                last optimization result.
+
+        Returns:
+            The scene produced by `scene_configuration`.
+
+        Raises:
+            ValueError: If `scene_configuration` is not set, or if
+                `optim_vars` is omitted and `optimize()` has not been called.
+        """
+        if self.scene_configuration is None:
+            raise ValueError("scene_configuration is not set on this problem.")
+        if optim_vars is None:
+            if self.result is None:
+                raise ValueError("No result yet — call optimize() first.")
+            optim_vars = self.result.optim_vars
+        return self.scene_configuration(optim_vars, self.input_parameters)
 
     def session(
         self, optim_config: OptimConfig | None = None, seed: int | None = None

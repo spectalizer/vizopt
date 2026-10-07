@@ -12,7 +12,7 @@ def graph_to_optimizer_inputs(G):
 
     Returns:
         Tuple of `(set_names, idx, enclosures, target_areas, initial_centers)`
-        in the formats expected by `optimize_star_domains_raster` and similar.
+        for `StarDomainOptimizer` and `RasterStarOptimizer`.
     """
     set_names = list(G.nodes)
     idx = {name: i for i, name in enumerate(set_names)}
@@ -82,7 +82,7 @@ def make_multiples_of_primes_graph(
 
     Returns:
         A `networkx.DiGraph` with parent→child edges, ready for
-        `optimize_multiple_radially_convex_sets_with_movable_circles_from_graph`.
+        `EulerDiagram.from_graph`.
         Leaf nodes carry `center` and `r` attributes; set nodes carry only
         their name.
     """

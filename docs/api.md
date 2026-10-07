@@ -20,6 +20,16 @@
 
 ---
 
+## vizopt.scene
+
+::: vizopt.scene
+    options:
+      members: true
+      filters:
+        - "!^_"
+
+---
+
 ## vizopt.animation
 
 ::: vizopt.animation

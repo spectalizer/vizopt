@@ -22,33 +22,42 @@ uv sync --group hyperoptim
 
 ```python
 import numpy as np
-from vizopt.templates import circle_packing
+from vizopt.base import OptimConfig
+from vizopt.templates.circle_packing import CirclePackingOptimizer
 
 # Define circle radii
 rng = np.random.default_rng(0)
 radii = rng.uniform(0.1, 1.0, size=20).tolist()
 
 # Pack circles to minimize overlap and bounding box size
-positions = circle_packing.optimize_circle_packing(
-    radii=radii,
-    weight_total_size=10.0,
-    collision_offset=0.05,
-    optim_kwargs={"n_iters": 3000, "learning_rate": 0.01},
-)
-# positions is a list of (x, y) tuples, one per circle
+optimizer = CirclePackingOptimizer(radii, weight_total_size=10.0, collision_offset=0.05)
+optimizer.optimize(OptimConfig(n_iters=3000, learning_rate=0.01))
+positions = optimizer.positions_  # list of (x, y) tuples, one per circle
+optimizer.plot()
+```
+
+For step-by-step control (e.g. dragging an element while the optimization keeps running), start a session instead of calling `optimize()`:
+
+```python
+session = optimizer.session(OptimConfig(learning_rate=0.01))
+session.step(500)
+session.pin("node_xys", 0, value=[0.0, 0.0])  # hold circle 0 at the origin
+session.reheat()
+session.step(500)
 ```
 
 ## Features
 
 - Multi-objective optimization (edge lengths, compactness, collision avoidance, inclusion constraints)
 - Efficient JAX-based gradient descent with JIT compilation
+- Steppable optimization sessions: pin or move variables, change term weights and reheat the learning rate between steps, without recompiling
 - Handles arbitrary hierarchical inclusion relationships
 - Automatic per-variable normalization so optimizer performance is independent of input coordinate scale
 - NetworkX integration with a consistent DiGraph convention: **parent → child edges** (`(u, v)` means `v ⊂ u`)
 
 ## Examples
 
-See [examples/examples_with_bubbles.ipynb](examples/examples_with_bubbles.ipynb) for detailed usage.
+See the [examples gallery](https://spectalizer.github.io/vizopt/examples/) in the documentation, rendered from the notebooks in [notebooks/examples/](notebooks/examples/). More exploratory work lives in [notebooks/experiments/](notebooks/experiments/).
 
 ## License
 
@@ -78,4 +87,10 @@ Using Zensical.
 
 `uv run zensical serve`
 
-`uv run python scripts/nb_to_md.py --execute examples/circle_packing.ipynb docs/examples/from-notebook-circle-packing.md`
+Render all example notebooks into `docs/examples/`:
+
+`uv run python scripts/convert_all_notebooks_to_md.py --execute`
+
+Or a single one:
+
+`uv run python scripts/nb_to_md.py --execute notebooks/examples/circle_packing.ipynb docs/examples/circle-packing.md`

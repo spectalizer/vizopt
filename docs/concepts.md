@@ -14,8 +14,9 @@ VizOptimizer subclass (e.g. EulerDiagram)
 OptimizationProblemTemplate   ←  ObjectiveTerm(s) + initialize function
        ↓ .instantiate(input_parameters)
 OptimizationProblem
-       ↓ .optimize()
-OptimizationResult  (optim_vars, history, final_loss)
+       ↓ .optimize()                     ↓ .session()
+OptimizationResult                 OptimizationSession
+(optim_vars, history, final_loss)  (step, pin, set_weight, reheat, …)
 ```
 
 ## VizOptimizer
@@ -84,7 +85,7 @@ from vizopt.base import OptimizationProblemTemplate
 
 template = OptimizationProblemTemplate(
     terms=[term_a, term_b],
-    initialize=lambda input_params: {"x": jnp.zeros(10)},
+    initialize=lambda input_params, seed: {"x": jnp.zeros(10)},
     input_params_class=MyPydanticModel,   # optional, for validation
     plot_configuration=my_plot_fn,        # optional
 )
@@ -112,7 +113,41 @@ result = problem.optimize(
 ```
 
 - `optim_vars` — the optimized variables (a plain dict / JAX pytree)
-- `history` — list of dicts with keys `"iteration"`, `"total"`, and one entry per term name
+- `history` — list of dicts with keys `"iteration"`, `"total"`, and one entry per term name (see [Optimization History](#optimization-history))
+- `final_loss` — loss of the best run at its last iteration
+
+With `OptimConfig(n_restarts=k)`, the problem is solved `k` times with seeds `seed, seed + 1, …` and the best run is returned.
+
+## OptimizationSession
+
+`optimize()` is a batch loop on top of a lower-level, steppable *session*. Use a session directly when something outside the loop should decide when to step and change the state in between, e.g. an interactive frontend where the user drags an element while the optimization keeps running:
+
+```python
+session = problem.session(OptimConfig(learning_rate=0.01))
+session.step(200)
+
+session.pin("node_xys", 3, value=[1.0, 2.0])   # hold node 3 at (1, 2); others re-flow
+session.set_weight("collision", 5.0)           # change a term weight live
+session.reheat()                                # restart the learning-rate decay
+session.step(200)
+
+session.unpin("node_xys", 3)
+session.vars["node_xys"]                        # current values, in physical space
+session.record()                                # per-term values, like a history entry
+```
+
+Weights, pins and the learning rate are passed to the jitted step as arguments, so none of these calls trigger a recompilation. `VizOptimizer.session()` builds the problem and returns a session in one call.
+
+### Scenes
+
+For rendering outside of Python, a template can describe a configuration as a `vizopt.scene.Scene`: a JSON-serializable list of circles, lines, polygons and text in data coordinates. Elements that can be dragged carry a `DragBinding(var, index)`, telling a frontend which variable entry to pin when the user drags them:
+
+```python
+scene = session.scene()
+payload = scene.to_json_dict()   # send to the browser
+# on drag of an element with element.drag = DragBinding(var="node_xys", index=3):
+session.pin("node_xys", 3, value=[x, y])
+```
 
 ## JAX Design Patterns
 
@@ -120,17 +155,17 @@ result = problem.optimize(
 
 **optim_vars are plain dicts**: This makes them JAX-compatible pytrees that Optax can differentiate through. Example: `{"node_xys": array, "variable_node_radii": array}`.
 
-**JIT compilation**: `build_objective()` produces a function that gets JIT-compiled by the optimizer — avoid Python-level branching inside `compute` functions.
+**JIT compilation**: `build_objective()` produces a function that gets JIT-compiled by the optimizer, once per problem — avoid Python-level branching inside `compute` functions.
 
 ## Loss Function Composition
 
 `build_objective(terms, input_parameters)` combines terms into a single scalar loss:
 
 ```
-loss(optim_vars) = Σ term.multiplier × term.compute(optim_vars, input_parameters)
+loss(optim_vars, step) = Σ term.multiplier × term.schedule(step) × term.compute(optim_vars, input_parameters)
 ```
 
-Terms with `multiplier=0.0` are skipped entirely.
+`schedule` is optional (constant 1 when unset); see `vizopt.schedules` for warmup/cooldown factories. Terms with `multiplier=0.0` are skipped entirely — they cannot be turned on later via `session.set_weight()`.
 
 ## Optimization History
 
@@ -144,11 +179,13 @@ Terms with `multiplier=0.0` are skipped entirely.
 ]
 ```
 
+Each record also holds, per term, `<term>_unweighted` (raw value) and `<term>_unscheduled` (weighted as at the end of the schedule), plus `"total_unscheduled"`, which early stopping (`OptimConfig.early_stop_patience`) monitors.
+
 Convert to a DataFrame for easy plotting:
 
 ```python
 import pandas as pd
-df = pd.DataFrame(history)
+df = pd.DataFrame(result.history)
 df.plot(x="iteration", y=["total", "edge_length", "collision"])
 ```
 
@@ -160,8 +197,10 @@ Use `SnapshotCallback` and `animate()` from `vizopt.animation` to visualize the 
 from vizopt.animation import SnapshotCallback, animate
 
 callback = SnapshotCallback(every=50)
-optim_vars, history = problem.optimize(n_iters=1000, callback=callback)
+result = problem.optimize(OptimConfig(n_iters=1000), callback=callback)
 
-anim = animate(callback.snapshots, problem)
-anim.save("layout.gif")
+anim = animate(problem, callback.snapshots)
+anim.save("layout.gif", writer="pillow")
 ```
+
+On a `VizOptimizer`, `optimizer.animate(callback)` and `optimizer.animate_svg(callback)` (animated SVG, no matplotlib rendering per frame) do the same after `optimizer.optimize(..., callback=callback)`.

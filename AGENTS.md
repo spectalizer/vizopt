@@ -17,13 +17,15 @@ uv sync
 # Format code with black
 uv run black .
 
-# Run tests (when tests are added)
+# Run tests (also run in CI on every push / PR)
 uv run pytest
 
-# Run Jupyter notebooks for examples
-uv run jupyter notebook examples/optimize_label_positions.ipynb
-uv run jupyter notebook examples/examples_with_bubbles.ipynb
+# Run Jupyter notebooks: curated examples (rendered into the docs) and experiments
+uv run jupyter notebook notebooks/examples/layered_graph_layouts.ipynb
+uv run jupyter notebook notebooks/experiments/examples_with_bubbles.ipynb
 ```
+
+Optional dependency groups: `uv sync --group milp` (PuLP/HiGHS, for `milp_euler_rectangles.py`) and `uv sync --group hyperoptim` (Optuna, for schedule search notebooks).
 
 ## Architecture
 
@@ -34,6 +36,8 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
    - `build_objective()`: Combines a list of `ObjectiveTerm`s into a single `fun(optim_vars, step, weights=None) -> scalar`
    - `OptimizationProblemTemplate`: A reusable template for a class of problems — holds terms, an `initialize` function, optional Pydantic `input_params_class` for validation, and optional `plot_configuration`
    - `OptimizationProblem`: A concrete runnable instance created via `template.instantiate(input_parameters)`; exposes `.session()` (a steppable run) and `.optimize()` (a batch run on top of a session) which returns an `OptimizationResult` (fields: `optim_vars`, `history`, `final_loss`)
+   - `OptimConfig`: Optimizer settings (iterations, learning rate and decay, Adam betas, restarts, seed, history tracking, early stopping)
+   - `VizOptimizer`: ABC for user-facing template classes; subclasses implement `_build_problem()`, the base provides `optimize()`, `session()`, `plot()`, `animate()`, `animate_svg()` (see Template Module Structure)
 
 2. **[session.py](src/vizopt/session.py)** - Steppable, steerable gradient descent
    - `OptimizationSession`: Owns one run's Adam state; `step(n)`, `vars` (physical space), `pin`/`unpin`/`set_value` (hold or move variable entries), `set_weight`, `reheat` (restart the cosine learning-rate decay), `record()` (per-term history record)
@@ -41,21 +45,40 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
    - Pinning is a projection after the Adam update (gradients are not masked), so Adam's moments keep tracking the force on a pinned entry and it does not jump when released
    - Foundation for interactive frontends (drag an element while the optimization keeps running)
 
-3. **[components.py](src/vizopt/components.py)** - Reusable JAX loss components
-   - `multiple_bbox_intersections()`: Vectorized pairwise bounding-box intersection areas; shape `(n, 2, 2)` inputs, returns `(n, m)` matrix
+2b. **[scene.py](src/vizopt/scene.py)** - Declarative, JSON-serializable scene descriptions for non-Python frontends
+   - Pydantic primitives `Circle`, `Line`, `Polygon`, `Text` (discriminated by `kind`, each with a frame-stable `id`, a `Style`, and an optional `DragBinding(var, index)`) inside a `Scene`
+   - Positions in data coordinates; sizes in data units unless the field ends in `_px` / says `"px"`
+   - A `DragBinding` means the element's anchor point is `optim_vars[var][index]`, so a frontend turns a drag into `session.pin(var, index, value=[x, y])` with no template-specific code
+   - Templates opt in via `scene_configuration(optim_vars, input_parameters) -> Scene`; exposed as `problem.scene()` and `session.scene()`. Implemented so far by `LayeredGraphOptimizer`
+   - `scripts/export_scene_schema.py` writes the JSON Schema to `frontend/src/protocol/scene.schema.json` for TypeScript codegen; re-run it after changing the models
 
-4. **[animation.py](src/vizopt/animation.py)** - Optimization progress visualization
+3. **[components/](src/vizopt/components/)** - Reusable JAX loss components and shape representations
+   - [common.py](src/vizopt/components/common.py): generic penalties — `multiple_bbox_intersections()` (vectorized pairwise bbox intersection areas, `(n, 2, 2)` inputs → `(n, m)` matrix), `calculate_collision_penalty()`, width penalties, `should_be_positive_activation()`
+   - [stars.py](src/vizopt/components/stars.py): star-shaped (radially convex) domains — the `StarRepresentation` ABC with `Discrete`, `Fourier` and `BSpline` parametrizations, plus the shared private loss terms (enclosure, exclusion, area, perimeter, smoothness, convexity, labels, …) and SVG helpers used by the star templates
+   - [bspline_stars.py](src/vizopt/components/bspline_stars.py): B-spline boundary math and raster soft-membership; also still holds legacy functional optimizers (`optimize_multiple_radially_convex_sets_bspline*`) predating the `BSpline` representation
+   - [bands.py](src/vizopt/components/bands.py): convex vertical-band domains (see Convex Band Sets)
+
+4. **[templates/](src/vizopt/templates/)** - User-facing `VizOptimizer` subclasses, one problem family per module
+   - [circle_packing.py](src/vizopt/templates/circle_packing.py) `CirclePackingOptimizer`, [label_positions.py](src/vizopt/templates/label_positions.py) `LabelPositionOptimizer`, [layered_graph.py](src/vizopt/templates/layered_graph.py) `LayeredGraphOptimizer`, [color.py](src/vizopt/templates/color.py) `ColorPaletteOptimizer` (OKLab palettes)
+   - [nested_circles.py](src/vizopt/templates/nested_circles.py) `NestedCirclesOptimizer` / `LinkedNestedCirclesOptimizer`: circle-based Euler diagrams with inclusion constraints
+   - [euler/](src/vizopt/templates/euler/): star-shaped Euler diagrams around circles (`stars_vs_circles.py`, `EulerDiagram`) or rectangles (`stars_vs_rectangles.py`, `EulerDiagramRect`)
+   - [star_vs_star.py](src/vizopt/templates/star_vs_star.py) `StarDomainOptimizer` / `StarVsStarOptimizer`, [band_vs_band.py](src/vizopt/templates/band_vs_band.py) `BandDomainOptimizer`, [raster_stars.py](src/vizopt/templates/raster_stars.py) `RasterStarOptimizer`: region layout without underlying elements
+   - [trees/](src/vizopt/templates/trees/): node-link `TreeLayoutOptimizer` and the recursive star-domain treemap `RasterTreemapOptimizer` (not a `VizOptimizer`: it runs one fit per sibling group)
+
+5. **[animation.py](src/vizopt/animation.py)** - Optimization progress visualization
    - `SnapshotCallback`: Callback that saves numpy copies of `optim_vars` at regular intervals into `.snapshots`
    - `animate()`: Renders each snapshot via `problem.plot_configuration` and returns a `FuncAnimation`
-
-5. **[radially_convex.py](src/vizopt/radially_convex.py)** - Star-shaped (radially convex) set optimizer
-   - `optimize_multiple_radially_convex_sets()`: Finds star-shaped boundaries enclosing each set of circles while minimizing area/perimeter and avoiding overlap with other sets
-   - `optimize_multiple_radially_convex_sets_with_movable_circles()`: Same, but circle positions are also optimization variables
-   - Each boundary is represented by a center + K radii at uniformly-spaced angles
+   - `snapshots_to_animated_svg()` / `smil_animate()`: animated SVGs from the template's `svg_configuration`; `chronophotograph()`: overlay of snapshots in one figure
 
 6. **[schedules.py](src/vizopt/schedules.py)** - Loss term weight scheduling
    - `warmup()` / `cooldown()`: JAX-compatible schedule factories that ramp a term's weight up or down over a fraction of the run
-   - `make_term_schedules()`: Builds a `term_schedules` dict from a flat parameter dict for use with `radially_convex` optimizers
+   - `make_term_schedules()`: Builds a `TermSchedules` from a flat parameter dict, for the `term_schedules` argument of `EulerDiagram` / `EulerDiagramRect`
+
+7. **Other modules**
+   - [treemap.py](src/vizopt/treemap.py): classic squarified treemap layout (non-optimization baseline)
+   - [milp_euler_rectangles.py](src/vizopt/milp_euler_rectangles.py): MILP-based Euler diagram with rectangular sets (needs the `milp` group)
+   - [introspection.py](src/vizopt/introspection.py): visualizes this project's own structure (file treemaps, import/class graphs)
+   - [examples/sets.py](src/vizopt/examples/sets.py): example set-hierarchy graphs used by notebooks and tests
 
 ### Key Architectural Concepts
 
@@ -64,7 +87,7 @@ uv run jupyter notebook examples/examples_with_bubbles.ipynb
 The framework separates *problem definition* from *problem instantiation*:
 
 1. Define `ObjectiveTerm`s (loss components with names, compute functions, and multipliers)
-2. Create an `OptimizationProblemTemplate` with those terms, an `initialize` function, optional Pydantic class for input validation, and optional `plot_configuration`
+2. Create an `OptimizationProblemTemplate` with those terms, an `initialize` function, optional Pydantic class for input validation, and optional rendering hooks (`plot_configuration` for matplotlib, `svg_configuration` for animated SVG, `scene_configuration` for interactive frontends)
 3. Call `template.instantiate(input_parameters)` → `OptimizationProblem`
 4. Call `problem.optimize(optim_config, callback)` → `OptimizationResult`, or `problem.session(optim_config)` → `OptimizationSession` to step and steer the run yourself
 
@@ -85,25 +108,26 @@ Input parameters are plain dicts (JAX-compatible pytrees) passed unchanged to lo
 
 High-level functions can pass a `var_scales` dict to `OptimizationProblemTemplate.instantiate()` to normalize optimization variables. The optimizer then works in a scaled space while all loss terms and callbacks always receive physical-space values.
 
-**Mechanism** (all in `base.py`):
+**Mechanism** (`base.py` and `session.py`):
 - `build_objective()` wraps the loss: `physical_vars[k] = optim_vars[k] * var_scales[k]` before calling any term
-- `optimize()` divides initial variables by their scales before the optimizer loop, and multiplies the result back afterward
-- The `tracking_callback` un-normalizes before computing per-term history and before forwarding to the user callback — so `SnapshotCallback` and the `optim_vars_panel` always see physical values
+- `OptimizationSession` divides the initial variables by their scales and keeps its optimizer state in scaled space; its `vars` property and all its steering methods (`pin`, `set_value`) work in physical space
+- `optimize()` passes `session.vars` to history recording and to the user callback — so `SnapshotCallback` and the `optim_vars_panel` of animated SVGs always see physical values. Only the `grads` passed to callbacks are in scaled space
 
 **Convention**: scale values may be scalars or arrays. Arrays allow per-axis scaling (e.g. `[scale_x, scale_y]` for 2D position variables, which broadcast over `(N, 2)` arrays). Keys absent from `var_scales` are left unscaled.
 
-**In `stars_vs_circles.py`**: scales are computed from the input circles and applied per variable group:
-- `"centers"` and `"circle_positions"`: `[max(std_x, mean_r), max(std_y, mean_r)]` — the `max` guards against the degenerate single-circle case
+**In `templates/euler/stars_vs_circles.py`**: scales are computed from the input circles and applied per variable group:
+- `"centers"`, `"circle_positions"` and (with labels) `"label_positions"`: `[max(std_x, mean_r), max(std_y, mean_r)]` — the `max` guards against the degenerate single-circle case
 - radii-like variables (`"radii"`, `"fourier_coeffs"`, `"bspline_ctrl"`): `mean(initial_radii)` — detected by iterating `init_vars.keys()` and treating every non-`"centers"` key as radii-scale, so all three representations are handled without naming them explicitly
 
-#### Radially Convex Sets (radially_convex.py)
+#### Star-Shaped Sets (components/stars.py, templates/euler/stars_vs_circles.py)
 
-`radially_convex.py` implements circle-set boundary optimization on top of the general framework:
+`EulerDiagram` implements circle-set boundary optimization on top of the general framework:
 
-- Input: N circles (cx, cy, r) and S subsets; each subset gets its own star-shaped boundary
-- Multi-objective loss: enclosure, exclusion (no overlap with non-members), area, perimeter, smoothness, and optional terms (circle collision, position anchor, set attraction, bounding box)
-- Two variants: fixed circle positions or jointly optimized circle positions
-- Boundaries are parametrized as center + K radii at uniformly-spaced angles (star polygon)
+- Input: N circles (cx, cy, r) and S subsets (or a graph via `from_graph()`); each subset gets its own star-shaped boundary
+- Circle positions are optimization variables alongside the boundaries (kept near their inputs by a position-anchor term)
+- Multi-objective loss: enclosure, exclusion (no overlap with non-members), area, perimeter, smoothness, and optional terms (convexity, circle collision, set attraction, bounding box, floating set labels)
+- Boundaries are a center plus a `StarRepresentation`: `Discrete` (K radii at uniformly-spaced angles), `Fourier` coefficients or `BSpline` control points — all evaluated to radii on the same angle grid, so loss terms are representation-agnostic
+- `EulerDiagramRect` (`stars_vs_rectangles.py`) is the same for axis-aligned rectangles; `StarDomainOptimizer` (`star_vs_star.py`) drops the underlying elements entirely
 
 #### Convex Band Sets (components/bands.py, templates/band_vs_band.py)
 
@@ -129,7 +153,7 @@ A template module lives under `src/vizopt/templates/` and exposes one or more `V
 
 - Requires Python 3.13+
 - Primary dependencies: JAX, Optax, NetworkX, matplotlib, pandas, pydantic
-- Dev dependencies: black (formatting), pytest (testing), ipykernel (notebooks)
+- Dev dependencies: black (formatting), ruff (linting), pyright (type checking), pytest + pytest-cov (testing), ipykernel / nbconvert / nbformat (notebooks), zensical + mkdocstrings-python (docs)
 
 ## Documentation
 

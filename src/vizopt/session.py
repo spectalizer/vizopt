@@ -13,7 +13,7 @@ recompilation.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import jax
 import jax.numpy as jnp
@@ -22,6 +22,7 @@ from jax import Array
 
 if TYPE_CHECKING:
     from .base import OptimConfig, OptimizationProblem, OptimVars
+    from .scene import Scene
 
 StepFunction = Callable[[Any, Any, Array, dict], tuple[Any, Any, Array, Any]]
 """A jitted `(params, opt_state, step, controls) -> (params, opt_state, loss, grads)`."""
@@ -84,6 +85,7 @@ def make_step_function(
             lambda p: fun_to_minimize(p, step, controls["weights"])
         )(params)
         updates, opt_state = adam.update(grads, opt_state)
+        updates = cast(dict, updates)  # same structure as params
         learning_rate = _cosine_learning_rate(step, controls)
         params = {
             k: jnp.where(
@@ -200,6 +202,14 @@ class OptimizationSession:
     def is_pinned(self, name: str) -> Array:
         """Boolean mask of the pinned entries of variable `name`."""
         return self._controls["pin_mask"][name]
+
+    def scene(self) -> "Scene":
+        """Describe the current variables as a [Scene][vizopt.scene.Scene].
+
+        Raises:
+            ValueError: If the problem has no `scene_configuration`.
+        """
+        return self.problem.scene(self.vars)
 
     def term_values(self) -> dict[str, Array]:
         """Raw (unweighted) value of every term at the current variables."""
