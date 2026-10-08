@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 from jax import numpy as jnp
 
+from ..scene import Circle, DragBinding, Polygon, Scene, Style, Text
 from ..utils import _SVG_SET_COLORS
 from .bspline_stars import _wrap_bspline_term, bspline_to_radii
 
@@ -1182,3 +1183,152 @@ class BSpline(StarRepresentation):
 
     def extra_results(self, s, optim_vars):
         return {"bspline_ctrl": np.array(optim_vars["bspline_ctrl"][s])}
+
+
+# ---------------------------------------------------------------------------
+# Scene elements (see vizopt.scene)
+# ---------------------------------------------------------------------------
+
+
+def default_set_colors(n_sets: int) -> list[str]:
+    """The default region colors, as used by the star and band SVG output."""
+    return [_SVG_SET_COLORS[s % len(_SVG_SET_COLORS)] for s in range(n_sets)]
+
+
+def star_region_elements(
+    centers,
+    radii,
+    angles,
+    *,
+    names=None,
+    colors=None,
+    drag_var: str | None = "centers",
+    fill_opacity: float = 0.15,
+) -> list[Polygon]:
+    """Scene polygons for star-shaped regions, one per set.
+
+    Args:
+        centers: `(S, 2)` region centers.
+        radii: `(S, K)` radii at `angles` (convert other representations with
+            `StarRepresentation.to_radii` first).
+        angles: `(K,)` angles in radians.
+        names: Optional display names, used as tooltips; defaults to
+            `"Set <s>"`.
+        colors: Optional CSS colors; defaults to `default_set_colors`.
+        drag_var: Variable holding the centers, so dragging a region moves
+            its center (its boundary keeps optimizing); `None` disables it.
+        fill_opacity: Opacity of the translucent region fill.
+
+    Returns:
+        Polygons with ids `set/<s>`, anchored at their centers.
+    """
+    centers = np.asarray(centers, dtype=float)
+    radii = np.asarray(radii, dtype=float)
+    angles = np.asarray(angles, dtype=float)
+    n_sets = len(centers)
+    names = [f"Set {s}" for s in range(n_sets)] if names is None else names
+    colors = default_set_colors(n_sets) if colors is None else colors
+    elements = []
+    for s in range(n_sets):
+        cx, cy = centers[s]
+        xs = cx + radii[s] * np.cos(angles)
+        ys = cy + radii[s] * np.sin(angles)
+        elements.append(
+            Polygon(
+                id=f"set/{s}",
+                points=[(float(x), float(y)) for x, y in zip(xs, ys)],
+                anchor=(float(cx), float(cy)),
+                drag=None if drag_var is None else DragBinding(var=drag_var, index=s),
+                style=Style(
+                    fill=colors[s],
+                    fill_opacity=fill_opacity,
+                    stroke=colors[s],
+                    stroke_width_px=2,
+                ),
+                tooltip=str(names[s]),
+            )
+        )
+    return elements
+
+
+def set_label_elements(
+    centers, radii, angles, names, label_positions=None
+) -> list[Text]:
+    """Scene labels for star-shaped sets.
+
+    Args:
+        centers: `(S, 2)` region centers.
+        radii: `(S, K)` radii at `angles`.
+        angles: `(K,)` angles in radians.
+        names: Display names, one per set.
+        label_positions: Optional `(S, 2)` optimized label positions (the
+            `"label_positions"` variable); the labels are then bound to it
+            and draggable. Otherwise each label sits at its region's top.
+
+    Returns:
+        Texts with ids `set-label/<s>`.
+    """
+    centers = np.asarray(centers, dtype=float)
+    radii = np.asarray(radii, dtype=float)
+    k_top = int(np.argmin(np.abs(np.asarray(angles) - np.pi / 2)))
+    elements = []
+    for s, name in enumerate(names):
+        if label_positions is not None:
+            x, y = np.asarray(label_positions[s], dtype=float)
+            drag = DragBinding(var="label_positions", index=s)
+            dy_px = -4.0
+        else:
+            x, y = centers[s, 0], centers[s, 1] + radii[s, k_top]
+            drag = None
+            dy_px = 6.0
+        elements.append(
+            Text(
+                id=f"set-label/{s}",
+                x=x,
+                y=y,
+                text=str(name),
+                anchor="middle",
+                dy_px=dy_px,
+                font_size_px=13.0,
+                drag=drag,
+            )
+        )
+    return elements
+
+
+def make_star_regions_scene(representation: StarRepresentation, with_circles=False):
+    """A `scene_configuration` for templates laying out star regions only.
+
+    Regions are draggable by their centers. Used by `StarDomainOptimizer`,
+    `StarVsStarOptimizer` and `RasterStarOptimizer`.
+
+    Args:
+        representation: The boundary representation, to convert the
+            optimization variables to radii.
+        with_circles: Also draw the fixed input circles
+            (`input_params["circles"]`, `(N, 3)` rows of `[cx, cy, r]`)
+            behind the regions.
+
+    Returns:
+        `scene_configuration(optim_vars, input_params) -> Scene`.
+    """
+
+    def scene_configuration(optim_vars, input_params) -> Scene:
+        angles = np.asarray(input_params["angles"], dtype=float)
+        radii = np.asarray(representation.to_radii(optim_vars, jnp.asarray(angles)))
+        circles = [
+            Circle(
+                id=f"circle/{i}",
+                cx=float(cx),
+                cy=float(cy),
+                r=float(r),
+                style=Style(fill="#fffbe6", stroke="#696969", stroke_width_px=1.5),
+            )
+            for i, (cx, cy, r) in enumerate(
+                np.asarray(input_params["circles"]) if with_circles else []
+            )
+        ]
+        regions = star_region_elements(optim_vars["centers"], radii, angles)
+        return Scene(elements=[*circles, *regions])
+
+    return scene_configuration

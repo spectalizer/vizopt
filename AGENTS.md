@@ -56,10 +56,11 @@ npm run codegen    # after changing scene.py or server/protocol.py: re-export th
    - Foundation for interactive frontends (drag an element while the optimization keeps running)
 
 2b. **[scene.py](src/vizopt/scene.py)** - Declarative, JSON-serializable scene descriptions for non-Python frontends
-   - Pydantic primitives `Circle`, `Line`, `Polygon`, `Text` (discriminated by `kind`, each with a frame-stable `id`, a `Style`, and an optional `DragBinding(var, index)`) inside a `Scene`
+   - Pydantic primitives `Circle`, `Rect` (anchored at its `"center"` or `"min_corner"`), `Line`, `Polygon` (with an optional `anchor` point, required when draggable), `Text` (discriminated by `kind`, each with a frame-stable `id`, a `Style`, and an optional `DragBinding(var, index)`) inside a `Scene`
    - Positions in data coordinates; sizes in data units unless the field ends in `_px` / says `"px"`
    - A `DragBinding` means the element's anchor point is `optim_vars[var][index]`, so a frontend turns a drag into `session.pin(var, index, value=[x, y])` with no template-specific code
-   - Templates opt in via `scene_configuration(optim_vars, input_parameters) -> Scene`; exposed as `problem.scene()` and `session.scene()`. Implemented by `LayeredGraphOptimizer`, `TreeLayoutOptimizer`, `CirclePackingOptimizer` and `EulerDiagram` (star regions as translucent `Polygon`s, circles and floating set labels draggable)
+   - Templates opt in via `scene_configuration(optim_vars, input_parameters) -> Scene`; exposed as `problem.scene()` and `session.scene()`. Every `VizOptimizer` template implements it (`RasterTreemapOptimizer` is not a `VizOptimizer` and has none). Drag targets: node / circle / rectangle positions, star-region `centers` (the boundary keeps optimizing around a dragged center), floating `label_positions`; band regions and color swatches are not draggable (no 2D position variable)
+   - Shared builders: `star_region_elements()`, `set_label_elements()` and `make_star_regions_scene(representation)` in `components/stars.py`; `band_region_elements()` and `make_band_regions_scene(representation)` in `components/bands.py`
    - `node_link_scene()` builds a draggable node-link diagram (edges, pixel-sized nodes, labels) from positions and edge indices; the layered graph and tree layout scenes are thin wrappers around it
    - `tests/test_scene.py` checks every template's scene generically (unique ids, JSON round trip, every `DragBinding` sitting exactly at its variable entry) — add new templates to its `_TEMPLATES` table
    - Its JSON Schema is exported as part of the live-server protocol (see `server/`); re-run `npm run codegen` in `frontend/` after changing the models

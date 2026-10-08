@@ -1,7 +1,7 @@
 """Declarative scene descriptions for rendering outside of Python.
 
 A `Scene` describes one configuration of an optimization problem as a flat
-list of drawing primitives (circles, lines, polygons, text), as plain data
+list of drawing primitives (circles, rectangles, lines, polygons, text), as plain data
 that serializes to JSON. It is the contract between vizopt and non-Python
 frontends (e.g. a browser app rendering a live optimization with D3), which
 therefore need no knowledge of any particular template.
@@ -15,7 +15,8 @@ Conventions:
 - Every element has an `id` that is stable across frames of the same
   problem, so frontends can key their data joins on it.
 - An element with a `drag` binding can be dragged: its anchor point (circle
-  center, text position) is the entry `optim_vars[drag.var][drag.index]`,
+  center, rectangle `(x, y)`, text position, polygon `anchor`) is the entry
+  `optim_vars[drag.var][drag.index]`,
   a 2D `[x, y]` position, so a frontend can turn a drag into
   `session.pin(drag.var, drag.index, value=[x, y])`.
 
@@ -29,7 +30,7 @@ from typing import Annotated, Literal
 
 import numpy as np
 
-from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
 _DISCRIMINATORS = ("type", "kind")
 
@@ -144,15 +145,44 @@ class Line(_Element):
     shorten_end_px: float = 0.0
 
 
+class Rect(_Element):
+    """An axis-aligned rectangle.
+
+    Attributes:
+        x: Anchor x, data coordinates (see `origin`).
+        y: Anchor y, data coordinates (see `origin`).
+        width: Width, data units.
+        height: Height, data units.
+        origin: What `(x, y)` is: the rectangle's `"center"`, or its
+            `"min_corner"` (smallest x and y).
+    """
+
+    kind: Literal["rect"] = "rect"
+    x: float
+    y: float
+    width: float
+    height: float
+    origin: Literal["center", "min_corner"] = "center"
+
+
 class Polygon(_Element):
     """A closed polygon, e.g. a sampled star-shaped or band boundary.
 
     Attributes:
         points: Vertices as `[x, y]` pairs, data coordinates.
+        anchor: The point a `drag` binding refers to (e.g. the center of a
+            star-shaped region); required for a draggable polygon.
     """
 
     kind: Literal["polygon"] = "polygon"
     points: list[Point]
+    anchor: Point | None = None
+
+    @model_validator(mode="after")
+    def _draggable_needs_anchor(self) -> "Polygon":
+        if self.drag is not None and self.anchor is None:
+            raise ValueError("A draggable polygon needs an anchor.")
+        return self
 
 
 class Text(_Element):
@@ -178,7 +208,7 @@ class Text(_Element):
     font_size_px: float = 12.0
 
 
-Element = Annotated[Circle | Line | Polygon | Text, Field(discriminator="kind")]
+Element = Annotated[Circle | Rect | Line | Polygon | Text, Field(discriminator="kind")]
 """Any scene element, discriminated by its `kind` field."""
 
 

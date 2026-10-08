@@ -33,6 +33,8 @@ from ..components.common import (
     calculate_total_width_penalty_for_circular_layout,
     should_be_positive_activation,
 )
+from ..components.stars import default_set_colors
+from ..scene import Circle, DragBinding, Line, Scene, Style, Text
 from ..treemap import squarify_layout
 
 
@@ -405,6 +407,94 @@ def _term_edge_length(optim_vars, input_params):
     return _calculate_edge_lengths(optim_vars["node_xys"], input_params["edge_indices"])
 
 
+def _make_nested_circles_scene(all_node_names, n_fixed: int):
+    """Scene for both nested-circles optimizers.
+
+    Nodes `[0, n_fixed)` have fixed radii (`input_params["fixed_node_radii"]`)
+    and are drawn as labelled leaves; the others are enclosing nodes with
+    optimized radii, drawn as translucent containers (largest first, so
+    smaller ones stay on top). Graph edges (`input_params["edge_indices"]`,
+    when present) connect node centers. Every node is draggable.
+    """
+    colors = default_set_colors(len(all_node_names) - n_fixed)
+
+    def scene_configuration(optim_vars, input_params) -> Scene:
+        node_xys = np.asarray(optim_vars["node_xys"], dtype=float)
+        radii = np.asarray(_get_node_radii(optim_vars, input_params), dtype=float)
+        containers = []
+        container_labels = []
+        for j in sorted(range(n_fixed, len(all_node_names)), key=lambda k: -radii[k]):
+            color = colors[j - n_fixed]
+            (x, y), r = node_xys[j], radii[j]
+            containers.append(
+                Circle(
+                    id=f"node/{j}",
+                    cx=x,
+                    cy=y,
+                    r=r,
+                    style=Style(
+                        fill=color, fill_opacity=0.1, stroke=color, stroke_width_px=2
+                    ),
+                    drag=DragBinding(var="node_xys", index=j),
+                    tooltip=str(all_node_names[j]),
+                )
+            )
+            container_labels.append(
+                Text(
+                    id=f"label/{j}",
+                    x=x,
+                    y=y + r,
+                    text=str(all_node_names[j]),
+                    anchor="middle",
+                    dy_px=4.0,
+                    font_size_px=13.0,
+                )
+            )
+        edges = [
+            Line(
+                id=f"edge/{e}",
+                x1=node_xys[i, 0],
+                y1=node_xys[i, 1],
+                x2=node_xys[k, 0],
+                y2=node_xys[k, 1],
+                style=Style(stroke="gray", stroke_width_px=1.5),
+            )
+            for e, (i, k) in enumerate(input_params.get("edge_indices", []))
+        ]
+        leaves = []
+        leaf_labels = []
+        for i in range(n_fixed):
+            (x, y), binding = node_xys[i], DragBinding(var="node_xys", index=i)
+            leaves.append(
+                Circle(
+                    id=f"node/{i}",
+                    cx=x,
+                    cy=y,
+                    r=radii[i],
+                    style=Style(fill="#fffbe6", stroke="#696969", stroke_width_px=1.5),
+                    drag=binding,
+                    tooltip=str(all_node_names[i]),
+                )
+            )
+            leaf_labels.append(
+                Text(
+                    id=f"label/{i}",
+                    x=x,
+                    y=y,
+                    text=str(all_node_names[i]),
+                    anchor="middle",
+                    dy_px=-4.0,
+                    drag=binding,
+                    style=Style(fill="#1f2328", stroke="#fffbe6"),
+                )
+            )
+        return Scene(
+            elements=[*containers, *edges, *leaves, *leaf_labels, *container_labels]
+        )
+
+    return scene_configuration
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -527,6 +617,9 @@ class NestedCirclesOptimizer(VizOptimizer):
                 ),
             ],
             initialize=initialize,
+            scene_configuration=_make_nested_circles_scene(
+                all_node_names, len(fixed_node_radii)
+            ),
         ).instantiate(input_parameters)
 
     @property
@@ -688,6 +781,9 @@ class LinkedNestedCirclesOptimizer(VizOptimizer):
                 ),
             ],
             initialize=initialize,
+            scene_configuration=_make_nested_circles_scene(
+                all_node_names, len(fixed_node_radii)
+            ),
         ).instantiate(input_parameters)
 
     @property

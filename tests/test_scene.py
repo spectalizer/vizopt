@@ -16,14 +16,25 @@ from vizopt.scene import (
     DragBinding,
     Line,
     Polygon,
+    Rect,
     Scene,
     Style,
     Text,
     node_link_scene,
 )
+from vizopt.templates.band_vs_band import BandDomainOptimizer
 from vizopt.templates.circle_packing import CirclePackingOptimizer
+from vizopt.templates.color import ColorPaletteOptimizer
 from vizopt.templates.euler.stars_vs_circles import EulerDiagram
+from vizopt.templates.euler.stars_vs_rectangles import EulerDiagramRect
+from vizopt.templates.label_positions import LabelPositionOptimizer
 from vizopt.templates.layered_graph import LayeredGraphOptimizer
+from vizopt.templates.nested_circles import (
+    LinkedNestedCirclesOptimizer,
+    NestedCirclesOptimizer,
+)
+from vizopt.templates.raster_stars import RasterStarOptimizer
+from vizopt.templates.star_vs_star import StarDomainOptimizer, StarVsStarOptimizer
 from vizopt.templates.trees.tree_layout import TreeLayoutOptimizer
 
 
@@ -210,6 +221,16 @@ def test_node_link_scene_without_names_has_no_labels():
 
 # --- every template with a scene ---
 
+_RECTS = np.array(
+    [[0.0, 0.0, 0.4, 0.3], [1.5, 0.0, 0.3, 0.3], [3.0, 0.5, 0.5, 0.2]],
+    dtype=np.float32,
+)
+
+_INCLUSION_TREE: nx.DiGraph = nx.DiGraph()
+_INCLUSION_TREE.add_edges_from([("all", "ab"), ("all", "c"), ("ab", "a"), ("ab", "b")])
+for _leaf, _size in {"a": 0.5, "b": 0.7, "c": 0.4}.items():
+    _INCLUSION_TREE.nodes[_leaf]["size"] = _size
+
 _TEMPLATES = {
     "layered_graph": lambda: LayeredGraphOptimizer(
         nx.DiGraph([("a", "b"), ("a", "c")])
@@ -228,14 +249,60 @@ _TEMPLATES = {
     "euler_bspline": lambda: EulerDiagram.from_graph(
         make_animals_graph(), representation=BSpline()
     ),
+    "euler_rect": lambda: EulerDiagramRect(_RECTS, [[0, 1], [1, 2]]),
+    "euler_rect_labels": lambda: EulerDiagramRect(
+        _RECTS, [[0, 1], [1, 2]], label_rect_size=(0.4, 0.15)
+    ),
+    "star_domain": lambda: StarDomainOptimizer(
+        2, np.array([[0.0, 0.0], [3.0, 0.0]]), enclosures=[]
+    ),
+    "star_vs_star": lambda: StarVsStarOptimizer(
+        np.array([[0.0, 0.0, 0.5], [2.0, 0.0, 0.5], [4.0, 0.0, 0.5]]),
+        [[0, 1], [1, 2]],
+    ),
+    "raster_stars": lambda: RasterStarOptimizer(
+        2, np.array([[0.0, 0.0], [3.0, 0.0]]), grid_resolution=16
+    ),
+    "bands": lambda: BandDomainOptimizer(2, np.array([[0.0, 0.0], [3.0, 0.0]])),
+    "nested_circles": lambda: NestedCirclesOptimizer(_INCLUSION_TREE),
+    "linked_nested_circles": lambda: LinkedNestedCirclesOptimizer(
+        nx.Graph([("a", "b"), ("b", "c")]), _INCLUSION_TREE
+    ),
+    "label_positions": lambda: LabelPositionOptimizer(
+        np.array([[0.0, 0.0], [0.5, 0.2], [1.0, 1.0]]),
+        np.array([[0.6, 0.2], [0.6, 0.2], [0.4, 0.2]]),
+    ),
+    "color_palette": lambda: ColorPaletteOptimizer(
+        np.array([[0.0, 1.0, 2.0], [1.0, 0.0, 1.0], [2.0, 1.0, 0.0]])
+    ),
 }
 
 
+# Templates whose variables have no 2D position to drag.
+_NOT_DRAGGABLE = {"bands", "color_palette"}
+
+
 @pytest.fixture(params=list(_TEMPLATES))
-def template_session(request):
-    session = _TEMPLATES[request.param]().session(OptimConfig(learning_rate=0.01))
+def template_name(request):
+    return request.param
+
+
+@pytest.fixture
+def template_session(template_name):
+    optimizer = _TEMPLATES[template_name]()
+    session = optimizer.session(OptimConfig(learning_rate=0.01))
     session.step(3)
     return session
+
+
+def _anchor(element):
+    """The point a drag binding refers to, per element kind."""
+    if isinstance(element, Circle):
+        return [element.cx, element.cy]
+    if isinstance(element, (Rect, Text)):
+        return [element.x, element.y]
+    assert isinstance(element, Polygon) and element.anchor is not None
+    return list(element.anchor)
 
 
 def test_template_scene_ids_are_unique(template_session):
@@ -248,20 +315,15 @@ def test_template_scene_is_json_serializable(template_session):
     assert Scene.model_validate(payload) == template_session.scene()
 
 
-def test_template_drag_bindings_point_at_anchors(template_session):
-    """Each bound circle / text sits exactly at the entry it is bound to."""
+def test_template_drag_bindings_point_at_anchors(template_name, template_session):
+    """Each bound element's anchor sits exactly at the entry it is bound to."""
     variables = {k: np.asarray(v) for k, v in template_session.vars.items()}
     bound = [e for e in template_session.scene().elements if e.drag is not None]
-    assert bound
+    assert bool(bound) == (template_name not in _NOT_DRAGGABLE)
     for element in bound:
         assert element.drag is not None
         expected = variables[element.drag.var][element.drag.index]
-        if isinstance(element, Circle):
-            actual = [element.cx, element.cy]
-        else:
-            assert isinstance(element, Text)
-            actual = [element.x, element.y]
-        np.testing.assert_allclose(actual, expected, rtol=1e-6)
+        np.testing.assert_allclose(_anchor(element), expected, rtol=1e-6, atol=1e-6)
 
 
 def test_euler_scene_has_one_region_per_set():
@@ -282,3 +344,67 @@ def test_euler_scene_uses_custom_set_colors():
     scene = optimizer.session(OptimConfig()).scene()
     region = _element(scene, "set/0", Polygon)
     assert region.style.fill == "#ff0000"
+
+
+def test_star_regions_drag_by_center():
+    session = StarDomainOptimizer(
+        2, np.array([[0.0, 0.0], [3.0, 0.0]]), enclosures=[]
+    ).session(OptimConfig(learning_rate=0.01))
+    region = _element(session.scene(), "set/1", Polygon)
+    assert region.drag == DragBinding(var="centers", index=1)
+    session.pin("centers", 1, value=[5.0, 2.0])
+    session.step(5)
+    moved = _element(session.scene(), "set/1", Polygon)
+    assert moved.anchor == pytest.approx((5.0, 2.0))
+
+
+def test_star_vs_star_draws_fixed_circles_below_regions():
+    scene = _TEMPLATES["star_vs_star"]().session(OptimConfig()).scene()
+    kinds = [e.kind for e in scene.elements]
+    assert kinds == ["circle"] * 3 + ["polygon"] * 2
+    assert all(e.drag is None for e in scene.elements if e.kind == "circle")
+
+
+def test_euler_rect_scene_rectangles_are_centered():
+    scene = _TEMPLATES["euler_rect"]().session(OptimConfig()).scene()
+    rect = _element(scene, "rect/0", Rect)
+    assert rect.origin == "center"
+    assert (rect.width, rect.height) == pytest.approx((0.8, 0.6))
+
+
+def test_label_positions_scene_boxes_are_anchored_at_min_corner():
+    scene = _TEMPLATES["label_positions"]().session(OptimConfig()).scene()
+    box = _element(scene, "label/2", Rect)
+    assert box.origin == "min_corner"
+    assert (box.width, box.height) == pytest.approx((0.4, 0.2))
+    leader = _element(scene, "leader/2", Line)
+    assert (leader.x1, leader.y1) == (1.0, 1.0)
+
+
+def test_nested_circles_scene_paints_containers_largest_first():
+    scene = _TEMPLATES["nested_circles"]().session(OptimConfig()).scene()
+    containers = [
+        e
+        for e in scene.elements
+        if isinstance(e, Circle) and e.style.fill_opacity is not None
+    ]
+    assert len(containers) == 2  # "all" and "ab"
+    radii = [c.r for c in containers]
+    assert radii == sorted(radii, reverse=True)
+
+
+def test_linked_nested_circles_scene_draws_graph_edges():
+    scene = _TEMPLATES["linked_nested_circles"]().session(OptimConfig()).scene()
+    assert sum(isinstance(e, Line) for e in scene.elements) == 2
+
+
+def test_color_palette_scene_shows_current_colors():
+    session = _TEMPLATES["color_palette"]().session(OptimConfig())
+    swatch = _element(session.scene(), "swatch/0", Circle)
+    assert swatch.style.fill is not None and swatch.style.fill.startswith("#")
+    assert len(swatch.style.fill) == 7
+
+
+def test_draggable_polygon_requires_anchor():
+    with pytest.raises(ValidationError, match="anchor"):
+        Polygon(id="p", points=[(0, 0)], drag=DragBinding(var="c", index=0))

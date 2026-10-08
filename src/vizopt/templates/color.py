@@ -12,6 +12,7 @@ from vizopt.base import (
     OptimizationProblemTemplate,
     VizOptimizer,
 )
+from vizopt.scene import Circle, Scene, Style, Text
 
 
 def oklab_to_rgb(Lab):
@@ -151,6 +152,37 @@ def plot_colored_words(optim_vars, input_parameters):
     ax.set_ylim(-0.3, 0.45)
     ax.axis("off")
     plt.tight_layout()
+
+
+def _color_scene_configuration(optim_vars, input_parameters) -> Scene:
+    """Swatches in a row, labelled below; colors are not spatial, so nothing
+    is draggable."""
+    rgb = np.clip(np.asarray(_build_rgb(optim_vars, input_parameters)), 0.0, 1.0)
+    swatches = []
+    labels = []
+    for i, (label, (r, g, b)) in enumerate(zip(input_parameters["labels"], rgb)):
+        hex_color = f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
+        swatches.append(
+            Circle(
+                id=f"swatch/{i}",
+                cx=float(i),
+                cy=0.0,
+                r=0.4,
+                style=Style(fill=hex_color, stroke="#555555", stroke_width_px=1),
+                tooltip=f"{label}: {hex_color}",
+            )
+        )
+        labels.append(
+            Text(
+                id=f"label/{i}",
+                x=float(i),
+                y=-0.5,
+                text=str(label),
+                anchor="middle",
+                dy_px=-12.0,
+            )
+        )
+    return Scene(elements=[*swatches, *labels])
 
 
 def _color_svg_configuration(snapshots, input_parameters, size):
@@ -366,6 +398,7 @@ class ColorPaletteOptimizer(VizOptimizer):
             initialize=lambda params, _seed: {"logit_rgb": params["logit_init"]},
             plot_configuration=plot_colored_words,
             svg_configuration=_color_svg_configuration,
+            scene_configuration=_color_scene_configuration,
         ).instantiate(input_parameters)
 
     @property

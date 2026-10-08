@@ -1,5 +1,5 @@
 import { axisBottom, axisLeft } from "d3-axis";
-import { scaleLinear, scaleLog } from "d3-scale";
+import { scaleLinear, scaleLog, type ScaleContinuousNumeric } from "d3-scale";
 import { pointer, select, type Selection } from "d3-selection";
 import { line } from "d3-shape";
 
@@ -15,9 +15,13 @@ const MAX_POINTS = 2000;
 const HEIGHT = 170;
 const MARGIN = { top: 8, right: 10, bottom: 22, left: 44 };
 
+type YScale = ScaleContinuousNumeric<number, number>;
+
 /**
- * Loss history over iterations on a log y-axis, accumulated client-side
- * from the frames' metrics, with a crosshair tooltip.
+ * Loss history over iterations, with a crosshair tooltip. The y-axis is
+ * logarithmic while every plotted value is positive (losses usually span
+ * orders of magnitude), and linear otherwise (objectives with negative
+ * terms).
  */
 export class LossChart {
   private iterations: number[] = [];
@@ -26,6 +30,7 @@ export class LossChart {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly tooltip: HTMLDivElement;
   private hoverX: number | null = null;
+  private logScale = true;
 
   constructor(private readonly container: HTMLElement) {
     container.classList.add("chart");
@@ -78,15 +83,17 @@ export class LossChart {
     if (n < 2 || width === 0) return;
 
     const plotted = this.series.filter((s) => this.values.has(s.name));
-    const positives = plotted.flatMap((s) => this.values.get(s.name)!.filter((v) => v > 0));
-    if (positives.length === 0) return;
-    let [lo, hi] = [Math.min(...positives), Math.max(...positives)];
-    if (lo === hi) [lo, hi] = [lo / 2, hi * 2];
+    const finite = plotted.flatMap((s) => this.values.get(s.name)!.filter(Number.isFinite));
+    if (finite.length === 0) return;
+    this.logScale = finite.every((v) => v > 0);
+    this.svg.attr("aria-label", `Loss over iterations, ${this.logScale ? "log" : "linear"} scale`);
+    let [lo, hi] = [Math.min(...finite), Math.max(...finite)];
+    if (lo === hi) [lo, hi] = this.logScale ? [lo / 2, hi * 2] : [lo - 1, hi + 1];
 
     const x = scaleLinear()
       .domain([this.iterations[0], this.iterations[n - 1]])
       .range([MARGIN.left, width - MARGIN.right]);
-    const y = scaleLog()
+    const y: YScale = (this.logScale ? scaleLog() : scaleLinear())
       .domain([lo, hi])
       .range([HEIGHT - MARGIN.bottom, MARGIN.top])
       .nice();
@@ -95,7 +102,11 @@ export class LossChart {
       .append("g")
       .attr("class", "axis")
       .attr("transform", `translate(${MARGIN.left},0)`)
-      .call(axisLeft(y).ticks(4, "~e").tickSize(-(width - MARGIN.left - MARGIN.right)));
+      .call(
+        axisLeft(y)
+          .ticks(4, this.logScale ? "~e" : "~g")
+          .tickSize(-(width - MARGIN.left - MARGIN.right)),
+      );
     yAxis.select(".domain").remove();
     yAxis.selectAll(".tick line").attr("class", "grid");
     const xAxis = this.svg
@@ -108,7 +119,7 @@ export class LossChart {
     for (const s of plotted) {
       const values = this.values.get(s.name)!;
       const path = line<number>()
-        .defined((i) => values[i] > 0)
+        .defined((i) => this.plottable(values[i]))
         .x((i) => x(this.iterations[i]))
         .y((i) => y(values[i]));
       this.svg
@@ -123,7 +134,7 @@ export class LossChart {
 
   private drawHover(
     x: ReturnType<typeof scaleLinear<number, number>>,
-    y: ReturnType<typeof scaleLog<number, number>>,
+    y: YScale,
     plotted: Series[],
   ): void {
     const target = x.invert(this.hoverX!);
@@ -141,7 +152,7 @@ export class LossChart {
       .attr("y2", HEIGHT - MARGIN.bottom);
     for (const s of plotted) {
       const v = this.values.get(s.name)![i];
-      if (!(v > 0)) continue;
+      if (!this.plottable(v)) continue;
       this.svg
         .append("circle")
         .attr("class", "hover-dot")
@@ -168,6 +179,11 @@ export class LossChart {
     this.tooltip.classList.add("visible");
     const left = px + 12 + this.tooltip.offsetWidth > this.container.clientWidth;
     this.tooltip.style.left = `${left ? px - 12 - this.tooltip.offsetWidth : px + 12}px`;
+  }
+
+  /** Whether a value can be drawn on the current y scale. */
+  private plottable(value: number): boolean {
+    return this.logScale ? value > 0 : Number.isFinite(value);
   }
 
   private sample(name: string): number[] {

@@ -20,6 +20,7 @@ from vizopt.components.stars import (
     _multi_term_min_radius,
     _multi_term_perimeter,
     _multi_term_smoothness,
+    make_star_regions_scene,
 )
 from vizopt.templates.star_vs_star import (
     _build_exclusion_mask,
@@ -406,6 +407,7 @@ class RasterStarOptimizer(VizOptimizer):
             ],
             initialize=initialize,
             svg_configuration=representation.make_svg_configuration(),
+            scene_configuration=make_star_regions_scene(representation),
         ).instantiate(input_parameters)
 
     @property

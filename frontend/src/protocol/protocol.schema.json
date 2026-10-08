@@ -485,7 +485,7 @@
     },
     "Polygon": {
       "additionalProperties": false,
-      "description": "A closed polygon, e.g. a sampled star-shaped or band boundary.\n\nAttributes:\n    points: Vertices as `[x, y]` pairs, data coordinates.",
+      "description": "A closed polygon, e.g. a sampled star-shaped or band boundary.\n\nAttributes:\n    points: Vertices as `[x, y]` pairs, data coordinates.\n    anchor: The point a `drag` binding refers to (e.g. the center of a\n        star-shaped region); required for a draggable polygon.",
       "properties": {
         "id": {
           "title": "Id",
@@ -534,6 +534,23 @@
           },
           "title": "Points",
           "type": "array"
+        },
+        "anchor": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor"
         }
       },
       "required": [
@@ -542,6 +559,83 @@
         "points"
       ],
       "title": "Polygon",
+      "type": "object"
+    },
+    "Rect": {
+      "additionalProperties": false,
+      "description": "An axis-aligned rectangle.\n\nAttributes:\n    x: Anchor x, data coordinates (see `origin`).\n    y: Anchor y, data coordinates (see `origin`).\n    width: Width, data units.\n    height: Height, data units.\n    origin: What `(x, y)` is: the rectangle's `\"center\"`, or its\n        `\"min_corner\"` (smallest x and y).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "drag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DragBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tooltip"
+        },
+        "kind": {
+          "const": "rect",
+          "default": "rect",
+          "title": "Kind",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "origin": {
+          "default": "center",
+          "enum": [
+            "center",
+            "min_corner"
+          ],
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "Rect",
       "type": "object"
     },
     "ReheatMessage": {
@@ -618,6 +712,7 @@
                 "circle": "#/$defs/Circle",
                 "line": "#/$defs/Line",
                 "polygon": "#/$defs/Polygon",
+                "rect": "#/$defs/Rect",
                 "text": "#/$defs/Text"
               },
               "propertyName": "kind"
@@ -625,6 +720,9 @@
             "oneOf": [
               {
                 "$ref": "#/$defs/Circle"
+              },
+              {
+                "$ref": "#/$defs/Rect"
               },
               {
                 "$ref": "#/$defs/Line"

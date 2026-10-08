@@ -35,6 +35,7 @@ from ..components.bands import (
     _multi_term_min_thickness,
     _multi_term_min_width,
     _multi_term_target_area,
+    make_band_regions_scene,
 )
 from .star_vs_star import _build_exclusion_mask
 
@@ -218,6 +219,7 @@ class BandDomainOptimizer(VizOptimizer):
             ],
             initialize=initialize,
             svg_configuration=representation.make_svg_configuration(),
+            scene_configuration=make_band_regions_scene(representation),
         ).instantiate(input_parameters)
 
     @property

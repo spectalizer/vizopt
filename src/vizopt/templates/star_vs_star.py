@@ -28,6 +28,7 @@ from ..components.stars import (
     _multi_term_perimeter,
     _multi_term_smoothness,
     _svg_configuration_fixed,
+    make_star_regions_scene,
 )
 
 
@@ -393,6 +394,7 @@ class StarDomainOptimizer(VizOptimizer):
             ],
             initialize=initialize,
             svg_configuration=representation.make_svg_configuration(),
+            scene_configuration=make_star_regions_scene(representation),
         ).instantiate(input_parameters)
 
     @property
@@ -542,6 +544,9 @@ class StarVsStarOptimizer(VizOptimizer):
             initialize=initialize,
             svg_configuration=representation.make_svg_configuration(
                 _svg_configuration_fixed
+            ),
+            scene_configuration=make_star_regions_scene(
+                representation, with_circles=True
             ),
         ).instantiate(input_parameters)
 

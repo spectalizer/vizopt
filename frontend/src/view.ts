@@ -9,11 +9,12 @@ import type {
   FrameMessage,
   Line,
   Polygon,
+  Rect,
   Scene,
   Text,
 } from "./protocol/protocol";
 
-export type SceneElement = Circle | Line | Polygon | Text;
+export type SceneElement = Circle | Rect | Line | Polygon | Text;
 
 /** Callbacks for user interactions with draggable elements. */
 export interface DragHandlers {
@@ -29,6 +30,7 @@ export interface DragHandlers {
 const SVG_NS = "http://www.w3.org/2000/svg";
 const TAGS: Record<SceneElement["kind"], string> = {
   circle: "circle",
+  rect: "rect",
   line: "line",
   polygon: "polygon",
   text: "text",
@@ -176,6 +178,16 @@ export class SceneView {
         else node.removeAttribute("marker-end");
         break;
       }
+      case "rect": {
+        const [x0, y0, x1, y1] = rectCorners(d);
+        const [sx0, sx1] = [x(x0), x(x1)];
+        const [sy0, sy1] = [y(y0), y(y1)];
+        node.setAttribute("x", String(Math.min(sx0, sx1)));
+        node.setAttribute("y", String(Math.min(sy0, sy1)));
+        node.setAttribute("width", String(Math.abs(sx1 - sx0)));
+        node.setAttribute("height", String(Math.abs(sy1 - sy0)));
+        break;
+      }
       case "polygon":
         node.setAttribute("points", d.points.map(([px, py]) => `${x(px)},${y(py)}`).join(" "));
         break;
@@ -238,11 +250,20 @@ function anchor(d: SceneElement): [number, number] | null {
   switch (d.kind) {
     case "circle":
       return [d.cx, d.cy];
+    case "rect":
     case "text":
       return [d.x, d.y];
+    case "polygon":
+      return d.anchor ?? null;
     default:
       return null;
   }
+}
+
+/** Data-space `[x0, y0, x1, y1]` of a rectangle, whatever its origin. */
+function rectCorners(d: Rect): [number, number, number, number] {
+  if ((d.origin ?? "center") === "min_corner") return [d.x, d.y, d.x + d.width, d.y + d.height];
+  return [d.x - d.width / 2, d.y - d.height / 2, d.x + d.width / 2, d.y + d.height / 2];
 }
 
 function sceneBounds(scene: Scene): Bounds | null {
@@ -260,6 +281,12 @@ function sceneBounds(scene: Scene): Bounds | null {
         xs.push(d.x1, d.x2);
         ys.push(d.y1, d.y2);
         break;
+      case "rect": {
+        const [x0, y0, x1, y1] = rectCorners(d);
+        xs.push(x0, x1);
+        ys.push(y0, y1);
+        break;
+      }
       case "polygon":
         for (const [px, py] of d.points) {
           xs.push(px);

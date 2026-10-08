@@ -29,7 +29,15 @@ export type R = number;
 export type RadiusUnits = "data" | "px";
 export type Id1 = string;
 export type Tooltip1 = string | null;
-export type Kind1 = "line";
+export type Kind1 = "rect";
+export type X = number;
+export type Y = number;
+export type Width = number;
+export type Height = number;
+export type Origin = "center" | "min_corner";
+export type Id2 = string;
+export type Tooltip2 = string | null;
+export type Kind2 = "line";
 export type X1 = number;
 export type Y1 = number;
 export type X2 = number;
@@ -37,21 +45,22 @@ export type Y2 = number;
 export type ArrowEnd = boolean;
 export type ShortenStartPx = number;
 export type ShortenEndPx = number;
-export type Id2 = string;
-export type Tooltip2 = string | null;
-export type Kind2 = "polygon";
-export type Points = [number, number][];
 export type Id3 = string;
 export type Tooltip3 = string | null;
-export type Kind3 = "text";
-export type X = number;
-export type Y = number;
+export type Kind3 = "polygon";
+export type Points = [number, number][];
+export type Anchor = [number, number] | null;
+export type Id4 = string;
+export type Tooltip4 = string | null;
+export type Kind4 = "text";
+export type X3 = number;
+export type Y3 = number;
 export type Text1 = string;
 export type DxPx = number;
 export type DyPx = number;
-export type Anchor = "start" | "middle" | "end";
+export type Anchor1 = "start" | "middle" | "end";
 export type FontSizePx = number;
-export type Elements = (Circle | Line | Polygon | Text)[];
+export type Elements = (Circle | Rect | Line | Polygon | Text)[];
 export type YAxis = "up" | "down";
 export type EqualAspect = boolean;
 export type Total1 = number;
@@ -73,8 +82,8 @@ export type Index1 = number;
 export type Type4 = "drag";
 export type Var2 = string;
 export type Index2 = number;
-export type X3 = number;
-export type Y3 = number;
+export type X4 = number;
+export type Y4 = number;
 export type Type5 = "drag_end";
 export type Var3 = string;
 export type Index3 = number;
@@ -226,6 +235,29 @@ export interface DragBinding {
   index: Index;
 }
 /**
+ * An axis-aligned rectangle.
+ *
+ * Attributes:
+ *     x: Anchor x, data coordinates (see `origin`).
+ *     y: Anchor y, data coordinates (see `origin`).
+ *     width: Width, data units.
+ *     height: Height, data units.
+ *     origin: What `(x, y)` is: the rectangle's `"center"`, or its
+ *         `"min_corner"` (smallest x and y).
+ */
+export interface Rect {
+  id: Id1;
+  style?: Style;
+  drag?: DragBinding | null;
+  tooltip?: Tooltip1;
+  kind: Kind1;
+  x: X;
+  y: Y;
+  width: Width;
+  height: Height;
+  origin?: Origin;
+}
+/**
  * A straight segment, optionally with an arrowhead at its end.
  *
  * Attributes:
@@ -239,11 +271,11 @@ export interface DragBinding {
  *     shorten_end_px: Screen pixels to trim from the end.
  */
 export interface Line {
-  id: Id1;
+  id: Id2;
   style?: Style;
   drag?: DragBinding | null;
-  tooltip?: Tooltip1;
-  kind: Kind1;
+  tooltip?: Tooltip2;
+  kind: Kind2;
   x1: X1;
   y1: Y1;
   x2: X2;
@@ -257,14 +289,17 @@ export interface Line {
  *
  * Attributes:
  *     points: Vertices as `[x, y]` pairs, data coordinates.
+ *     anchor: The point a `drag` binding refers to (e.g. the center of a
+ *         star-shaped region); required for a draggable polygon.
  */
 export interface Polygon {
-  id: Id2;
+  id: Id3;
   style?: Style;
   drag?: DragBinding | null;
-  tooltip?: Tooltip2;
-  kind: Kind2;
+  tooltip?: Tooltip3;
+  kind: Kind3;
   points: Points;
+  anchor?: Anchor;
 }
 /**
  * A text label.
@@ -279,17 +314,17 @@ export interface Polygon {
  *     font_size_px: Font size in screen pixels.
  */
 export interface Text {
-  id: Id3;
+  id: Id4;
   style?: Style;
   drag?: DragBinding | null;
-  tooltip?: Tooltip3;
-  kind: Kind3;
-  x: X;
-  y: Y;
+  tooltip?: Tooltip4;
+  kind: Kind4;
+  x: X3;
+  y: Y3;
   text: Text1;
   dx_px?: DxPx;
   dy_px?: DyPx;
-  anchor?: Anchor;
+  anchor?: Anchor1;
   font_size_px?: FontSizePx;
 }
 /**
@@ -347,8 +382,8 @@ export interface DragMessage {
   type: Type4;
   var: Var2;
   index: Index2;
-  x: X3;
-  y: Y3;
+  x: X4;
+  y: Y4;
 }
 /**
  * The user released a grabbed element.

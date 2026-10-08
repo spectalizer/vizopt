@@ -42,10 +42,12 @@ from ...components.stars import (
     _multi_term_smoothness,
     _multi_term_total_bounding_box,
     _svg_configuration_movable,
+    default_set_colors,
+    set_label_elements,
+    star_region_elements,
 )
-from ...scene import Circle, DragBinding, Polygon, Scene, Style, Text
+from ...scene import Circle, DragBinding, Scene, Style, Text
 from ...schedules import TermSchedules
-from ...utils import _SVG_SET_COLORS
 from .graph_utils import offsets_from_graph
 
 
@@ -479,66 +481,23 @@ class EulerDiagram(VizOptimizer):
 
 
 def _make_scene_configuration(set_names, leaf_names, representation, set_colors=None):
-    colors = [
-        (
-            to_hex(set_colors[s])
-            if set_colors is not None
-            else _SVG_SET_COLORS[s % len(_SVG_SET_COLORS)]
-        )
-        for s in range(len(set_names))
-    ]
+    colors = (
+        [to_hex(c) for c in set_colors]
+        if set_colors is not None
+        else default_set_colors(len(set_names))
+    )
 
     def scene_configuration(optim_vars, input_params) -> Scene:
         angles = np.asarray(input_params["angles"], dtype=float)
-        radii = np.asarray(
-            representation.to_radii(optim_vars, jnp.asarray(angles)), dtype=float
+        radii = np.asarray(representation.to_radii(optim_vars, jnp.asarray(angles)))
+        centers = optim_vars["centers"]
+        regions = star_region_elements(
+            centers, radii, angles, names=set_names, colors=colors
         )
-        centers = np.asarray(optim_vars["centers"], dtype=float)
+        set_labels = set_label_elements(
+            centers, radii, angles, set_names, optim_vars.get("label_positions")
+        )
         circle_positions = np.asarray(optim_vars["circle_positions"], dtype=float)
-        has_label = "label_positions" in optim_vars
-        k_top = int(np.argmin(np.abs(angles - np.pi / 2)))
-
-        regions = []
-        set_labels = []
-        for s, (name, color) in enumerate(zip(set_names, colors)):
-            cx, cy = centers[s]
-            points = np.stack(
-                [cx + radii[s] * np.cos(angles), cy + radii[s] * np.sin(angles)], 1
-            )
-            regions.append(
-                Polygon(
-                    id=f"set/{s}",
-                    points=[(float(x), float(y)) for x, y in points],
-                    style=Style(
-                        fill=color, fill_opacity=0.15, stroke=color, stroke_width_px=2
-                    ),
-                    tooltip=str(name),
-                )
-            )
-            if has_label:
-                lx, ly = np.asarray(optim_vars["label_positions"][s], dtype=float)
-                label = Text(
-                    id=f"set-label/{s}",
-                    x=lx,
-                    y=ly,
-                    text=str(name),
-                    anchor="middle",
-                    dy_px=-4.0,
-                    font_size_px=13.0,
-                    drag=DragBinding(var="label_positions", index=s),
-                )
-            else:
-                label = Text(
-                    id=f"set-label/{s}",
-                    x=cx,
-                    y=cy + radii[s, k_top],
-                    text=str(name),
-                    anchor="middle",
-                    dy_px=6.0,
-                    font_size_px=13.0,
-                )
-            set_labels.append(label)
-
         circles = []
         leaf_labels = []
         for i, (name, (x, y)) in enumerate(zip(leaf_names, circle_positions)):

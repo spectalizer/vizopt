@@ -24,9 +24,7 @@ def multiple_bbox_intersections(bbox_matrix: jax.Array, other_bbox_matrix: jax.A
     coord_min = rep_bbox_matrix[:, 0, :]
     coord_max_other = rep_other_bbox_matrix[:, 1, :]
     coord_min_other = rep_other_bbox_matrix[:, 0, :]
-    intersects = jnp.clip(
-        coord_max - coord_min_other, a_max=coord_max_other - coord_min
-    )
+    intersects = jnp.clip(coord_max - coord_min_other, max=coord_max_other - coord_min)
     x_intersect = jnp.clip(intersects[:, 0], 0, np.inf)
     y_intersect = jnp.clip(intersects[:, 1], 0, np.inf)
     intersect_prods = x_intersect * y_intersect

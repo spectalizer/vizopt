@@ -349,6 +349,18 @@ svg.scene.dragging .draggable {
   stroke: var(--text);
 }
 
+.el-rect {
+  fill: var(--node);
+}
+
+/* Pinned regions and rectangles: a dashed outline in the pinned color. */
+.el-polygon.pinned,
+.el-rect.pinned {
+  stroke: var(--pinned) !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: 6 3;
+}
+
 .el-text {
   fill: var(--text);
   user-select: none;

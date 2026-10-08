@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 from jax import numpy as jnp
 
+from ..scene import Polygon, Scene, Style
 from ..utils import _SVG_SET_COLORS
 
 _MIN_WIDTH = 0.1
@@ -504,3 +505,77 @@ class Discrete(BandRepresentation):
 
     def to_bounds(self, optim_vars):
         return optim_vars["upper"], optim_vars["lower"]
+
+
+# ---------------------------------------------------------------------------
+# Scene elements (see vizopt.scene)
+# ---------------------------------------------------------------------------
+
+
+def band_region_elements(
+    x_bounds, upper, lower, *, names=None, colors=None, fill_opacity: float = 0.15
+) -> list[Polygon]:
+    """Scene polygons for convex band regions, one per set.
+
+    Bands have no 2D position variable to bind a drag to, so the polygons
+    are not draggable.
+
+    Args:
+        x_bounds: `(S, 2)` `[x_min, x_max]` per set.
+        upper: `(S, K)` upper boundary at the K uniformly-spaced columns
+            (convert other representations with `BandRepresentation.to_bounds`).
+        lower: `(S, K)` lower boundary at the same columns.
+        names: Optional display names, used as tooltips; defaults to
+            `"Set <s>"`.
+        colors: Optional CSS colors; defaults to the band SVG colors.
+        fill_opacity: Opacity of the translucent region fill.
+
+    Returns:
+        Polygons with ids `set/<s>`: the upper boundary left to right, then
+        the lower boundary back.
+    """
+    x_bounds = np.asarray(x_bounds, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+    lower = np.asarray(lower, dtype=float)
+    n_sets, k = upper.shape
+    names = [f"Set {s}" for s in range(n_sets)] if names is None else names
+    if colors is None:
+        colors = [_SVG_SET_COLORS[s % len(_SVG_SET_COLORS)] for s in range(n_sets)]
+    elements = []
+    for s in range(n_sets):
+        xs = np.linspace(x_bounds[s, 0], x_bounds[s, 1], k)
+        points = [*zip(xs, upper[s]), *zip(xs[::-1], lower[s, ::-1])]
+        elements.append(
+            Polygon(
+                id=f"set/{s}",
+                points=[(float(x), float(y)) for x, y in points],
+                style=Style(
+                    fill=colors[s],
+                    fill_opacity=fill_opacity,
+                    stroke=colors[s],
+                    stroke_width_px=2,
+                ),
+                tooltip=str(names[s]),
+            )
+        )
+    return elements
+
+
+def make_band_regions_scene(representation: BandRepresentation):
+    """A `scene_configuration` for `BandDomainOptimizer`.
+
+    Args:
+        representation: The band representation, to convert the optimization
+            variables to `upper` / `lower` bounds.
+
+    Returns:
+        `scene_configuration(optim_vars, input_params) -> Scene`.
+    """
+
+    def scene_configuration(optim_vars, input_params) -> Scene:
+        upper, lower = representation.to_bounds(optim_vars)
+        return Scene(
+            elements=[*band_region_elements(optim_vars["x_bounds"], upper, lower)]
+        )
+
+    return scene_configuration
