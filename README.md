@@ -129,3 +129,18 @@ Render all example notebooks into `docs/examples/`:
 Or a single one:
 
 `uv run python scripts/nb_to_md.py --execute notebooks/examples/circle_packing.ipynb docs/examples/circle-packing.md`
+
+### Releasing
+
+Pushing a `v*` tag runs the publish workflow (`.github/workflows/publish.yml`), which builds the frontend and the package and uploads it to PyPI via Trusted Publishing.
+
+1. Bump `version` in `pyproject.toml`, then run `uv lock` to update `uv.lock`.
+2. Commit, push to `main`, and wait for the tests to pass (the publish workflow does not run them).
+3. Tag that commit and push the tag:
+
+   ```bash
+   git tag v0.0.6
+   git push origin v0.0.6
+   ```
+
+The workflow does not check the tag against `pyproject.toml`: tagging before bumping the version rebuilds the previous release, which PyPI rejects.
