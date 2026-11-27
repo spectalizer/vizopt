@@ -7,14 +7,20 @@ authors = [
 ]
 readme = "README.md"
 urls = {repository = "https://github.com/spectalizer/vizopt/" }
-requires-python = ">=3.13,<3.14.1"
+requires-python = ">=3.13,<3.15"
 dependencies = [
-    "jax==0.9.1",
+    "jax>=0.9.1",
     "matplotlib>=3.10.8",
     "networkx>=3.6.1",
     "optax>=0.2.6",
     "pandas>=3.0.0",
     "pydantic>=2.12.5",
+]
+
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.142.3",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
@@ -27,6 +33,7 @@ milp = [
 ]
 dev = [
     "black>=26.1.0",
+    "httpx2>=2.13.1",
     "ipykernel>=7.1.0",
     "mkdocstrings-python>=2.0.3",
     "nbconvert>=7.0.0",
@@ -37,6 +44,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "ruff>=0.15.16",
     "types-networkx>=3.6.1.20260210",
+    "vizopt[server]",
     "zensical>=0.0.40",
 ]
 
@@ -47,6 +55,11 @@ ignore_missing_imports = true
 [build-system]
 requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# uv_build packages everything under src/vizopt/ regardless of .gitignore,
+# so keep local tool caches out of sdists and wheels.
+source-exclude = ["**/.mypy_cache", "**/__pycache__"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=vizopt --cov-report=html --cov-report=term-missing"
@@ -72,3 +85,6 @@ reportPrivateImportUsage = "none"
 root = "notebooks"
 reportUndefinedVariable = "none"
 reportUnusedExpression = "none"
+
+[tool.uv.sources]
+vizopt = { workspace = true }

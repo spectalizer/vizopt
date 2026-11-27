@@ -268,8 +268,8 @@ class RasterTreemapOptimizer:
             to reproduce old-style uniform padding to one fixed `n_sets`
             (e.g. for a future JIT-compile-reuse experiment, which needs a
             fixed shape across calls; under the current
-            `~vizopt.jaxopt.optimize_gradient_descent`, a fresh closure
-            rebuilt on every `optimize()` call, no padding scheme saves
+            setup, the jitted step is cached per problem instance and each
+            sibling group builds its own problem, so no padding scheme saves
             compilation today).
         early_stop_patience, early_stop_tol: Forwarded to every sibling-group
             fit's `~vizopt.base.OptimConfig`. Most sibling groups (especially

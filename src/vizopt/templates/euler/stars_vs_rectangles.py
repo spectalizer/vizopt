@@ -35,7 +35,10 @@ from ...components.stars import (
     _multi_term_perimeter,
     _multi_term_smoothness,
     _multi_term_total_bounding_box,
+    set_label_elements,
+    star_region_elements,
 )
+from ...scene import DragBinding, Rect, Scene, Style, Text
 from ...schedules import TermSchedules
 from ...utils import _SVG_SET_COLORS
 from .graph_utils import offsets_from_graph
@@ -255,6 +258,49 @@ def _term_set_attraction_rect(optim_vars, input_params):
 # ---------------------------------------------------------------------------
 # SVG animation helper
 # ---------------------------------------------------------------------------
+
+
+def _make_scene_configuration_rect(set_names, leaf_names):
+    def scene_configuration(optim_vars, input_params) -> Scene:
+        angles = np.asarray(input_params["angles"], dtype=float)
+        radii = np.asarray(optim_vars["radii"], dtype=float)
+        centers = optim_vars["centers"]
+        regions = star_region_elements(centers, radii, angles, names=set_names)
+        set_labels = set_label_elements(
+            centers, radii, angles, set_names, optim_vars.get("label_positions")
+        )
+        rects = []
+        rect_labels = []
+        positions = np.asarray(optim_vars["rect_positions"], dtype=float)
+        for i, (name, (x, y)) in enumerate(zip(leaf_names, positions)):
+            binding = DragBinding(var="rect_positions", index=i)
+            rects.append(
+                Rect(
+                    id=f"rect/{i}",
+                    x=x,
+                    y=y,
+                    width=2 * float(input_params["rect_hw"][i]),
+                    height=2 * float(input_params["rect_hh"][i]),
+                    style=Style(fill="#fffbe6", stroke="#696969", stroke_width_px=1.5),
+                    drag=binding,
+                    tooltip=str(name),
+                )
+            )
+            rect_labels.append(
+                Text(
+                    id=f"rect-label/{i}",
+                    x=x,
+                    y=y,
+                    text=str(name),
+                    anchor="middle",
+                    dy_px=-4.0,
+                    drag=binding,
+                    style=Style(fill="#1f2328", stroke="#fffbe6"),
+                )
+            )
+        return Scene(elements=[*regions, *rects, *rect_labels, *set_labels])
+
+    return scene_configuration
 
 
 def _svg_configuration_rect(snapshots, input_params, size):
@@ -857,6 +903,9 @@ class EulerDiagramRect(VizOptimizer):
             terms=terms,
             initialize=initialize,
             svg_configuration=_svg_configuration_rect,
+            scene_configuration=_make_scene_configuration_rect(
+                self.set_names, self.leaf_names
+            ),
         ).instantiate(input_parameters, var_scales=var_scales)
 
     @property

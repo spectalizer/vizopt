@@ -12,6 +12,7 @@ from ..base import (
     VizOptimizer,
 )
 from ..components import common
+from ..scene import Circle, DragBinding, Line, Rect, Scene, Style
 
 
 class LabelPositionParams(BaseModel):
@@ -97,6 +98,48 @@ def _plot_rectangles(optim_vars, input_parameters):
     )
 
 
+def _scene_configuration(optim_vars, input_parameters) -> Scene:
+    positions = np.asarray(optim_vars["rectangle_positions"], dtype=float)
+    points = np.asarray(input_parameters["point_positions"], dtype=float)
+    sizes = np.asarray(input_parameters["rectangle_sizes"], dtype=float)
+    leaders = [
+        Line(
+            id=f"leader/{i}",
+            x1=px,
+            y1=py,
+            x2=x,
+            y2=y,
+            style=Style(stroke="gray", stroke_width_px=1),
+        )
+        for i, ((px, py), (x, y)) in enumerate(zip(points, positions))
+    ]
+    labels = [
+        Rect(
+            id=f"label/{i}",
+            x=x,
+            y=y,
+            width=w,
+            height=h,
+            origin="min_corner",
+            style=Style(fill="#4682b4", fill_opacity=0.5),
+            drag=DragBinding(var="rectangle_positions", index=i),
+        )
+        for i, ((x, y), (w, h)) in enumerate(zip(positions, sizes))
+    ]
+    markers = [
+        Circle(
+            id=f"point/{i}",
+            cx=px,
+            cy=py,
+            r=3.0,
+            radius_units="px",
+            style=Style(fill="#1f2328"),
+        )
+        for i, (px, py) in enumerate(points)
+    ]
+    return Scene(elements=[*leaders, *labels, *markers])
+
+
 class LabelPositionOptimizer(VizOptimizer):
     """Optimize label rectangle positions to avoid overlap while staying near points.
 
@@ -141,6 +184,7 @@ class LabelPositionOptimizer(VizOptimizer):
             initialize=_initialize,
             input_params_class=LabelPositionParams,
             plot_configuration=_plot_rectangles,
+            scene_configuration=_scene_configuration,
         ).instantiate(input_parameters)
 
     @property

@@ -22,6 +22,7 @@ from ...components.common import (
     calculate_total_width_penalty_ignoring_radii,
     should_be_positive_activation,
 )
+from ...scene import Scene, node_link_scene
 
 # ---------------------------------------------------------------------------
 # Preprocessing
@@ -187,6 +188,15 @@ def _initialize(input_params, seed):
 # ---------------------------------------------------------------------------
 # Plotting / animation
 # ---------------------------------------------------------------------------
+
+
+def _scene_configuration(optim_vars, input_params) -> Scene:
+    return node_link_scene(
+        optim_vars["node_xys"],
+        input_params["edge_indices"],
+        input_params.get("node_names", None),
+        directed=False,
+    )
 
 
 def _plot_configuration(optim_vars, input_params):
@@ -479,6 +489,7 @@ class TreeLayoutOptimizer(VizOptimizer):
             initialize=_initialize,
             plot_configuration=_plot_configuration,
             svg_configuration=_svg_configuration,
+            scene_configuration=_scene_configuration,
         ).instantiate(input_parameters)
 
     @property

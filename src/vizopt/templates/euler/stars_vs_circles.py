@@ -13,6 +13,7 @@ from typing import Any
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from matplotlib.colors import to_hex
 
 from ...base import (
     ObjectiveTerm,
@@ -41,7 +42,11 @@ from ...components.stars import (
     _multi_term_smoothness,
     _multi_term_total_bounding_box,
     _svg_configuration_movable,
+    default_set_colors,
+    set_label_elements,
+    star_region_elements,
 )
+from ...scene import Circle, DragBinding, Scene, Style, Text
 from ...schedules import TermSchedules
 from .graph_utils import offsets_from_graph
 
@@ -418,6 +423,9 @@ class EulerDiagram(VizOptimizer):
             svg_configuration=representation.make_svg_configuration(
                 _svg_configuration_movable
             ),
+            scene_configuration=_make_scene_configuration(
+                self.set_names, self.leaf_names, representation, self.set_colors
+            ),
         ).instantiate(input_parameters, var_scales=var_scales)
 
     @property
@@ -470,6 +478,57 @@ class EulerDiagram(VizOptimizer):
             ],
             axis=1,
         )
+
+
+def _make_scene_configuration(set_names, leaf_names, representation, set_colors=None):
+    colors = (
+        [to_hex(c) for c in set_colors]
+        if set_colors is not None
+        else default_set_colors(len(set_names))
+    )
+
+    def scene_configuration(optim_vars, input_params) -> Scene:
+        angles = np.asarray(input_params["angles"], dtype=float)
+        radii = np.asarray(representation.to_radii(optim_vars, jnp.asarray(angles)))
+        centers = optim_vars["centers"]
+        regions = star_region_elements(
+            centers, radii, angles, names=set_names, colors=colors
+        )
+        set_labels = set_label_elements(
+            centers, radii, angles, set_names, optim_vars.get("label_positions")
+        )
+        circle_positions = np.asarray(optim_vars["circle_positions"], dtype=float)
+        circles = []
+        leaf_labels = []
+        for i, (name, (x, y)) in enumerate(zip(leaf_names, circle_positions)):
+            binding = DragBinding(var="circle_positions", index=i)
+            circles.append(
+                Circle(
+                    id=f"circle/{i}",
+                    cx=x,
+                    cy=y,
+                    r=float(input_params["circle_radii"][i]),
+                    style=Style(fill="#fffbe6", stroke="#696969", stroke_width_px=1.5),
+                    drag=binding,
+                    tooltip=str(name),
+                )
+            )
+            leaf_labels.append(
+                Text(
+                    id=f"circle-label/{i}",
+                    x=x,
+                    y=y,
+                    text=str(name),
+                    anchor="middle",
+                    dy_px=-4.0,
+                    drag=binding,
+                    # Dark ink with a halo matching the pale circle fill.
+                    style=Style(fill="#1f2328", stroke="#fffbe6"),
+                )
+            )
+        return Scene(elements=[*regions, *circles, *leaf_labels, *set_labels])
+
+    return scene_configuration
 
 
 def _make_plot_configuration(

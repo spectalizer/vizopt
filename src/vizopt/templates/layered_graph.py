@@ -12,6 +12,7 @@ from ..base import (
     VizOptimizer,
 )
 from ..components.common import should_be_positive_activation
+from ..scene import Scene, node_link_scene
 
 # ---------------------------------------------------------------------------
 # Preprocessing
@@ -245,6 +246,14 @@ def _svg_configuration(snapshots, input_params, size):
     return elements
 
 
+def _scene_configuration(optim_vars, input_params) -> Scene:
+    return node_link_scene(
+        optim_vars["node_xys"],
+        input_params["edge_indices"],
+        input_params.get("node_names", None),
+    )
+
+
 def _plot_configuration(optim_vars, input_params):
     node_xys = optim_vars["node_xys"]
     edge_indices = input_params["edge_indices"]
@@ -412,6 +421,7 @@ class LayeredGraphOptimizer(VizOptimizer):
             initialize=_initialize,
             plot_configuration=_plot_configuration,
             svg_configuration=_svg_configuration,
+            scene_configuration=_scene_configuration,
         ).instantiate(input_parameters)
 
     @property

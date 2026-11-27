@@ -14,5 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
+      # The frontend bundle is gitignored; build it so the wheel ships it
+      # (vizopt.server serves it from src/vizopt/server/static/).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1

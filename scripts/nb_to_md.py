@@ -1,8 +1,8 @@
 """Convert a Jupyter notebook to a Markdown page for Zensical (mkdocs-compatible).
 
 Usage:
-    python scripts/nb_to_md.py examples/nested_circles.ipynb docs/examples/nested-circles.md
-    python scripts/nb_to_md.py --execute examples/nested_circles.ipynb docs/examples/nested-circles.md
+    uv run python scripts/nb_to_md.py notebooks/examples/circle_packing.ipynb docs/examples/circle-packing.md
+    uv run python scripts/nb_to_md.py --execute notebooks/examples/circle_packing.ipynb docs/examples/circle-packing.md
 
 Image outputs are saved to a sibling `images/` directory next to the output file
 and referenced with relative paths in the markdown.
